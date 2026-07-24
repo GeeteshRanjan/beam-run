@@ -17,6 +17,7 @@
  */
 import { RESOLUTION } from '../data/tuning.config';
 import { drawBricks, hash2, pxRect, type BrickOptions } from './PixelArt';
+import { drawText, drawLabelPlaque } from './PixelText';
 
 const { WIDTH: W, TILE } = RESOLUTION;
 const GROUND_TOP = 15 * TILE; // 600
@@ -172,6 +173,32 @@ function drawBoard(
   }
 }
 
+/**
+ * A background "floor directory" sign that names the stage's problem, read as
+ * an office building sign. Low-contrast so it sits behind gameplay.
+ */
+function drawFloorSign(ctx: CanvasRenderingContext2D, cx: number, midY: number, text: string): void {
+  drawLabelPlaque(ctx, text, cx, midY, {
+    scale: 3,
+    fg: '#8FC7D4',
+    bg: 'rgba(0,26,34,0.55)',
+    frame: 'rgba(20,90,110,0.7)',
+    padX: 10,
+    padY: 7,
+    alpha: 0.72,
+  });
+}
+
+/** A small caption on a background prop (e.g. a board title). */
+function drawPropLabel(ctx: CanvasRenderingContext2D, cx: number, topY: number, text: string): void {
+  drawText(ctx, text, cx, topY, {
+    scale: 2,
+    color: '#7FB6C4',
+    align: 'center',
+    alpha: 0.8,
+  });
+}
+
 /** A person silhouette (hiring crowd / candidates). */
 function drawPerson(ctx: CanvasRenderingContext2D, x: number, baseY: number, tone: string): void {
   pxRect(ctx, tone, x + 2, baseY - 40, 10, 10, 2); // head
@@ -185,10 +212,9 @@ function drawReceptionDesk(ctx: CanvasRenderingContext2D, x: number, baseY: numb
   pxRect(ctx, '#0A4553', x, baseY - 46, 120, 46, 2); // desk body
   pxRect(ctx, '#137084', x, baseY - 46, 120, 6, 2); // counter top
   pxRect(ctx, '#00323F', x + 10, baseY - 34, 100, 24, 2); // front panel
-  // A soft hanging sign above the desk.
-  pxRect(ctx, '#0F5A6C', x + 30, baseY - 96, 60, 22, 2);
-  pxRect(ctx, '#1C8296', x + 36, baseY - 90, 48, 4, 2);
-  pxRect(ctx, '#1C8296', x + 36, baseY - 82, 34, 4, 2);
+  // A soft hanging sign above the desk, carrying the ANSR wordmark.
+  pxRect(ctx, '#0F5A6C', x + 20, baseY - 100, 80, 26, 2);
+  drawText(ctx, 'ANSR', x + 60, baseY - 94, { scale: 2, color: '#CFE6EC', align: 'center' });
 }
 
 /** Stacked boxes / stalled paperwork (Setup Delays). */
@@ -267,6 +293,7 @@ export function drawSceneBackground(
       drawSky(ctx, '#0A4553');
       drawSkyline(ctx, 11, '#063a47', '#9FD8E4', t, reduced);
       // Lobby interior read: reception desk + greenery flanking the entrance.
+      drawFloorSign(ctx, W * 0.5, 96, 'MARKET ENTRY');
       drawReceptionDesk(ctx, W * 0.5 - 60, GROUND_TOP);
       drawPottedPlant(ctx, 120, GROUND_TOP);
       drawPottedPlant(ctx, W - 150, GROUND_TOP);
@@ -276,10 +303,13 @@ export function drawSceneBackground(
       drawSky(ctx, '#0A3D49');
       drawSkyline(ctx, 23, '#06333d', '#7FC4D2', t, reduced);
       // Setup delays: stalled paperwork stacks + a slipping clock.
+      drawFloorSign(ctx, W * 0.5, 70, 'SETUP DELAYS');
       drawStalledStacks(ctx, 90, GROUND_TOP);
       drawStalledStacks(ctx, W - 190, GROUND_TOP);
       drawClock(ctx, W * 0.5, 150, t, reduced);
       drawBoard(ctx, W * 0.5 - 40, 210, 80, 56, '#0A3642', '#0E4A57', '#0A2C36'); // permits form
+      drawPropLabel(ctx, W * 0.5, 190, 'PERMITS');
+      drawPropLabel(ctx, 124, GROUND_TOP - 92, 'RED TAPE');
       break;
     }
     case 2: {
@@ -291,18 +321,27 @@ export function drawSceneBackground(
       drawPerson(ctx, 178, GROUND_TOP, '#0B3B45');
       drawPerson(ctx, W - 150, GROUND_TOP, '#0E4854');
       drawPerson(ctx, W - 122, GROUND_TOP, '#0B3B45');
+      drawFloorSign(ctx, W * 0.5, 70, 'HIRE UNDER FIRE');
       drawBoard(ctx, W * 0.5 - 46, 150, 92, 70, '#0C3B44', '#0F5060', '#08313A'); // job board
+      drawPropLabel(ctx, W * 0.5, 128, 'HIRING');
       break;
     }
     case 3: {
       drawSky(ctx, '#083845');
       drawSkyline(ctx, 51, '#06303b', '#8FCAD6', t, reduced);
       // Compliance maze: a wall grid of stamped documents/regulations.
-      for (let bx = 120; bx < W - 200; bx += 130) {
-        drawBoard(ctx, bx, 130, 70, 90, '#072a34', '#0C4553', '#06333d');
-        // Approval "stamp".
-        pxRect(ctx, '#12657A', bx + 44, 190, 18, 18, 2);
-        pxRect(ctx, '#0A3B47', bx + 48, 194, 10, 10, 2);
+      drawFloorSign(ctx, W * 0.5, 70, 'COMPLIANCE MAZE');
+      {
+        const labels = ['TAX', 'GST', 'AUDIT', 'LEGAL', 'ENTITY'];
+        let i = 0;
+        for (let bx = 120; bx < W - 200; bx += 130) {
+          drawBoard(ctx, bx, 130, 70, 90, '#072a34', '#0C4553', '#06333d');
+          drawPropLabel(ctx, bx + 35, 138, labels[i % labels.length]!);
+          // Approval "stamp".
+          pxRect(ctx, '#12657A', bx + 44, 190, 18, 18, 2);
+          pxRect(ctx, '#0A3B47', bx + 48, 194, 10, 10, 2);
+          i += 1;
+        }
       }
       break;
     }
@@ -310,7 +349,9 @@ export function drawSceneBackground(
       drawSky(ctx, '#0A333F'); // dusk
       drawSkyline(ctx, 67, '#062b34', '#7FB8C6', t, reduced);
       // Lack of local expertise: a map of India + question marks.
+      drawFloorSign(ctx, W * 0.5, 70, 'LOCAL EXPERTISE');
       drawIndiaMap(ctx, W * 0.5 - 44, 120);
+      drawPropLabel(ctx, W * 0.5, 210, 'LOCAL?');
       break;
     }
     case 5: {

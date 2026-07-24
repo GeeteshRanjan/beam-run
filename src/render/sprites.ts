@@ -1,89 +1,103 @@
 /**
  * sprites.ts — hand-authored 8-bit sprite data for Beam Run.
  *
- * The hero is a HUMAN founder/executive walking the market-entry journey (a
- * deliberate change from the abstract "Beam" orb): dark hair, skin, a light
- * shirt with a teal blazer and dark trousers. The light shirt is intentional —
- * it gives the most gameplay-critical sprite a strong ≥3:1 silhouette against
- * the teal backdrops (accessibility), while the blazer keeps him on-brand.
+ * The hero is a HUMAN executive walking the market-entry journey (a deliberate
+ * change from the abstract "Beam" orb): dark hair with a highlight, a face with
+ * eyes and a hint of a smile, a light shirt + tie under a teal blazer with
+ * lapels, trousers and shoes. The light shirt is intentional — it gives the
+ * most gameplay-critical sprite a strong ≥3:1 silhouette against the teal
+ * backdrops (accessibility), while the blazer keeps him on-brand.
  *
  * Orange is deliberately NOT used on the hero: the brand reserves orange for
  * "value unlocked" (active powers, badge burst), so the player character stays
  * teal/neutral and orange always means progress.
  *
- * All grids are 12×16 cells. Feet sit on the bottom row; the sprite is centred
+ * Grids are 16×20 cells. Feet sit on the bottom row; the sprite is centred
  * horizontally on the player's hitbox and its bottom aligns to the feet.
  */
 import { drawPixels, maxWidth, type Palette } from './PixelArt';
 
-/** Extra human tones live alongside the brand palette (skin/hair are needed
- * for a believable person and cannot come from the 5 brand colours). */
+/** Human tones (skin/hair) sit alongside the brand palette — a believable
+ * person can't be built from the 5 brand colours alone. */
 export const HERO_PALETTE: Palette = {
   O: '#0A1416', // outline / eyes (near-black)
   H: '#241A12', // hair (dark brown)
+  h: '#3A2A1C', // hair highlight
   S: '#E8B48C', // skin
-  s: '#C98E64', // skin shadow
+  s: '#C98E64', // skin shadow (nose/mouth/jaw)
   J: '#005465', // blazer (brand Light Teal)
-  j: '#013947', // blazer shadow / tie
+  j: '#013947', // blazer shadow / sleeve edge
+  L: '#0A6B80', // lapel / blazer highlight
   W: '#E6E6E6', // shirt (brand Light Grey) — high-contrast core
-  P: '#0A2A33', // trousers (deep teal-dark)
+  w: '#B9C2C4', // shirt shadow
+  T: '#0A2A33', // tie (deep teal-dark)
+  P: '#0A2A33', // trousers
+  p: '#06181E', // trouser shadow
   B: '#0A1416', // shoes
 };
 
-// Shared upper body (head + torso + arms), rows 0..12.
+// Head + torso + waist (rows 0..15) — shared across every pose.
 const UPPER: readonly string[] = [
-  '    HHHH    ',
-  '   HHHHHH   ',
-  '   HSSSSH   ',
-  '   SSSSSS   ',
-  '   SOssOS   ',
-  '   SSssSS   ',
-  '    SSSS    ',
-  '   jWPPWj   ',
-  '  jJWPPWJj  ',
-  '  JJWPPWJJ  ',
-  '  JJWPPWJJ  ',
-  '  SJWPPWJS  ',
-  '   PPPPPP   ',
+  '.....HHHHHH.....',
+  '....HHHHHHHH....',
+  '....HhSSSShH....',
+  '....hSSSSSSh....',
+  '.....SOSSOS.....',
+  '.....SSSSSS.....',
+  '.....SssssS.....',
+  '......SSSS......',
+  '.....WwTTwW.....',
+  '..jJJLWTTWLJJj..',
+  '..jJJLWTTWLJJj..',
+  '..jJJLWTTWLJJj..',
+  '..SJJLWTTWLJJS..',
+  '....JJWWWWJJ....',
+  '....PPPPPPPP....',
+  '....PPPPPPPP....',
 ];
 
 const IDLE: readonly string[] = [
   ...UPPER,
-  '    PPPP    ',
-  '    PPPP    ',
-  '    BBBB    ',
+  '....PPP..PPP....',
+  '....PPP..PPP....',
+  '....pPP..PPp....',
+  '....BBB..BBB....',
 ];
 
 // Run frame A — legs open (stride).
 const RUN_A: readonly string[] = [
   ...UPPER,
-  '    PPPP    ',
-  '  PP    PP  ',
-  '  BB    BB  ',
+  '....PPP..PPP....',
+  '...PPP....PPP...',
+  '..pPP......PPp..',
+  '..BBB......BBB..',
 ];
 
 // Run frame B — legs together (passing). Alternating A/B reads as a walk cycle.
 const RUN_B: readonly string[] = [
   ...UPPER,
-  '    PPPP    ',
-  '    PPPP    ',
-  '    BBBB    ',
+  '....PPP..PPP....',
+  '....PPP..PPP....',
+  '......PPPP......',
+  '......BBBB......',
 ];
 
-// Airborne rising — legs tucked/spread for lift.
+// Airborne rising — knees tucked, feet lifted.
 const JUMP: readonly string[] = [
   ...UPPER,
-  '   PPPPPP   ',
-  '  PP    PP  ',
-  '  BB    BB  ',
+  '....PPP..PPP....',
+  '...PPP....PPP...',
+  '...BB......BB...',
+  '................',
 ];
 
-// Airborne falling — legs reaching for ground.
+// Airborne falling — legs reaching down and spread.
 const FALL: readonly string[] = [
   ...UPPER,
-  '   PPPPPP   ',
-  '   PP  PP   ',
-  '   BB  BB   ',
+  '....PPP..PPP....',
+  '....PPP..PPP....',
+  '...pPP....PPp...',
+  '...BBB....BBB...',
 ];
 
 export const HERO_GRID_W = maxWidth(IDLE);
@@ -105,8 +119,7 @@ function heroFrame(state: HeroDrawState): readonly string[] {
   if (state.motion === 'jump') return JUMP;
   if (state.motion === 'fall') return FALL;
   if (state.motion === 'run' && !state.still) {
-    // ~8 fps leg cadence.
-    return Math.floor(state.time * 8) % 2 === 0 ? RUN_A : RUN_B;
+    return Math.floor(state.time * 8) % 2 === 0 ? RUN_A : RUN_B; // ~8 fps cadence
   }
   return IDLE;
 }
@@ -126,41 +139,43 @@ export function drawHero(
   const grid = heroFrame(state);
   const w = HERO_GRID_W * scale;
   const h = HERO_GRID_H * scale;
-  const x = centerX - w / 2;
-  const y = feetY - h;
-  drawPixels(ctx, grid, HERO_PALETTE, x, y, {
+  drawPixels(ctx, grid, HERO_PALETTE, centerX - w / 2, feetY - h, {
     scale,
     flip: state.facing === -1,
     alpha,
   });
 }
 
-// --- Growth Point: a rising line-graph glyph (fits "growing the company") ---
+// --- Growth Point: a rising bar-chart with an up-arrow (company growth) ------
 
 const POINT_GRID: readonly string[] = [
-  '......GG',
-  '.....G..',
-  '...GG...',
-  '..G.....',
-  'GG......',
-  'a.......',
-  'a.......',
-  'aaaaaaaa',
+  '........A.......',
+  '.......AAA......',
+  '......A.A.A.....',
+  '........A....GG.',
+  '........A..GGGG.',
+  '.....G..A.GGGGG.',
+  '...GGG.GGGGGGGG.',
+  '.GGGGG.GGGGGGGG.',
+  'aaaaaaaaaaaaaaaa',
 ];
 
 const POINT_PALETTE: Palette = {
-  G: '#E6E6E6', // trend line (light grey)
-  a: '#2E7D8C', // axes (teal)
+  G: '#E6E6E6', // bars (light grey)
+  A: '#9FE6C4', // up-arrow (positive-growth green-teal accent, not orange)
+  a: '#2E7D8C', // baseline axis (teal)
 };
+
+export const POINT_GRID_W = maxWidth(POINT_GRID);
 
 /** Draw a Growth Point centred at (cx,cy). */
 export function drawGrowthPoint(
   ctx: CanvasRenderingContext2D,
   cx: number,
   cy: number,
-  scale = 3,
+  scale = 2,
 ): void {
-  const w = maxWidth(POINT_GRID) * scale;
+  const w = POINT_GRID_W * scale;
   const h = POINT_GRID.length * scale;
   drawPixels(ctx, POINT_GRID, POINT_PALETTE, cx - w / 2, cy - h / 2, { scale });
 }

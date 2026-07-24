@@ -7,7 +7,7 @@
  * only draws the world and the death fade. Pause is a host-level concern (it
  * halts stepping); all gameplay truth stays in `Simulation`.
  */
-import { RESOLUTION, BRAND, LOOP } from '../data/tuning.config';
+import { RESOLUTION, BRAND, LOOP, RUN } from '../data/tuning.config';
 import { COPY } from '../data/copy';
 import { Loop } from './Loop';
 import { Renderer } from './Renderer';
@@ -27,6 +27,7 @@ import { AudioEngine } from '../audio/AudioEngine';
 import { drawHero, drawGrowthPoint, drawBadgeDisc, type HeroMotion } from '../render/sprites';
 import { drawTileRect, drawSceneBackground } from '../render/scenery';
 import { pxRect, hash2 } from '../render/PixelArt';
+import { drawText, drawLabelPlaque } from '../render/PixelText';
 import { AssistController } from './AssistController';
 import { TouchControls, isTouchDevice } from '../ui/TouchControls';
 import { AssistMenu } from '../ui/AssistMenu';
@@ -36,6 +37,29 @@ import { getSessionId, getMutePref, setMutePref } from '../analytics/Save';
 
 /** ANSR logo orange (from the brand SVG — kept in its own colour per brief). */
 const LOGO_ORANGE = '#f05722';
+
+/**
+ * The short ANSR "solution" tag shown on each badge, so a prospect reads the
+ * pickup as a concrete ANSR capability that removes the level's problem.
+ */
+const SOLUTION_TAG: Record<string, string> = {
+  PLACE_TILE: 'ANSR 1WRK',
+  FIRE_SHIELD: 'TALENT500',
+  PASS_THROUGH: 'GCC-BOT',
+  FREEZE: '500LEADERS',
+};
+
+/** A short-lived floating label (value gained / capability unlocked). */
+interface Popup {
+  x: number;
+  y: number;
+  vy: number;
+  life: number;
+  maxLife: number;
+  text: string;
+  color: string;
+  scale: number;
+}
 
 export interface GameOptions {
   navigatorUrl?: string;
@@ -82,6 +106,7 @@ export class Game {
   private lastFrameS = 0;
   private prevOnGround = false;
   private prevHasPower = false;
+  private readonly popups: Popup[] = [];
 
   constructor(root: HTMLElement, options: GameOptions = {}) {
     this.root = root;
@@ -149,6 +174,7 @@ export class Game {
       onStateChange: (from, to) => this.onSimStateChange(from, to),
       onScreenEnter: (id, name) => {
         this.effects.clear();
+        this.popups.length = 0;
         this.prevOnGround = false;
         this.analytics.screenEntered(id, name);
         this.hud.announce(COPY.a11y.screenEntered(name));
@@ -168,7 +194,11 @@ export class Game {
       },
       onPointCollected: (id) => {
         const pt = this.sim.screen.points.find((p) => p.id === id);
-        if (pt) this.effects.emitBurst(pt.x, pt.y, BRAND.LIGHT_GREY, 10, 140);
+        if (pt) {
+          this.effects.emitBurst(pt.x, pt.y, BRAND.LIGHT_GREY, 10, 140);
+          // Floating "+value" so growth reads as concrete company value.
+          this.spawnPopup(pt.x, pt.y - 16, `+${RUN.POINTS_PER_PICKUP}`, '#9FE6C4', 2);
+        }
         this.audio.playSfx('pickup');
       },
       onBadgeCollected: (id, type) => {
@@ -182,6 +212,14 @@ export class Game {
         this.analytics.badgeCollected(id, type);
         const capability = COPY.capabilities[type] ?? type;
         this.hud.announce(`${COPY.badgeToast.prefix}: ${capability}.`);
+        // Floating "VALUE UNLOCKED" + the ANSR capability, in the value orange.
+        if (b) {
+          const T = RESOLUTION.TILE;
+          const cx = b.gx * T + T / 2;
+          const cy = b.gy * T + T / 2;
+          this.spawnPopup(cx, cy - 24, 'VALUE UNLOCKED', BRAND.ORANGE, 2);
+          this.spawnPopup(cx, cy - 8, SOLUTION_TAG[type] ?? type, '#CFE6EC', 2);
+        }
       },
     });
 
@@ -344,6 +382,7 @@ export class Game {
     const dt = this.lastFrameS ? Math.min(0.1, nowS - this.lastFrameS) : 0;
     this.lastFrameS = nowS;
     this.effects.update(dt);
+    if (!this.paused) this.updatePopups(dt);
 
     const state = this.sim.state;
     const p = this.sim.player;
@@ -373,6 +412,7 @@ export class Game {
     if (state !== 'START' && state !== 'BOOT') {
       this.drawWorld(ctx, alpha);
       this.drawParticles(ctx);
+      this.drawPopups(ctx);
       if (state === 'DEATH') this.drawFade(ctx);
     }
     this.drawFlash(ctx);
@@ -485,7 +525,7 @@ export class Game {
     for (const pt of screen.points) {
       if (pt.collected) continue;
       const bob = this.reducedMotion ? 0 : Math.sin(this.now() * 3 + pt.x) * 3;
-      drawGrowthPoint(ctx, pt.x, pt.y + bob, 3);
+      drawGrowthPoint(ctx, pt.x, pt.y + bob, 2);
     }
 
     const p = this.sim.player;
@@ -502,7 +542,8 @@ export class Game {
     let motion: HeroMotion;
     if (!p.onGround) motion = p.vy < 0 ? 'jump' : 'fall';
     else motion = Math.abs(p.vx) > 20 ? 'run' : 'idle';
-    // Feet land ~4px above the raw hitbox bottom so the shoes sit on the tile.
+    // Feet land ~2px into the tile so the shoes sit on the surface. The 16×20
+    // grid at scale 3 → a 48×60 figure (bigger, clearly a person).
     drawHero(
       ctx,
       { motion, facing: p.facing, time: this.now(), still: this.reducedMotion },
@@ -510,6 +551,35 @@ export class Game {
       feetY + 2,
       3,
     );
+  }
+
+  // --- floating value popups ------------------------------------------------
+
+  private spawnPopup(x: number, y: number, text: string, color: string, scale = 2): void {
+    if (this.popups.length > 24) this.popups.shift();
+    this.popups.push({ x, y, vy: -34, life: 1.1, maxLife: 1.1, text, color, scale });
+  }
+
+  private updatePopups(dt: number): void {
+    for (let i = this.popups.length - 1; i >= 0; i -= 1) {
+      const p = this.popups[i]!;
+      p.life -= dt;
+      if (!this.reducedMotion) p.y += p.vy * dt;
+      if (p.life <= 0) this.popups.splice(i, 1);
+    }
+  }
+
+  private drawPopups(ctx: CanvasRenderingContext2D): void {
+    for (const p of this.popups) {
+      const a = Math.max(0, Math.min(1, p.life / p.maxLife));
+      drawText(ctx, p.text, p.x, p.y, {
+        scale: p.scale,
+        color: p.color,
+        align: 'center',
+        outline: 'rgba(0,20,26,0.9)',
+        alpha: a,
+      });
+    }
   }
 
   /** Landing dust + pickup/badge bursts (empty under reduced motion). */
@@ -572,6 +642,16 @@ export class Game {
             pxRect(ctx, 'rgba(230,230,230,0.22)', x + px, yy, PX, PX, PX);
           }
         }
+        // Sinking paperwork flecks — you are literally stuck in the "red tape".
+        for (let f = 0; f < 6; f += 1) {
+          const seed = hash2(q.gx * 13 + f, q.gy + f * 5);
+          const fx = x + 12 + seed * (w - 28);
+          const phase = ((t * 0.22 + seed) % 1 + 1) % 1;
+          const fy = y + 6 + phase * (h - 18);
+          const a = 0.55 * (1 - phase);
+          pxRect(ctx, `rgba(207,230,236,${a})`, fx, fy, 10, 8, 2); // sheet
+          pxRect(ctx, `rgba(10,44,53,${a})`, fx + 2, fy + 3, 6, 2, 2); // text line
+        }
       }
     }
   }
@@ -596,19 +676,23 @@ export class Game {
         pxRect(ctx, markColor, cx - s * PX, 30, s * PX * 2, PX, PX);
         pxRect(ctx, markColor, cx - PX, 24, PX * 2, PX * 3, PX);
       } else if (lane.state === 'active') {
-        // Lethal pixel flame filling the lane: stacked orange blocks whose edge
-        // tongues flicker via stable hash noise + time (chunky, not gradient).
-        const left = lane.x + 4;
-        const colW = T - 8;
+        // Lethal pixel flame: full and hot at the base, tapering into wavy
+        // tongues with a white-hot core and rising embers (hiring pressure).
         for (let y = 0; y < groundY; y += PX) {
-          const heat = 1 - y / groundY; // hotter (whiter) near the top-source
-          const base = heat > 0.6 ? '#FFB07A' : heat > 0.3 ? '#FF7A2A' : '#FF5400';
-          pxRect(ctx, base, left, y, colW, PX, PX);
-          // Flickering ragged edges.
-          const flick = Math.sin(t * 16 + y * 0.4 + lane.x) * 0.5 + 0.5;
-          if (hash2(lane.x + y, Math.floor(t * 12)) < 0.35 + flick * 0.2) {
-            pxRect(ctx, '#FFB07A', left, y, PX, PX, PX);
-            pxRect(ctx, '#FFB07A', left + colW - PX, y, PX, PX, PX);
+          const up = y / groundY; // 0 at ground → 1 at top
+          const wave = this.reducedMotion ? 0 : Math.sin(t * 12 + y * 0.12 + lane.x) * 3;
+          const half = Math.max(PX, (T / 2 - 4) * (1 - up * 0.55) + wave);
+          const base = up > 0.66 ? '#FF5400' : up > 0.33 ? '#FF7A2A' : '#FFA24A';
+          pxRect(ctx, base, cx - half, groundY - PX - y, half * 2, PX, PX);
+          pxRect(ctx, '#FFD9A8', cx - PX, groundY - PX - y, PX * 2, PX, PX); // core
+        }
+        // Rising embers (respect reduced-motion).
+        if (!this.reducedMotion) {
+          for (let e = 0; e < 5; e += 1) {
+            const seed = hash2(lane.x + e * 7, 3);
+            const ey = groundY - ((t * (70 + seed * 70) + seed * 500) % groundY);
+            const ex = cx + Math.sin(t * 3 + e) * 10;
+            pxRect(ctx, '#FFB07A', ex, ey, PX, PX, PX);
           }
         }
       }
@@ -738,8 +822,19 @@ export class Game {
     ctx.beginPath();
     ctx.arc(cx, cy, r * 1.8, 0, Math.PI * 2);
     ctx.fill();
-    // Pixel ANSR disc (12 cells wide → scale ~3 gives a ~36px badge).
+    // Pixel ANSR disc (12 cells wide → scale 3 gives a ~36px badge).
     drawBadgeDisc(ctx, cx, cy, 3);
+    // Name the ANSR capability this badge unlocks, so the "solution" is explicit.
+    const tag = SOLUTION_TAG[badge.type] ?? '';
+    if (tag) {
+      drawLabelPlaque(ctx, tag, cx, cy - 52, {
+        scale: 2,
+        fg: '#CFE6EC',
+        bg: 'rgba(0,26,34,0.7)',
+        frame: 'rgba(28,130,150,0.6)',
+        alpha: 0.95,
+      });
+    }
   }
 
   private drawFade(ctx: CanvasRenderingContext2D): void {
