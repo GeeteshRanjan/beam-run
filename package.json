@@ -1,0 +1,49 @@
+{
+  "name": "@ansr/beam-run",
+  "version": "0.1.0",
+  "description": "Beam Run: Market Entry — a playable explainer for ANSR's India GCC journey.",
+  "type": "module",
+  "license": "UNLICENSED",
+  "private": true,
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/beam-run.iife.js",
+  "module": "./dist/beam-run.esm.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/beam-run.esm.js",
+      "require": "./dist/beam-run.iife.js"
+    }
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "validate:levels": "tsx scripts/validate-levels.ts",
+    "lint": "eslint \"src/**/*.{ts,tsx}\" \"scripts/**/*.ts\"",
+    "lint:fix": "eslint --fix \"src/**/*.{ts,tsx}\" \"scripts/**/*.ts\"",
+    "format": "prettier --write \"src/**/*.{ts,tsx,css,json}\"",
+    "typecheck": "tsc --noEmit",
+    "analyze": "vite build && node scripts/check-budget.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.43",
+    "@typescript-eslint/eslint-plugin": "^8.8.0",
+    "@typescript-eslint/parser": "^8.8.0",
+    "eslint": "^8.57.1",
+    "eslint-config-prettier": "^9.1.0",
+    "jsdom": "^25.0.1",
+    "prettier": "^3.3.3",
+    "rollup-plugin-visualizer": "^5.12.0",
+    "terser": "^5.36.0",
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.10",
+    "vitest": "^2.1.4"
+  }
+}

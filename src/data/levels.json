@@ -1,0 +1,163 @@
+{
+  "$schema": "./levels.schema.md",
+  "meta": {
+    "grid": { "cols": 32, "rows": 18, "tile": 40 },
+    "notes": "All coordinates are in TILE units unless a field name ends in _px. Rows count from top (0) down. Ground band is rows 15-17. 'gx' = grid x, 'gy' = grid y, 'w'/'h' in tiles. Player hitbox is 28x44px; spawn places feet on the given tile top.",
+    "conventions": {
+      "solid": "static collidable platform/wall (non-lethal). Walking into a wall stops you.",
+      "spawn": "player entry point (feet), always near far-left",
+      "exit": "reaching this x (right edge trigger) advances to next screen",
+      "badge": "ANSR powerup pickup for this screen",
+      "points": "Growth Point pickups (value from tuning RUN.POINTS_PER_PICKUP)"
+    }
+  },
+
+  "screens": [
+    {
+      "id": 0,
+      "name": "Lobby",
+      "type": "intro",
+      "hazard": "none",
+      "spawn": { "gx": 1, "gy": 15 },
+      "exit": { "gx": 31 },
+      "solids": [
+        { "gx": 0, "gy": 15, "w": 32, "h": 3, "role": "ground" },
+        { "gx": 9,  "gy": 14, "w": 1, "h": 1, "role": "practice-wall" },
+        { "gx": 16, "gy": 13, "w": 1, "h": 2, "role": "practice-wall" },
+        { "gx": 23, "gy": 12, "w": 2, "h": 3, "role": "practice-step" }
+      ],
+      "points": [
+        { "gx": 10, "gy": 12 }, { "gx": 17, "gy": 11 }, { "gx": 24, "gy": 10 }
+      ],
+      "copy": { "titleCard": "Reception", "hint": "Move: ← →  ·  Jump: Space / ↑" }
+    },
+
+    {
+      "id": 1,
+      "name": "Setup Delays",
+      "type": "hazard",
+      "hazard": "quicksand",
+      "meaningTag": "speed-to-setup",
+      "spawn": { "gx": 1, "gy": 15 },
+      "exit": { "gx": 31 },
+      "solids": [
+        { "gx": 0,  "gy": 15, "w": 13, "h": 3, "role": "ground" },
+        { "gx": 20, "gy": 15, "w": 12, "h": 3, "role": "ground" }
+      ],
+      "quicksand": [
+        { "gx": 13, "gy": 16, "w": 7, "h": 2 }
+      ],
+      "badge": {
+        "type": "PLACE_TILE", "gx": 8, "gy": 13,
+        "placesTileAt": { "gx": 14, "gy": 15, "w": 5, "h": 1 },
+        "note": "Lays a FLUSH bridge across the pit (setup 'solved once'). Permanent for the attempt; cleared on respawn — re-collect required. Without the badge the 7-tile pit exceeds max jump distance, so the badge is the intended solve."
+      },
+      "points": [
+        { "gx": 4, "gy": 13 }, { "gx": 8, "gy": 12 }, { "gx": 24, "gy": 13 }, { "gx": 28, "gy": 12 }
+      ],
+      "copy": { "titleCard": "Level 1 — Setup Delays", "onClear": "Setup accelerated." }
+    },
+
+    {
+      "id": 2,
+      "name": "Hire Under Fire",
+      "type": "hazard",
+      "hazard": "fire",
+      "meaningTag": "talent-at-scale",
+      "spawn": { "gx": 1, "gy": 15 },
+      "exit": { "gx": 31 },
+      "solids": [
+        { "gx": 0,  "gy": 15, "w": 32, "h": 3, "role": "ground" },
+        { "gx": 11, "gy": 14, "w": 1, "h": 1, "role": "practice-wall" },
+        { "gx": 21, "gy": 13, "w": 1, "h": 2, "role": "practice-wall" }
+      ],
+      "fireLanes": [
+        { "gx": 8,  "phaseIndex": 0 },
+        { "gx": 14, "phaseIndex": 1 },
+        { "gx": 19, "phaseIndex": 2 },
+        { "gx": 26, "phaseIndex": 0 }
+      ],
+      "badge": { "type": "FIRE_SHIELD", "gx": 5, "gy": 13 },
+      "points": [
+        { "gx": 5, "gy": 12 }, { "gx": 12, "gy": 13 }, { "gx": 17, "gy": 12 }, { "gx": 23, "gy": 13 }, { "gx": 29, "gy": 12 }
+      ],
+      "copy": { "titleCard": "Level 2 — Hire Under Fire", "onClear": "Talent secured." }
+    },
+
+    {
+      "id": 3,
+      "name": "Compliance Maze",
+      "type": "hazard",
+      "hazard": "plants",
+      "meaningTag": "entity-and-compliance",
+      "spawn": { "gx": 1, "gy": 15 },
+      "exit": { "gx": 31 },
+      "solids": [
+        { "gx": 0, "gy": 15, "w": 32, "h": 3, "role": "ground" },
+        { "gx": 7,  "gy": 12, "w": 3, "h": 1, "role": "platform" },
+        { "gx": 15, "gy": 11, "w": 3, "h": 1, "role": "platform" },
+        { "gx": 23, "gy": 12, "w": 3, "h": 1, "role": "platform" }
+      ],
+      "plants": [
+        { "gx": 6,  "gy": 14, "axis": "x", "phase": 0.0 },
+        { "gx": 11, "gy": 14, "axis": "x", "phase": 0.5 },
+        { "gx": 14, "gy": 14, "axis": "x", "phase": 1.0 },
+        { "gx": 19, "gy": 14, "axis": "x", "phase": 0.25 },
+        { "gx": 22, "gy": 14, "axis": "x", "phase": 0.75 },
+        { "gx": 27, "gy": 14, "axis": "x", "phase": 0.5 }
+      ],
+      "badge": { "type": "PASS_THROUGH", "gx": 4, "gy": 13 },
+      "points": [
+        { "gx": 8, "gy": 11 }, { "gx": 16, "gy": 10 }, { "gx": 24, "gy": 11 }, { "gx": 30, "gy": 13 }
+      ],
+      "copy": { "titleCard": "Level 3 — Compliance Maze", "onClear": "Entity compliant." }
+    },
+
+    {
+      "id": 4,
+      "name": "Lack of Local Expertise",
+      "type": "hazard",
+      "hazard": "spikes",
+      "meaningTag": "local-expertise",
+      "spawn": { "gx": 1, "gy": 15 },
+      "exit": { "gx": 31 },
+      "solids": [
+        { "gx": 0,  "gy": 15, "w": 32, "h": 3, "role": "ground" },
+        { "gx": 13, "gy": 13, "w": 2, "h": 1, "role": "platform" }
+      ],
+      "spikeColumns": [
+        { "gx": 7,  "phaseIndex": 0 },
+        { "gx": 11, "phaseIndex": 2 },
+        { "gx": 16, "phaseIndex": 1 },
+        { "gx": 20, "phaseIndex": 3 },
+        { "gx": 25, "phaseIndex": 0 }
+      ],
+      "badge": { "type": "FREEZE", "gx": 4, "gy": 13 },
+      "points": [
+        { "gx": 4, "gy": 12 }, { "gx": 13, "gy": 11 }, { "gx": 22, "gy": 13 }, { "gx": 29, "gy": 12 }
+      ],
+      "copy": { "titleCard": "Level 4 — Lack of Local Expertise", "onClear": "Local expertise onboarded." }
+    },
+
+    {
+      "id": 5,
+      "name": "ANSR Tech Park",
+      "type": "finale",
+      "hazard": "none",
+      "spawn": { "gx": 1, "gy": 15 },
+      "winTrigger": { "gx": 26 },
+      "solids": [
+        { "gx": 0, "gy": 15, "w": 32, "h": 3, "role": "ground" },
+        { "gx": 22, "gy": 8, "w": 8, "h": 7, "role": "tower-facade-noncollide" }
+      ],
+      "points": [
+        { "gx": 8, "gy": 13 }, { "gx": 14, "gy": 13 }, { "gx": 19, "gy": 13 }
+      ],
+      "copy": {
+        "titleCard": "Arrival — ANSR Tech Park",
+        "win": "Market Entry Complete.",
+        "valuationLabel": "Company Valuation"
+      }
+    }
+  ]
+}

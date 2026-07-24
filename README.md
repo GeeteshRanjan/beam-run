@@ -1,0 +1,120 @@
+# Beam Run: Market Entry
+
+A tasteful, on-brand HTML5 Canvas 2D platformer — a ~90-second "playable explainer" for ANSR's
+India GCC journey. Six fixed-camera screens (Lobby → Setup Delays → Hire Under Fire → Compliance
+Maze → Lack of Local Expertise → ANSR Tech Park), each hazard mapping to a real ANSR capability
+with an ANSR "badge" powerup. Privacy-first, accessible (WCAG 2.2 AA target), and lazy-loaded so it
+never sits on the host page's critical path.
+
+The full specifications live in the sibling `ANSR Game/` docs (game design, technical architecture,
+level design, art/audio, UX/accessibility, analytics, QA, ops, roadmap). Those docs are the source
+of truth; this README covers running, building and embedding.
+
+## Requirements
+
+- Node.js 20.x and npm 10.x
+- Install dependencies once: `npm install`
+
+## Run (local dev)
+
+```bash
+npm run dev        # Vite dev server; open the printed URL to play
+```
+
+## Verify (all gates must be green)
+
+```bash
+npm run typecheck        # tsc --noEmit
+npm run lint             # eslint
+npm run test             # vitest (unit + integration)
+npm run build            # tsc + vite library build (ESM + IIFE)
+npm run validate:levels  # physics-aware completability + lethal-point checks
+npm run analyze          # build + bundle budget gate (JS ≤ 90 KB, total ≤ 250 KB gzipped)
+```
+
+## Build output
+
+`npm run build` produces a lazy-loadable library in `dist/`:
+
+- `beam-run.esm.js` — ES module (for bundlers / the React wrapper). React is a peer, never bundled.
+- `beam-run.iife.js` — self-contained global build exposing `window.BeamRun`.
+
+## Embed
+
+### 1. Plain page / IIFE (`window.BeamRun`)
+
+```html
+<div id="beam-run"></div>
+<script src="/path/to/beam-run.iife.js"></script>
+<script>
+  window.BeamRun.mount('#beam-run', {
+    navigatorUrl: '/gcc-opportunity-navigator',
+    consent: false, // set true only when your consent manager approves analytics
+    lazy: true,     // boot on viewport intersection (default)
+  });
+</script>
+```
+
+`mount(target, options)` returns `{ destroy() }`. See `../index.html` for a full branded demo page.
+
+### 2. React (`<BeamRun/>`)
+
+The library ships zero React. Build the component from your own React so there is no version
+coupling:
+
+```tsx
+import { createBeamRunComponent } from '@ansr/beam-run';
+import * as React from 'react';
+
+const BeamRun = createBeamRunComponent(React);
+
+export function Explainer() {
+  return <BeamRun navigatorUrl="/gcc-opportunity-navigator" consent={hasConsent} />;
+}
+```
+
+### Options
+
+| Option         | Type      | Default                        | Notes                                                        |
+| -------------- | --------- | ------------------------------ | ------------------------------------------------------------ |
+| `navigatorUrl` | string    | `/gcc-opportunity-navigator`   | CTA deep-link base (UTM + non-PII outcome payload appended). |
+| `consent`      | boolean   | `false`                        | Analytics are a **no-op** until this is `true`.              |
+| `lazy`         | boolean   | `true`                         | Boot only when scrolled into view.                           |
+| `enabled`      | boolean   | `true`                         | Kill switch — `false` renders only the fallback card.        |
+| `onCta`        | function  | —                              | Intercept the Navigator hand-off (else navigates).           |
+| `onError`      | function  | —                              | Notified if the engine fails to boot (falls back to card).   |
+
+Global kill switch: set `window.__BEAM_RUN_DISABLED__ = true` before mount to force the fallback.
+
+## Controls & accessibility
+
+- **Keyboard:** ← → / A D to move, Space / ↑ / W to jump, Esc / P to pause, M to mute.
+- **Touch:** on-screen movement zone + jump button (safe-area aware, ≥44px, haptics).
+- **Assist options** (pause → Assist): slow mode, extra reaction time, invincible practice, larger
+  controls, and independent music/SFX mutes — all announced via `aria-live`.
+- Respects `prefers-reduced-motion` (disables shake, trail, particles, flash, parallax drift).
+- Audio starts muted until a user gesture; the game is fully playable with sound off.
+
+## Privacy
+
+No PII is collected in the game and there is no gate to play. A pseudonymous `session_id`
+(sessionStorage, cleared on tab close) ties analytics for funnel analysis only. With no consent the
+analytics adapter emits nothing. The only hand-off is an explicit CTA click that deep-links to the
+Navigator with a non-PII UTM/outcome payload.
+
+## Project layout
+
+```
+src/
+  core/       Loop, StateMachine, Renderer, Input, Simulation, Game, Effects, AssistController, finaleScene
+  world/      Physics, Player, Screen, Powerups, Hazards/{Quicksand,Fire,Plants,Spikes}
+  ui/         Hud, Overlays, TouchControls, AssistMenu, styles
+  audio/      AudioEngine
+  analytics/  Analytics, navigator, Save
+  embed/      mount (lazy/kill-switch/error-boundary), FallbackCard
+  data/       tuning.config.ts, levels.json (source of truth), levels.ts, tokens.ts, copy.ts
+scripts/      validate-levels.ts (physics-aware CI gate), check-budget.mjs + budget.mjs (budget gate)
+```
+
+Gameplay numbers and layouts are entirely data-driven (`src/data/tuning.config.ts`, `levels.json`);
+the engine hardcodes none. All UI strings live in `src/data/copy.ts` (i18n-ready).
