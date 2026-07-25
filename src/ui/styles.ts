@@ -337,12 +337,16 @@ export const CSS = `
 }
 
 /* ANSR lockup (generated sunburst + wordmark) ------------------------------- */
-.beam-run__brand { display: flex; align-items: center; gap: clamp(10px, 1.6%, 18px); }
+.beam-run__brand {
+  display: flex; align-items: center; justify-content: center;
+  flex-wrap: wrap; gap: clamp(10px, 1.6%, 18px);
+}
 /* Wordmark + edition on a shared baseline (see BrandMark): centring the two
    against each other left the smaller edition text sitting low. The mark stays
    optically centred on the row. */
 .beam-run__brand-text {
-  display: flex; align-items: baseline; gap: clamp(8px, 1.4%, 16px);
+  display: flex; align-items: baseline; justify-content: center;
+  flex-wrap: wrap; gap: clamp(8px, 1.4%, 16px);
 }
 /* Height is left to the aspect ratio: the sunburst's own bounding box is
    175×181, so forcing a square would squash the real logo by 3%. */
@@ -360,14 +364,19 @@ export const CSS = `
   width: 2px; height: clamp(15px, ${U(2.1)}, 26px);
   background: rgba(230, 230, 230, 0.34);
 }
+/* Set at the SAME size as the wordmark: at a smaller size it never sat right
+   beside it, whatever it was aligned to. Weight and colour carry the hierarchy
+   instead — the edition is lighter and muted, the wordmark bold and white. */
 .beam-run__brand-title {
-  font-size: clamp(11px, ${U(1.6)}, 19px); color: ${BRAND.LIGHT_GREY};
-  text-transform: uppercase; letter-spacing: 0.16em;
+  font-size: clamp(21px, ${U(3)}, 36px); color: ${BRAND.LIGHT_GREY};
+  font-weight: 400; text-transform: uppercase; letter-spacing: 0.12em; line-height: 1;
 }
 .beam-run__brand--compact .beam-run__brand-mark {
   width: clamp(22px, ${U(2.6)}, 32px);
 }
-.beam-run__brand--compact .beam-run__brand-word { font-size: clamp(13px, ${U(1.7)}, 19px); }
+.beam-run__brand--compact .beam-run__brand-word,
+.beam-run__brand--compact .beam-run__brand-title { font-size: clamp(13px, ${U(1.7)}, 19px); }
+.beam-run__brand--compact .beam-run__brand-rule { height: clamp(10px, ${U(1.2)}, 14px); }
 
 /* Titles are bitmap art (the visible glyphs live in the SVG); the element itself
    just centres it and carries the orange value hairline underneath. */
@@ -690,8 +699,8 @@ export const CSS = `
      the meters. */
   .beam-run__stack { width: 100%; }
   .beam-run__brand-mark { width: clamp(32px, 9vw, 46px); }
-  .beam-run__brand-word { font-size: clamp(19px, 5.6vw, 28px); }
-  .beam-run__brand-title { font-size: clamp(11px, 3vw, 15px); }
+  .beam-run__brand-word,
+  .beam-run__brand-title { font-size: clamp(19px, 5.6vw, 28px); }
   .beam-run__bar { grid-template-columns: minmax(58px, 30%) minmax(0, 1fr) 3ch; gap: 8px; }
   .beam-run__bar-label { font-size: clamp(9px, 2.6vw, 12px); letter-spacing: 0.06em; }
   .beam-run__bar-value { font-size: clamp(11px, 3vw, 15px); }
