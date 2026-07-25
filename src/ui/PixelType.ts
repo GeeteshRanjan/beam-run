@@ -204,6 +204,10 @@ export const PIXEL_TITLE = {
   unit: 0.42,
   minPx: 3,
   maxPx: 7,
+  // Headings are flex items in a centred column, i.e. shrink-wrapped, so they
+  // need the frame-unit cap too — with the percentage one they came out ~10%
+  // under size (the fallback is the SVG's own intrinsic width).
+  maxShare: 72,
   color: '#FFFFFF',
   shadow: 'rgba(0,16,22,0.85)',
 } as const;

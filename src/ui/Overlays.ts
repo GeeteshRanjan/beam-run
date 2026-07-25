@@ -31,12 +31,20 @@ import {
 const PX_TYPE = {
   /** Headlines — shared with the assist dialog so every title matches. */
   title: PIXEL_TITLE,
-  /** The closing months figure — the loudest element on any screen. */
-  figure: { unit: 0.9, minPx: 7, maxPx: 15 },
+  /**
+   * The closing months figure — the loudest element on any screen.
+   *
+   * `maxShare` is not optional here. This sits in `.beam-run__months-value`,
+   * which shrink-wraps its contents, so the default `min(96%, …)` cap had nothing
+   * definite to measure: the percentage fell back to the SVG's own intrinsic
+   * width (12 cells × the default 4px scale = 48px) and the hero figure rendered
+   * at ~46px instead of ~110px — the same size as the word "months" beside it.
+   */
+  figure: { unit: 0.9, minPx: 7, maxPx: 15, maxShare: 30 },
   /** The lead-in and tail of the stake sentence (~21px glyphs at native width). */
-  stakeText: { unit: 0.24, minPx: 2.4, maxPx: 4 },
+  stakeText: { unit: 0.24, minPx: 2.4, maxPx: 4, maxShare: 80 },
   /** "24 months" — the figure carries the hook, so it is set at display size. */
-  stakeFigure: { unit: 0.5, minPx: 4, maxPx: 9 },
+  stakeFigure: { unit: 0.5, minPx: 4, maxPx: 9, maxShare: 60 },
 
   /*
    * End-screen roles. These all carry `maxShare` (a cap in frame units) rather
@@ -375,11 +383,16 @@ export class Overlays {
 
   /**
    * The end screens' two-column body: the run's result on the left, the receipt
-   * and its routes on the right. Stacked, these screens are ~800px of content —
-   * taller than a 16:9 frame even before they were set in bitmap type — which put
-   * the CTA, the whole point of the screen, below the fold. Side by side they fit
-   * with room, and the receipt reads beside the figure it explains. Narrow frames
-   * fall back to one column (see styles.ts).
+   * on the right. Stacked, these screens are ~800px of content — taller than a
+   * 16:9 frame even before they were set in bitmap type — which put the CTA, the
+   * whole point of the screen, below the fold. Side by side they fit with room,
+   * and the receipt reads beside the figure it explains. Narrow frames fall back
+   * to one column (see styles.ts).
+   *
+   * The actions are deliberately NOT in a column: a CTA tucked under the right
+   * half made the screen lopsided, and full width it also has room to sit beside
+   * "Play again" instead of wrapping under it. Title above, buttons below, two
+   * columns between — the whole screen reads on one centre line.
    */
   private columns(main: readonly HTMLElement[], aside: readonly HTMLElement[]): HTMLElement {
     const cols = this.h('div', 'beam-run__cols');
@@ -606,10 +619,7 @@ export class Overlays {
     const cta = this.btn(COPY.summary.cta, 'primary', () => this.cb.onCta('summary'));
     const resume = this.btn(COPY.summary.resume, 'ghost', () => this.cb.onResume());
     actions.append(cta, resume);
-    card.append(
-      title,
-      this.columns([this.summaryReached, clock], [this.summaryReceipt.root, actions]),
-    );
+    card.append(title, this.columns([this.summaryReached, clock], [this.summaryReceipt.root]), actions);
     el.append(brand, card);
     return { el, focusTarget: cta };
   }
@@ -714,8 +724,8 @@ export class Overlays {
       title,
       this.columns([label, figure, this.winBars.root, refs, this.winMatched], [
         this.winReceipt.root,
-        actions,
       ]),
+      actions,
     );
     el.append(brand, card);
     return { el, focusTarget: this.winCta };

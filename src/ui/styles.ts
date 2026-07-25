@@ -350,6 +350,10 @@ export const CSS = `
 }
 @container (min-width: 900px) {
   .beam-run__stack--receipt { width: min(100%, 1060px); }
+  /* Equal-width columns, tops aligned: with the buttons moved out from under the
+     right column the two halves are within ~25px of each other, and aligning
+     their opening captions on one line reads more even than centring each
+     column's mass would. */
   .beam-run__cols { flex-direction: row; align-items: flex-start; gap: clamp(20px, 3%, 44px); }
   .beam-run__col { flex: 1 1 0; min-width: 0; }
   .beam-run__col--aside .beam-run__receipt { max-width: none; }
@@ -549,11 +553,10 @@ export const CSS = `
 
 /* Receipt — the four capabilities, each its own route to the Navigator. */
 .beam-run__receipt { width: 100%; max-width: 640px; display: flex; flex-direction: column; gap: 6px; }
-/* The receipt is a list, so its header, hint and footer line up with the rows
-   rather than centring like the rest of the screen. */
-.beam-run__receipt-title { display: flex; }
-.beam-run__receipt .beam-run__hint,
-.beam-run__receipt-wins { justify-content: flex-start; }
+/* The receipt's header, hint and footer centre on their column, mirroring the
+   left column's caption: the rows fill the column, so the axis of the screen
+   stays down the middle. */
+.beam-run__receipt-title { display: flex; justify-content: center; }
 .beam-run__receipt-list { display: flex; flex-direction: column; gap: 6px; width: 100%; }
 /*
  * One row layout everywhere: mark | product + saving | stage underneath.
@@ -588,7 +591,7 @@ export const CSS = `
   background: rgba(60, 20, 0, 0.6); border-color: rgba(255, 84, 0, 0.55);
   box-shadow: inset 4px 0 0 ${BRAND.ORANGE};
 }
-.beam-run__receipt-wins { margin-top: 2px; display: flex; }
+.beam-run__receipt-wins { margin-top: 2px; display: flex; justify-content: center; }
 
 .beam-run__actions {
   display: flex; flex-wrap: wrap; justify-content: center; align-items: center;

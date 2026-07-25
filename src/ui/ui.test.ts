@@ -277,6 +277,31 @@ describe('Overlays', () => {
     expect(visible(parent).querySelector('.beam-run__title')!.textContent).toBe('Compliance');
   });
 
+  it('sizes the closing figure in frame units, not off its own parent', () => {
+    // The figure sits in a shrink-wrapping box, so a percentage cap has nothing
+    // definite to measure and silently falls back to the SVG's intrinsic width —
+    // which rendered the hero figure at the same size as the word beside it.
+    overlays.show('win', { receipt: receipt({ months: 14 }) });
+    const art = visible(parent).querySelector('.beam-run__months-value svg')!;
+    const width = art.getAttribute('style') ?? '';
+    expect(width).toContain('var(--beam-run-u)');
+    expect(width).not.toContain('%');
+    // …and it is set larger than the unit label next to it.
+    const unit = visible(parent).querySelector('.beam-run__months-unit svg')!;
+    const scale = (el: Element): number => {
+      const w = Number(el.getAttribute('width'));
+      const cols = Number(el.getAttribute('viewBox')!.split(' ')[2]);
+      return w / cols; // authored-pixel size at intrinsic scale
+    };
+    expect(scale(art)).toBe(scale(unit)); // both at the default intrinsic scale…
+    const share = (el: Element): number =>
+      Number(/--beam-run-u\) \* ([\d.]+)/.exec(el.getAttribute('style') ?? '')![1]);
+    // …so the difference must come from the frame-relative sizing, per glyph.
+    const per = (el: Element): number =>
+      share(el) / Number(el.getAttribute('viewBox')!.split(' ')[2]);
+    expect(per(art)).toBeGreaterThan(per(unit) * 2);
+  });
+
   it('draws the closing months figure as bitmap digits that follow the count-up', () => {
     overlays.show('win', { receipt: receipt({ months: 14 }) });
     const value = visible(parent).querySelector('.beam-run__months-value')!;
@@ -372,10 +397,16 @@ describe('Overlays', () => {
       const cols = visible(parent).querySelector('.beam-run__cols')!;
       expect(cols, screen).not.toBeNull();
       expect(cols.children, screen).toHaveLength(2);
-      // The conversion surface and its routes travel together.
+      // The receipt is the right-hand column…
       const aside = cols.querySelector('.beam-run__col--aside')!;
       expect(aside.querySelector('.beam-run__receipt'), screen).not.toBeNull();
-      expect(aside.querySelector('.beam-run__actions'), screen).not.toBeNull();
+      // …and the buttons span the whole screen under both columns, centred, so
+      // the composition stays on one centre line (a CTA tucked under the right
+      // half made the screen lopsided).
+      const stack = visible(parent).querySelector('.beam-run__stack')!;
+      const actions = stack.querySelector('.beam-run__actions')!;
+      expect(actions.parentElement, screen).toBe(stack);
+      expect(cols.querySelector('.beam-run__actions'), screen).toBeNull();
     }
     // Side by side only where the frame can carry it; stacked below that.
     expect(CSS).toContain('@container (min-width: 900px)');
