@@ -341,12 +341,11 @@ export const CSS = `
   display: flex; align-items: center; justify-content: center;
   flex-wrap: wrap; gap: clamp(10px, 1.6%, 18px);
 }
-/* Wordmark + edition on a shared baseline (see BrandMark): centring the two
-   against each other left the smaller edition text sitting low. The mark stays
-   optically centred on the row. */
+/* Wordmark, divider and edition on one centred row (see BrandMark). Every item
+   is line-height 1, so centring the boxes centres the caps. */
 .beam-run__brand-text {
-  display: flex; align-items: baseline; justify-content: center;
-  flex-wrap: wrap; gap: clamp(8px, 1.4%, 16px);
+  display: flex; align-items: center; justify-content: center;
+  flex-wrap: wrap; gap: clamp(9px, 1.5%, 17px);
 }
 /* Height is left to the aspect ratio: the sunburst's own bounding box is
    175×181, so forcing a square would squash the real logo by 3%. */
@@ -354,29 +353,38 @@ export const CSS = `
   width: clamp(34px, ${U(4.2)}, 56px); height: auto;
   flex: none; display: block;
 }
+/* The negative margins cancel the trailing letter-space that tracking leaves
+   after the last glyph — without them the gap before the divider looks wider
+   than the gap after it, and the whole lockup sits fractionally left of centre. */
 .beam-run__brand-word {
   font-size: clamp(21px, ${U(3)}, 36px); font-weight: 700; color: ${BRAND.WHITE};
-  letter-spacing: 0.2em; line-height: 1;
+  letter-spacing: 0.2em; line-height: 1; margin-right: -0.2em;
 }
-/* Hangs from the shared baseline, sized to the wordmark's cap height (its own
-   font-size is the overlay's, not the wordmark's, so it is set explicitly). */
+/* The divider: a 2px bar the height of the wordmark's caps, centred on the same
+   line as both texts. Its own font-size is the overlay's, not the wordmark's, so
+   the height is set explicitly rather than in em. */
 .beam-run__brand-rule {
-  width: 2px; height: clamp(15px, ${U(2.1)}, 26px);
-  background: rgba(230, 230, 230, 0.34);
+  width: 2px; height: clamp(16px, ${U(2.2)}, 27px); flex: none;
+  background: rgba(230, 230, 230, 0.4);
 }
-/* Set at the SAME size as the wordmark: at a smaller size it never sat right
-   beside it, whatever it was aligned to. Weight and colour carry the hierarchy
-   instead — the edition is lighter and muted, the wordmark bold and white. */
+/*
+ * The edition returns to a supporting size beside the wordmark. The line-height
+ * of 1 is the part that matters: with the inherited line-height its line box was
+ * taller than its glyphs, so centring the boxes did not centre the *text*, which
+ * is what made it look off. With both lines at line-height 1 and the row centred,
+ * the two cap heights share a centre line.
+ */
 .beam-run__brand-title {
-  font-size: clamp(21px, ${U(3)}, 36px); color: ${BRAND.LIGHT_GREY};
-  font-weight: 400; text-transform: uppercase; letter-spacing: 0.12em; line-height: 1;
+  font-size: clamp(12px, ${U(1.7)}, 20px); color: ${BRAND.LIGHT_GREY};
+  font-weight: 500; text-transform: uppercase; letter-spacing: 0.14em; line-height: 1;
+  margin-right: -0.14em;
 }
 .beam-run__brand--compact .beam-run__brand-mark {
   width: clamp(22px, ${U(2.6)}, 32px);
 }
-.beam-run__brand--compact .beam-run__brand-word,
-.beam-run__brand--compact .beam-run__brand-title { font-size: clamp(13px, ${U(1.7)}, 19px); }
-.beam-run__brand--compact .beam-run__brand-rule { height: clamp(10px, ${U(1.2)}, 14px); }
+.beam-run__brand--compact .beam-run__brand-word { font-size: clamp(13px, ${U(1.7)}, 19px); }
+.beam-run__brand--compact .beam-run__brand-title { font-size: clamp(10px, ${U(1.2)}, 14px); }
+.beam-run__brand--compact .beam-run__brand-rule { height: clamp(10px, ${U(1.3)}, 15px); }
 
 /* Titles are bitmap art (the visible glyphs live in the SVG); the element itself
    just centres it and carries the orange value hairline underneath. */
@@ -699,8 +707,9 @@ export const CSS = `
      the meters. */
   .beam-run__stack { width: 100%; }
   .beam-run__brand-mark { width: clamp(32px, 9vw, 46px); }
-  .beam-run__brand-word,
-  .beam-run__brand-title { font-size: clamp(19px, 5.6vw, 28px); }
+  .beam-run__brand-word { font-size: clamp(19px, 5.6vw, 28px); }
+  .beam-run__brand-title { font-size: clamp(11px, 3.2vw, 16px); }
+  .beam-run__brand-rule { height: clamp(14px, 4vw, 21px); }
   .beam-run__bar { grid-template-columns: minmax(58px, 30%) minmax(0, 1fr) 3ch; gap: 8px; }
   .beam-run__bar-label { font-size: clamp(9px, 2.6vw, 12px); letter-spacing: 0.06em; }
   .beam-run__bar-value { font-size: clamp(11px, 3vw, 15px); }
