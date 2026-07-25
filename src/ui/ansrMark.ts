@@ -20,6 +20,10 @@ export const LOGO_ORANGE = '#f05722';
 /** viewBox for {@link ANSR_MARK_PATH} (the sunburst's own bounding box). */
 export const ANSR_MARK_VIEWBOX = '0 0 87.68 90.55';
 
+/** Path units: the mark's own width and height (for canvas scaling). */
+export const ANSR_MARK_W = 87.68;
+export const ANSR_MARK_H = 90.55;
+
 /** Number of subpaths (one per shape in the source). */
 export const ANSR_MARK_SHAPES = 32;
 

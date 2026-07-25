@@ -29,6 +29,7 @@ import { drawHero, drawGrowthPoint, drawBadgeDisc, type HeroMotion } from '../re
 import { drawTileRect, drawSceneBackground } from '../render/scenery';
 import { drawTitleScene } from '../render/titleScene';
 import { pxRect, hash2 } from '../render/PixelArt';
+import { drawAnsrLogo, LOGO_ORANGE } from '../render/ansrLogo';
 import { drawText, drawLabelPlaque } from '../render/PixelText';
 import { AssistController } from './AssistController';
 import { TouchControls, isTouchDevice } from '../ui/TouchControls';
@@ -36,9 +37,6 @@ import { AssistMenu } from '../ui/AssistMenu';
 import { Analytics, detectDevice } from '../analytics/Analytics';
 import { buildNavigatorPayload, buildNavigatorUrl, type CtaContext as NavCtaContext } from '../analytics/navigator';
 import { getSessionId, getMutePref, setMutePref } from '../analytics/Save';
-
-/** ANSR logo orange (from the brand SVG — kept in its own colour per brief). */
-const LOGO_ORANGE = '#f05722';
 
 /** The short ANSR product tag shown on a badge (single source: CAPABILITIES). */
 function solutionTag(badge: string): string {
@@ -1113,7 +1111,12 @@ export class Game {
     this.drawAnsrMark(ctx, l.mark.x, l.mark.y, l.mark.r, t);
   }
 
-  /** A procedural nod to the ANSR sunburst mark + wordmark (own brand orange). */
+  /**
+   * The ANSR mark on the Tech Park plaza — the real brand sunburst (same path the
+   * DOM lockup uses), not the 28-ray approximation that stood here before. It is
+   * the arrival marker at the end of the run, so it is the one place in the world
+   * that should be the actual logo. Revolves slowly; still under reduced motion.
+   */
   private drawAnsrMark(
     ctx: CanvasRenderingContext2D,
     x: number,
@@ -1121,28 +1124,25 @@ export class Game {
     r: number,
     t: number,
   ): void {
-    const rays = 28;
     const spin = this.reducedMotion ? 0 : t * 0.05;
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.strokeStyle = LOGO_ORANGE;
-    ctx.lineWidth = 2;
-    ctx.lineCap = 'round';
-    for (let i = 0; i < rays; i += 1) {
-      const a = (i / rays) * Math.PI * 2 + spin;
-      const inner = r * 0.5;
-      const outer = r * (0.82 + 0.18 * (i % 2));
-      ctx.beginPath();
-      ctx.moveTo(Math.cos(a) * inner, Math.sin(a) * inner);
-      ctx.lineTo(Math.cos(a) * outer, Math.sin(a) * outer);
-      ctx.stroke();
-    }
-    ctx.restore();
+    // A soft glow first, so the mark reads against the plaza gradient.
+    const glow = ctx.createRadialGradient(x, y, 0, x, y, r * 1.9);
+    glow.addColorStop(0, 'rgba(240, 87, 34, 0.26)');
+    glow.addColorStop(1, 'rgba(240, 87, 34, 0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(x, y, r * 1.9, 0, Math.PI * 2);
+    ctx.fill();
+
+    drawAnsrLogo(ctx, x, y, r * 2, spin);
+
+    // Wordmark under the mark, in the brand typeface (the logo's own lettering
+    // is deliberately not shipped as artwork — see ui/ansrMark.ts).
     ctx.fillStyle = LOGO_ORANGE;
     ctx.font = "700 22px 'Moderat', system-ui, sans-serif";
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('ANSR', x, y + r + 16);
+    ctx.fillText('ANSR', x, y + r + 18);
   }
 
   // --- teardown -------------------------------------------------------------

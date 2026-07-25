@@ -20,6 +20,7 @@ import { RESOLUTION } from '../data/tuning.config';
 import { drawBricks, hash2, pxRect } from './PixelArt';
 import { tileMaterial } from './scenery';
 import { drawHero } from './sprites';
+import { drawAnsrLogo } from './ansrLogo';
 
 const { WIDTH: W, HEIGHT: H } = RESOLUTION;
 
@@ -97,30 +98,6 @@ function drawPixelSun(
     const color = up < 0.34 ? '#7A3413' : up < 0.68 ? '#8E3E14' : '#A04A18';
     pxRect(ctx, color, cx - half, cy + y, half * 2, px, px);
   }
-}
-
-/** The ANSR sunburst mark, drawn in chunky pixels (logo orange). */
-function drawPixelSunburst(
-  ctx: CanvasRenderingContext2D,
-  cx: number,
-  cy: number,
-  r: number,
-  t: number,
-  reduced: boolean,
-): void {
-  const rays = 24;
-  const spin = reduced ? 0 : t * 0.06;
-  for (let i = 0; i < rays; i += 1) {
-    const a = (i / rays) * Math.PI * 2 + spin;
-    const inner = r * 0.42;
-    const outer = r * (i % 2 === 0 ? 1 : 0.78);
-    const steps = Math.max(3, Math.round((outer - inner) / 4));
-    for (let s = 0; s <= steps; s += 1) {
-      const d = inner + ((outer - inner) * s) / steps;
-      pxRect(ctx, '#f05722', cx + Math.cos(a) * d - 2, cy + Math.sin(a) * d - 2, 4, 4, 4);
-    }
-  }
-  pxRect(ctx, '#FFFFFF', cx - 3, cy - 3, 6, 6, 3);
 }
 
 /**
@@ -208,8 +185,9 @@ export function drawTitleScene(
   ctx.beginPath();
   ctx.arc(a.x + a.w / 2, a.y, br, 0, Math.PI * 2);
   ctx.fill();
-  // Sunburst mark on the facade.
-  drawPixelSunburst(ctx, a.x + a.w / 2, a.y + 96, 46, t, reduced);
+  // The real ANSR mark on the facade (same brand path the lockup and the Tech
+  // Park plaza use — one logo everywhere, no approximations).
+  drawAnsrLogo(ctx, a.x + a.w / 2, a.y + 96, 92, reduced ? 0 : t * 0.05);
 
   // --- ground ---------------------------------------------------------------
   drawBricks(ctx, 0, l.groundY, W, H - l.groundY, tileMaterial(0));
