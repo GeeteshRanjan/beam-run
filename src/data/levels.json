@@ -189,7 +189,7 @@
       "winTrigger": { "gx": 26 },
       "solids": [
         { "gx": 0, "gy": 15, "w": 32, "h": 3, "role": "ground" },
-        { "gx": 22, "gy": 8, "w": 8, "h": 7, "role": "tower-facade-noncollide" }
+        { "gx": 22, "gy": 4, "w": 8, "h": 11, "role": "tower-facade-noncollide" }
       ],
       "points": [
         { "gx": 8, "gy": 13 },
