@@ -18,7 +18,10 @@ import {
   createPixelHeading,
   createPixelSvg,
   paintPixelSvg,
+  PIXEL_TITLE,
   setPixelButtonLabel,
+  setPixelText,
+  type PixelLineOptions,
 } from './PixelType';
 
 /**
@@ -26,14 +29,42 @@ import {
  * scale of the overlays: one number each, so every screen agrees.
  */
 const PX_TYPE = {
-  /** Headlines: ~38px glyphs at native frame width, never under 21px. */
-  title: { unit: 0.42, minPx: 3, maxPx: 7 },
+  /** Headlines — shared with the assist dialog so every title matches. */
+  title: PIXEL_TITLE,
   /** The closing months figure — the loudest element on any screen. */
   figure: { unit: 0.9, minPx: 7, maxPx: 15 },
   /** The lead-in and tail of the stake sentence (~21px glyphs at native width). */
   stakeText: { unit: 0.24, minPx: 2.4, maxPx: 4 },
   /** "24 months" — the figure carries the hook, so it is set at display size. */
   stakeFigure: { unit: 0.5, minPx: 4, maxPx: 9 },
+
+  /*
+   * End-screen roles. These all carry `maxShare` (a cap in frame units) rather
+   * than relying on the default `min(96%, …)`: several of them sit in grid cells
+   * or shrink-wrapping flex boxes whose width comes *from* their content, where a
+   * percentage is circular. See PixelType's `maxShare`.
+   */
+  /** Small caps captions: "You went live in", "Time to market", "What got you here". */
+  caption: { unit: 0.2, minPx: 2, maxPx: 3.4, maxShare: 88, maxChars: 34 },
+  /**
+   * Supporting sentences: the attributed refs, the receipt hint, quick wins.
+   * `maxChars` is 34 rather than the 26 a button uses — "ANSR clients average 11
+   * months." is 31 characters, and at 26 it broke across two lines for no reason
+   * (its floor width, 316px, still clears a 390px frame).
+   */
+  body: { unit: 0.17, minPx: 1.7, maxPx: 2.8, maxShare: 88, maxChars: 34 },
+  /** "months" beside the big closing figure. */
+  unitText: { unit: 0.28, minPx: 2.6, maxPx: 4.4, maxShare: 34 },
+  /** The mid-run summary's "14 months". */
+  clockStrong: { unit: 0.34, minPx: 3, maxPx: 5, maxShare: 46 },
+  /** Receipt row: the product name. */
+  rowStrong: { unit: 0.19, minPx: 2, maxPx: 3, maxShare: 34 },
+  /** Receipt row: the stage and the months saved. */
+  rowText: { unit: 0.16, minPx: 1.6, maxPx: 2.6, maxShare: 34 },
+  /** Comparison bar labels (right-aligned in a percentage-width column). */
+  barLabel: { unit: 0.14, minPx: 1.5, maxPx: 2.2, maxShare: 30 },
+  /** Comparison bar numbers (fixed-width column, so the tracks stay aligned). */
+  barValue: { unit: 0.19, minPx: 2, maxPx: 2.9, maxShare: 10 },
 } as const;
 
 /** Muted ink for supporting bitmap lines (the stake lead-in / tail). */
@@ -41,6 +72,8 @@ const MUTED_INK = { color: '#CFE6EC', shadow: 'rgba(0,16,22,0.85)' } as const;
 
 const TITLE_INK = { color: '#FFFFFF', shadow: 'rgba(0,16,22,0.85)' } as const;
 const VALUE_INK = { color: '#FF5400', shadow: 'rgba(0,16,22,0.9)' } as const;
+/** Captions and other secondary lines — cool grey, one step down from body. */
+const DIM_INK = { color: '#9FC8D2', shadow: 'rgba(0,16,22,0.85)' } as const;
 
 export type OverlayName = 'start' | 'titlecard' | 'pause' | 'summary' | 'win';
 export type CtaContext = 'win' | 'summary' | 'skip';
@@ -85,7 +118,10 @@ interface OverlayEntry {
 
 interface ReceiptView {
   root: HTMLDivElement;
-  rows: Map<string, { btn: HTMLButtonElement; detail: HTMLSpanElement }>;
+  rows: Map<
+    string,
+    { btn: HTMLButtonElement; detail: HTMLSpanElement; mark: HTMLElement }
+  >;
   quickWins: HTMLElement;
 }
 
@@ -122,6 +158,7 @@ export class Overlays {
   private winMonthsSr!: HTMLElement;
   private winMonthsArt!: SVGSVGElement;
   private winUnit!: HTMLElement;
+  private winUnitText = '';
   private winBenchmark!: HTMLElement;
   private winBaseline!: HTMLElement;
   private winMatched!: HTMLElement;
@@ -227,11 +264,17 @@ export class Overlays {
       ...PX_TYPE.figure,
       ...VALUE_INK,
     });
-    this.winUnit.textContent = COPY.win.monthsUnit(value);
+    // Only repaint the unit when it actually changes (month ↔ months): this runs
+    // every frame of the count-up.
+    const unit = COPY.win.monthsUnit(value);
+    if (unit !== this.winUnitText) {
+      this.winUnitText = unit;
+      setPixelText(this.winUnit, unit, { ...PX_TYPE.unitText, ...DIM_INK });
+    }
     // The player's bar grows with the count-up, so the figure and the picture
     // always agree.
     this.winBars.you.style.width = `${this.barPercent(value)}%`;
-    this.winBars.youValue.textContent = `${value}`;
+    setPixelText(this.winBars.youValue, `${value}`, { ...PX_TYPE.barValue, ...VALUE_INK });
   }
 
   /** Bar width as a percentage of the going-alone baseline (clamped 4–100). */
@@ -255,16 +298,21 @@ export class Overlays {
   // --- data → DOM -----------------------------------------------------------
 
   private renderWin(r: ReceiptModel): void {
-    this.winBenchmark.textContent = COPY.win.benchmark(r.benchmarkMonths);
-    this.winBaseline.textContent = COPY.win.baseline(r.baselineMonths);
+    const refInk = { ...PX_TYPE.body, ...MUTED_INK };
+    setPixelText(this.winBenchmark, COPY.win.benchmark(r.benchmarkMonths), refInk);
+    setPixelText(this.winBaseline, COPY.win.baseline(r.baselineMonths), refInk);
     // Scale the bars to the going-alone baseline: the run is always measured
     // against the number the buyer is actually facing.
     this.barScale = Math.max(r.baselineMonths, r.months);
     this.winBars.ansr.style.width = `${this.barPercent(r.benchmarkMonths)}%`;
-    this.winBars.ansrValue.textContent = `${r.benchmarkMonths}`;
     this.winBars.alone.style.width = `${this.barPercent(r.baselineMonths)}%`;
-    this.winBars.aloneValue.textContent = `${r.baselineMonths}`;
-    this.winMatched.textContent = r.matchedBenchmark ? COPY.win.matched : '';
+    const barNum = { ...PX_TYPE.barValue, ...TITLE_INK };
+    setPixelText(this.winBars.ansrValue, `${r.benchmarkMonths}`, barNum);
+    setPixelText(this.winBars.aloneValue, `${r.baselineMonths}`, barNum);
+    setPixelText(this.winMatched, r.matchedBenchmark ? COPY.win.matched : '', {
+      ...PX_TYPE.body,
+      ...VALUE_INK,
+    });
     this.winMatched.hidden = !r.matchedBenchmark;
     // A clean run gets the plain CTA; anything else gets the "close the gap" one.
     setPixelButtonLabel(this.winCta, r.matchedBenchmark ? COPY.win.cta : COPY.win.ctaGap, 'primary');
@@ -272,8 +320,14 @@ export class Overlays {
   }
 
   private renderSummary(r: ReceiptModel): void {
-    this.summaryReached.textContent = COPY.summary.reached(r.reachedScreenName);
-    this.summaryMonths.textContent = `${r.months} ${COPY.win.monthsUnit(r.months)}`;
+    setPixelText(this.summaryReached, COPY.summary.reached(r.reachedScreenName), {
+      ...PX_TYPE.body,
+      ...MUTED_INK,
+    });
+    setPixelText(this.summaryMonths, `${r.months} ${COPY.win.monthsUnit(r.months)}`, {
+      ...PX_TYPE.clockStrong,
+      ...VALUE_INK,
+    });
     this.fillReceipt(this.summaryReceipt, r);
   }
 
@@ -284,11 +338,17 @@ export class Overlays {
       const engaged = r.engaged.includes(cap.badge);
       row.btn.classList.toggle('beam-run__receipt-row--engaged', engaged);
       row.btn.setAttribute('aria-pressed', engaged ? 'true' : 'false');
-      row.detail.textContent = engaged
-        ? COPY.win.savesMonths(cap.monthsSaved)
-        : COPY.win.notReached;
+      row.mark.replaceChildren(this.pixelMark(engaged));
+      setPixelText(
+        row.detail,
+        engaged ? COPY.win.savesMonths(cap.monthsSaved) : COPY.win.notReached,
+        { ...PX_TYPE.rowText, ...(engaged ? VALUE_INK : DIM_INK), maxChars: 16 },
+      );
     }
-    view.quickWins.textContent = COPY.win.quickWins(r.quickWins, r.totalQuickWins);
+    setPixelText(view.quickWins, COPY.win.quickWins(r.quickWins, r.totalQuickWins), {
+      ...PX_TYPE.body,
+      ...DIM_INK,
+    });
   }
 
   // --- builders -------------------------------------------------------------
@@ -311,6 +371,24 @@ export class Overlays {
     const el = this.doc.createElement('div');
     el.className = 'beam-run__stack' + (modifier ? ` beam-run__stack--${modifier}` : '');
     return el;
+  }
+
+  /**
+   * The end screens' two-column body: the run's result on the left, the receipt
+   * and its routes on the right. Stacked, these screens are ~800px of content —
+   * taller than a 16:9 frame even before they were set in bitmap type — which put
+   * the CTA, the whole point of the screen, below the fold. Side by side they fit
+   * with room, and the receipt reads beside the figure it explains. Narrow frames
+   * fall back to one column (see styles.ts).
+   */
+  private columns(main: readonly HTMLElement[], aside: readonly HTMLElement[]): HTMLElement {
+    const cols = this.h('div', 'beam-run__cols');
+    const left = this.h('div', 'beam-run__col beam-run__col--main');
+    const right = this.h('div', 'beam-run__col beam-run__col--aside');
+    left.append(...main);
+    right.append(...aside);
+    cols.append(left, right);
+    return cols;
   }
 
   /** A heading set in the game's own 5×7 bitmap font. */
@@ -343,16 +421,58 @@ export class Overlays {
   }
 
   /**
+   * The receipt row's status glyph, drawn as pixels: a hollow box for a stage the
+   * run never reached, a check for one ANSR handled. Shape carries the meaning —
+   * the orange is a bonus, never the signal.
+   */
+  private pixelMark(engaged: boolean): SVGSVGElement {
+    const rows = engaged
+      ? ['.......', '......#', '.....#.', '#...#..', '.#.#...', '..#....', '.......']
+      : ['#######', '#.....#', '#.....#', '#.....#', '#.....#', '#.....#', '#######'];
+    const svg = this.doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 7 7');
+    svg.setAttribute('aria-hidden', 'true');
+    svg.setAttribute('focusable', 'false');
+    svg.setAttribute('class', 'beam-run__pixels');
+    const d: string[] = [];
+    rows.forEach((line, y) => {
+      for (let x = 0; x < line.length; x += 1) {
+        if (line[x] === '#') d.push(`M${x} ${y}h1v1h-1z`);
+      }
+    });
+    const path = this.doc.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', d.join(''));
+    path.setAttribute('fill', engaged ? '#FF5400' : '#6E93A0');
+    path.setAttribute('shape-rendering', 'crispEdges');
+    svg.appendChild(path);
+    svg.style.width = 'clamp(11px, calc(var(--beam-run-u) * 1.2), 17px)';
+    return svg;
+  }
+
+  /** An element whose text is bitmap artwork (plus hidden prose). */
+  private pixel(tag: string, cls: string, text: string, opts: PixelLineOptions): HTMLElement {
+    const el = this.h(tag, cls);
+    setPixelText(el, text, opts);
+    return el;
+  }
+
+  /**
    * The receipt: four capability rows, each a button that carries its own topic
    * into the Navigator. Engaged rows read "saves N months"; unreached rows are
    * dimmed but still clickable — an unreached stage is a live interest signal.
    */
   private buildReceipt(context: CtaContext): ReceiptView {
     const root = this.h('div', 'beam-run__receipt') as HTMLDivElement;
-    const title = this.h('div', 'beam-run__receipt-title', COPY.win.receiptTitle);
-    const hint = this.h('div', 'beam-run__hint', COPY.win.receiptHint);
+    const title = this.pixel('div', 'beam-run__receipt-title', COPY.win.receiptTitle, {
+      ...PX_TYPE.caption,
+      ...DIM_INK,
+    });
+    const hint = this.pixel('div', 'beam-run__hint', COPY.win.receiptHint, {
+      ...PX_TYPE.body,
+      ...MUTED_INK,
+    });
     const list = this.h('div', 'beam-run__receipt-list');
-    const rows = new Map<string, { btn: HTMLButtonElement; detail: HTMLSpanElement }>();
+    const rows: ReceiptView['rows'] = new Map();
 
     for (const cap of CAPABILITIES) {
       const btn = this.doc.createElement('button');
@@ -360,14 +480,22 @@ export class Overlays {
       btn.className = 'beam-run__receipt-row';
       const mark = this.h('span', 'beam-run__receipt-mark');
       mark.setAttribute('aria-hidden', 'true');
-      const product = this.h('span', 'beam-run__receipt-product', cap.product);
-      const stage = this.h('span', 'beam-run__receipt-stage', cap.stage);
+      const markArt = this.pixelMark(false);
+      mark.appendChild(markArt);
+      const product = this.pixel('span', 'beam-run__receipt-product', cap.product, {
+        ...PX_TYPE.rowStrong,
+        ...TITLE_INK,
+      });
+      const stage = this.pixel('span', 'beam-run__receipt-stage', cap.stage, {
+        ...PX_TYPE.rowText,
+        ...MUTED_INK,
+      });
       const detail = this.h('span', 'beam-run__receipt-detail') as HTMLSpanElement;
       btn.append(mark, product, stage, detail);
       btn.setAttribute('aria-label', `${cap.product} — ${cap.stage}. ${cap.effect}.`);
       btn.addEventListener('click', () => this.cb.onCta(context, cap.topic));
       list.appendChild(btn);
-      rows.set(cap.badge, { btn, detail });
+      rows.set(cap.badge, { btn, detail, mark });
     }
 
     const quickWins = this.h('div', 'beam-run__hint beam-run__receipt-wins');
@@ -467,7 +595,10 @@ export class Overlays {
     const title = this.pixelTitle(COPY.summary.title, ['YOUR JOURNEY', 'SO FAR']);
     this.summaryReached = this.h('p', 'beam-run__subtitle');
     const clock = this.h('div', 'beam-run__clock-line');
-    const clockLabel = this.h('span', 'beam-run__clock-label', COPY.win.monthsLabel);
+    const clockLabel = this.pixel('span', 'beam-run__clock-label', COPY.win.monthsLabel, {
+      ...PX_TYPE.caption,
+      ...DIM_INK,
+    });
     this.summaryMonths = this.h('span', 'beam-run__clock-strong');
     clock.append(clockLabel, this.summaryMonths);
     this.summaryReceipt = this.buildReceipt('summary');
@@ -475,7 +606,10 @@ export class Overlays {
     const cta = this.btn(COPY.summary.cta, 'primary', () => this.cb.onCta('summary'));
     const resume = this.btn(COPY.summary.resume, 'ghost', () => this.cb.onResume());
     actions.append(cta, resume);
-    card.append(title, this.summaryReached, clock, this.summaryReceipt.root, actions);
+    card.append(
+      title,
+      this.columns([this.summaryReached, clock], [this.summaryReceipt.root, actions]),
+    );
     el.append(brand, card);
     return { el, focusTarget: cta };
   }
@@ -496,11 +630,17 @@ export class Overlays {
       variant: 'you' | 'ansr' | 'alone',
     ): { fill: HTMLElement; value: HTMLElement } => {
       const line = this.h('div', 'beam-run__bar');
-      const name = this.h('span', 'beam-run__bar-label', label);
+      const name = this.pixel('span', 'beam-run__bar-label', label, {
+        ...PX_TYPE.barLabel,
+        ...DIM_INK,
+      });
       const track = this.h('span', 'beam-run__bar-track');
       const fill = this.h('span', `beam-run__bar-fill beam-run__bar-fill--${variant}`);
       track.appendChild(fill);
-      const value = this.h('span', 'beam-run__bar-value', '0');
+      const value = this.pixel('span', 'beam-run__bar-value', '0', {
+        ...PX_TYPE.barValue,
+        ...TITLE_INK,
+      });
       line.append(name, track, value);
       root.appendChild(line);
       return { fill, value };
@@ -526,7 +666,10 @@ export class Overlays {
     const card = this.stack('receipt');
     const title = this.pixelTitle(COPY.win.title, ['MARKET ENTRY', 'COMPLETE']);
 
-    const label = this.h('div', 'beam-run__months-label', COPY.win.monthsLabel);
+    const label = this.pixel('div', 'beam-run__months-label', COPY.win.monthsLabel, {
+      ...PX_TYPE.caption,
+      ...DIM_INK,
+    });
     const figure = this.h('div', 'beam-run__months');
     // The closing figure is the loudest thing on the screen, so it is drawn in
     // the game's own font — an arcade score readout, not a web number.
@@ -537,7 +680,9 @@ export class Overlays {
       ...VALUE_INK,
     });
     this.winMonths.append(this.winMonthsSr, this.winMonthsArt);
-    this.winUnit = this.h('span', 'beam-run__months-unit', COPY.win.monthsUnit(0));
+    this.winUnit = this.h('span', 'beam-run__months-unit');
+    this.winUnitText = COPY.win.monthsUnit(0);
+    setPixelText(this.winUnit, this.winUnitText, { ...PX_TYPE.unitText, ...DIM_INK });
     figure.append(this.winMonths, this.winUnit);
 
     this.winBars = this.buildBars();
@@ -557,15 +702,20 @@ export class Overlays {
     const replay = this.btn(COPY.win.replay, 'ghost', () => this.cb.onRestart());
     actions.append(this.winCta, replay);
 
+    /*
+     * Two columns on a wide frame (see styles.ts): the run's result on the left,
+     * the receipt and its routes on the right. Stacked, this screen is ~890px of
+     * content — taller than a 720px frame even before it was set in bitmap type —
+     * so the CTA, which is the whole point of the screen, sat below the fold.
+     * Side by side it fits with room, and the receipt reads beside the figure it
+     * explains instead of underneath it. Narrow frames keep the single column.
+     */
     card.append(
       title,
-      label,
-      figure,
-      this.winBars.root,
-      refs,
-      this.winMatched,
-      this.winReceipt.root,
-      actions,
+      this.columns([label, figure, this.winBars.root, refs, this.winMatched], [
+        this.winReceipt.root,
+        actions,
+      ]),
     );
     el.append(brand, card);
     return { el, focusTarget: this.winCta };

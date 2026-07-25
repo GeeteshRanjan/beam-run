@@ -8,7 +8,7 @@
  */
 import { COPY } from '../data/copy';
 import type { AssistController, AssistToggle } from '../core/AssistController';
-import { setPixelButtonLabel } from './PixelType';
+import { PIXEL_TITLE, setPixelButtonLabel, setPixelText } from './PixelType';
 
 const TOGGLES: { key: AssistToggle; label: string }[] = [
   { key: 'autoRun', label: COPY.assist.autoRun },
@@ -41,10 +41,13 @@ export class AssistMenu {
 
     const title = doc.createElement('h2');
     title.className = 'beam-run__title';
-    title.textContent = COPY.assist.title;
+    setPixelText(title, COPY.assist.title, PIXEL_TITLE);
 
+    // The intro and the checkbox labels stay in web type on purpose: this is a
+    // settings dialog with real form controls, and the 5×7 font has no lower
+    // case or punctuation, which is what makes a sentence hard to read.
     const intro = doc.createElement('p');
-    intro.className = 'beam-run__hint';
+    intro.className = 'beam-run__assist-intro';
     intro.textContent = COPY.assist.intro;
 
     const list = doc.createElement('div');

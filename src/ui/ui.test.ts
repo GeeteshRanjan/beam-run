@@ -310,6 +310,115 @@ describe('Overlays', () => {
     expect(win.querySelector('.beam-run__bar-value')!.textContent).toBe('12');
   });
 
+  it('sets the whole end screen in the bitmap font, prose intact', () => {
+    overlays.show('win', { receipt: receipt({ matchedBenchmark: true, months: 11 }) });
+    const win = visible(parent);
+    // Every readout on the screen: caption, unit, bar labels/values, the two
+    // attributed refs, the clean-run line, the receipt and its rows.
+    const selectors = [
+      '.beam-run__months-label',
+      '.beam-run__months-unit',
+      '.beam-run__bar-label',
+      '.beam-run__bar-value',
+      '.beam-run__ref',
+      '.beam-run__matched',
+      '.beam-run__receipt-title',
+      '.beam-run__receipt-wins',
+      '.beam-run__receipt-product',
+      '.beam-run__receipt-stage',
+      '.beam-run__receipt-detail',
+    ];
+    for (const sel of selectors) {
+      const el = win.querySelector(sel)!;
+      expect(el, sel).not.toBeNull();
+      const svg = el.querySelector('svg.beam-run__pixels');
+      expect(svg, sel).not.toBeNull();
+      expect(svg!.getAttribute('aria-hidden'), sel).toBe('true');
+      expect(svg!.querySelector('path')!.getAttribute('shape-rendering')).toBe('crispEdges');
+      // The real string is still readable as text.
+      expect(el.querySelector('.beam-run__sr')!.textContent, sel).toBe(el.textContent);
+    }
+    // No web-font text left in the content column outside hidden spans. (The
+    // brand lockup is excluded on purpose: "ANSRcade" is set in the brand
+    // typeface — changing brand typography is an owner call, not a style fix.)
+    const stray = Array.from(win.querySelector('.beam-run__stack')!.querySelectorAll('*')).filter(
+      (n) =>
+        !n.classList.contains('beam-run__sr') &&
+        !n.closest('.beam-run__sr') &&
+        Array.from(n.childNodes).some(
+          (c) => c.nodeType === 3 && (c.textContent ?? '').trim() !== '',
+        ),
+    );
+    expect(stray.map((n) => n.className)).toEqual([]);
+  });
+
+  it('marks a reached stage with a drawn glyph, not a font character', () => {
+    overlays.show('win', { receipt: receipt({ engaged: ['PLACE_TILE'] }) });
+    const marks = Array.from(visible(parent).querySelectorAll('.beam-run__receipt-mark'));
+    expect(marks).toHaveLength(CAPABILITIES.length);
+    const fills = marks.map((m) => m.querySelector('path')!.getAttribute('fill'));
+    // One engaged (value orange), the rest the neutral hollow box.
+    expect(fills.filter((f) => f === '#FF5400')).toHaveLength(1);
+    expect(fills.filter((f) => f !== '#FF5400')).toHaveLength(CAPABILITIES.length - 1);
+    // Shape carries the meaning: the two glyphs have different geometry.
+    const engagedD = marks[0]!.querySelector('path')!.getAttribute('d');
+    const dimD = marks[1]!.querySelector('path')!.getAttribute('d');
+    expect(engagedD).not.toBe(dimD);
+  });
+
+  it('splits the end screens in two so the CTA is never below the fold', () => {
+    for (const screen of ['win', 'summary'] as const) {
+      overlays.show(screen, { receipt: receipt() });
+      const cols = visible(parent).querySelector('.beam-run__cols')!;
+      expect(cols, screen).not.toBeNull();
+      expect(cols.children, screen).toHaveLength(2);
+      // The conversion surface and its routes travel together.
+      const aside = cols.querySelector('.beam-run__col--aside')!;
+      expect(aside.querySelector('.beam-run__receipt'), screen).not.toBeNull();
+      expect(aside.querySelector('.beam-run__actions'), screen).not.toBeNull();
+    }
+    // Side by side only where the frame can carry it; stacked below that.
+    expect(CSS).toContain('@container (min-width: 900px)');
+    expect(CSS).toMatch(/\.beam-run__cols \{ flex-direction: row/);
+  });
+
+  it('keeps apostrophes out of copy that gets set in the bitmap font', () => {
+    // The 5×7 font has no apostrophe, so it is dropped: "ANSR's" rendered as
+    // "ANSRS" and read like a typo. Any string drawn as pixels must avoid one.
+    const drawn = [
+      COPY.win.title,
+      COPY.win.monthsLabel,
+      COPY.win.matched,
+      COPY.win.receiptTitle,
+      COPY.win.receiptHint,
+      COPY.win.benchmark(11),
+      COPY.win.baseline(24),
+      COPY.win.quickWins(1, 2),
+      COPY.win.savesMonths(4),
+      COPY.win.notReached,
+      COPY.win.barYou,
+      COPY.win.barAnsr,
+      COPY.win.barAlone,
+      COPY.win.cta,
+      COPY.win.ctaGap,
+      COPY.win.replay,
+      COPY.summary.title,
+      COPY.summary.reached('Compliance'),
+      COPY.summary.cta,
+      COPY.summary.resume,
+      COPY.start.play,
+      COPY.start.skip,
+      COPY.start.challenge,
+      COPY.start.stakeLead,
+      COPY.start.stakeTail,
+      ...Object.values(COPY.pause),
+      ...CAPABILITIES.flatMap((c) => [c.product, c.stage]),
+    ];
+    for (const s of drawn) {
+      expect(s, s).not.toMatch(/['\u2018\u2019]/);
+    }
+  });
+
   it('has no game-over overlay — the run cannot fail', () => {
     // @ts-expect-error 'gameover' is intentionally not an OverlayName any more.
     expect(() => overlays.show('gameover')).not.toThrow();

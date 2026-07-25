@@ -195,6 +195,39 @@ export function wrapPixelLabel(text: string, maxChars = 26): string[] {
   return lines.length > 0 ? lines : [''];
 }
 
+/**
+ * The headline scale, shared by every screen that sets a title: ~38px glyphs at
+ * native frame width, never under 21px. Exported so the assist dialog's heading
+ * matches the overlays instead of falling back to web type.
+ */
+export const PIXEL_TITLE = {
+  unit: 0.42,
+  minPx: 3,
+  maxPx: 7,
+  color: '#FFFFFF',
+  shadow: 'rgba(0,16,22,0.85)',
+} as const;
+
+export interface PixelLineOptions extends PixelTextOptions {
+  /** Wrap width in authored characters (see `wrapPixelLabel`). */
+  maxChars?: number;
+}
+
+/**
+ * Set an element's text as bitmap artwork plus a visually-hidden copy of the
+ * real string, so `textContent`, `aria-label` and assistive tech are unchanged.
+ * Empty text clears the element (used by the win screen's conditional line).
+ */
+export function setPixelText(el: Element, text: string, opts: PixelLineOptions): void {
+  const doc = el.ownerDocument;
+  while (el.firstChild) el.removeChild(el.firstChild);
+  if (text === '') return;
+  const sr = doc.createElement('span');
+  sr.className = 'beam-run__sr';
+  sr.textContent = text;
+  el.append(sr, createPixelSvg(doc, wrapPixelLabel(text, opts.maxChars ?? 26), opts));
+}
+
 export type PixelButtonVariant = 'primary' | 'ghost' | 'default';
 
 /**

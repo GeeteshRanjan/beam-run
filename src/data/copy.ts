@@ -192,13 +192,18 @@ export const COPY = {
     /** Two attributed reference lines — ANSR's data, not the player's score. */
     benchmark: (months: number) => `ANSR clients average ${months} months.`,
     baseline: (months: number) => `Going it alone, the average is ${months}.`,
-    matched: 'You matched ANSR\u2019s benchmark.',
+    /*
+     * No possessive: the 5×7 font has no apostrophe, so "ANSR's" rendered as
+     * "ANSRS" and read like a typo on the biggest screen in the game.
+     */
+    matched: 'You matched the ANSR benchmark.',
     /** Labels on the closing comparison bars (your run vs the two references). */
     barYou: 'Your run',
     barAnsr: 'ANSR clients',
     barAlone: 'Going alone',
     receiptTitle: 'What got you here',
-    receiptHint: 'Pick the one you want to talk about.',
+    /* Short enough to set on one bitmap line beside the list it introduces. */
+    receiptHint: 'Pick one to talk about.',
     quickWins: (found: number, total: number) => `Quick wins found: ${found} of ${total}`,
     savesMonths: (months: number) => `saves ${months} months`,
     notReached: 'not reached',

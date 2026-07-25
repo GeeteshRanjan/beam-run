@@ -339,6 +339,24 @@ export const CSS = `
  * open with a bigger step, while the pieces inside a group stay close.
  */
 .beam-run__stack--receipt { width: min(100%, 720px); gap: clamp(5px, 1%, 10px); }
+/* End-screen columns: stacked by default, side by side once the frame can carry
+   it (see Overlays.columns — stacked, these screens are taller than a 16:9 frame
+   and push the CTA below the fold). 900px is the smallest frame where the CTA cap
+   still fits half the stack. */
+.beam-run__cols,
+.beam-run__col {
+  display: flex; flex-direction: column; align-items: center;
+  width: 100%; gap: clamp(5px, 1%, 10px);
+}
+@container (min-width: 900px) {
+  .beam-run__stack--receipt { width: min(100%, 1060px); }
+  .beam-run__cols { flex-direction: row; align-items: flex-start; gap: clamp(20px, 3%, 44px); }
+  .beam-run__col { flex: 1 1 0; min-width: 0; }
+  .beam-run__col--aside .beam-run__receipt { max-width: none; }
+  /* The receipt starts its own column, so it no longer needs the group step that
+     separated it from the meters when everything was one stack. */
+  .beam-run__stack--receipt .beam-run__col--aside .beam-run__receipt { margin-top: 0; }
+}
 .beam-run__stack--receipt .beam-run__months-label,
 .beam-run__stack--receipt .beam-run__clock-line { margin-top: clamp(8px, 2%, 20px); }
 .beam-run__stack--receipt .beam-run__bars,
@@ -451,10 +469,8 @@ export const CSS = `
   font-size: clamp(13px, ${U(1.8)}, 20px); color: ${BRAND.LIGHT_GREY}; margin: 0;
   text-shadow: 0 2px 0 rgba(0, 16, 22, 0.85);
 }
-.beam-run__hint {
-  font-size: clamp(11px, ${U(1.4)}, 16px); color: ${BRAND.LIGHT_GREY}; margin: 0;
-  text-shadow: 0 2px 0 rgba(0, 16, 22, 0.85);
-}
+/* Hints are bitmap lines on the end screens (the only place they are used now). */
+.beam-run__hint { margin: 0; display: flex; justify-content: center; }
 
 /* Start screen stake — the 24-month hook, set entirely in the bitmap font:
    lead-in line, the figure at display size, then the tail. */
@@ -472,10 +488,7 @@ export const CSS = `
 
 
 /* Closing figure: months to market. */
-.beam-run__months-label {
-  font-size: clamp(11px, ${U(1.4)}, 16px); color: ${BRAND.LIGHT_GREY};
-  letter-spacing: 1.2px; text-transform: uppercase;
-}
+.beam-run__months-label { display: flex; justify-content: center; }
 .beam-run__months { display: flex; align-items: flex-end; gap: clamp(8px, 1.2%, 14px); }
 /* Bitmap digits with an orange glow: an arcade readout, not a web number. */
 .beam-run__months-value {
@@ -484,11 +497,7 @@ export const CSS = `
      not enough to blur the pixel edges. */
   filter: drop-shadow(0 0 10px rgba(255, 84, 0, 0.38));
 }
-.beam-run__months-unit {
-  font-size: clamp(14px, ${U(2)}, 22px); color: ${BRAND.LIGHT_GREY};
-  text-transform: uppercase; letter-spacing: 0.12em; padding-bottom: 0.25em;
-  text-shadow: 0 2px 0 rgba(0, 16, 22, 0.85);
-}
+.beam-run__months-unit { display: flex; padding-bottom: 4px; }
 
 /* Closing comparison bars ----------------------------------------------------
  * "14 months" means nothing to someone who isn't carrying the benchmarks in
@@ -500,14 +509,16 @@ export const CSS = `
   width: 100%; max-width: 560px; display: flex; flex-direction: column;
   gap: 7px; margin: 2px 0 4px;
 }
+/* Bitmap labels are wider than the web type they replaced, so the label column
+   grew; the value column is a *fixed* width on purpose — each bar is its own
+   grid, so a content-sized column would give the rows different track widths and
+   the three meters would no longer be comparable. */
 .beam-run__bar {
-  display: grid; grid-template-columns: minmax(70px, 27%) minmax(0, 1fr) 3ch;
+  display: grid;
+  grid-template-columns: minmax(84px, 34%) minmax(0, 1fr) clamp(24px, ${U(2.6)}, 38px);
   align-items: center; gap: 10px;
 }
-.beam-run__bar-label {
-  font-size: clamp(9px, ${U(1.2)}, 13px); color: ${BRAND.LIGHT_GREY};
-  text-transform: uppercase; letter-spacing: 0.1em; text-align: right;
-}
+.beam-run__bar-label { display: flex; justify-content: flex-end; }
 .beam-run__bar-track {
   display: block; position: relative; height: clamp(12px, ${U(1.5)}, 18px);
   background: rgba(0, 20, 27, 0.85);
@@ -525,38 +536,36 @@ export const CSS = `
 .beam-run__bar-fill--you { background-color: ${BRAND.ORANGE}; }
 .beam-run__bar-fill--ansr { background-color: #5CE2F4; }
 .beam-run__bar-fill--alone { background-color: #5D7A83; }
-.beam-run__bar-value {
-  font-family: ${TYPOGRAPHY.monoFamily}; font-weight: 700;
-  font-size: clamp(11px, ${U(1.4)}, 16px); color: ${BRAND.WHITE};
-  font-variant-numeric: tabular-nums; text-align: right;
-}
+.beam-run__bar-value { display: flex; justify-content: flex-end; }
 
+/* Every end-screen line below is bitmap artwork (see Overlays' PX_TYPE), so
+   these rules only place it: no font, size or colour left to set. */
 .beam-run__refs { display: flex; flex-wrap: wrap; gap: 6px 18px; justify-content: center; }
-.beam-run__ref { font-size: clamp(11px, ${U(1.4)}, 16px); color: ${BRAND.LIGHT_GREY}; }
-.beam-run__matched {
-  margin: 0; font-size: clamp(12px, ${U(1.6)}, 18px); font-weight: 600; color: ${BRAND.ORANGE};
-}
-.beam-run__clock-line { display: flex; align-items: baseline; gap: 10px; }
-.beam-run__clock-label {
-  font-size: clamp(11px, ${U(1.4)}, 16px); color: ${BRAND.LIGHT_GREY};
-  text-transform: uppercase; letter-spacing: 1.2px;
-}
-.beam-run__clock-strong {
-  font-family: ${TYPOGRAPHY.monoFamily}; font-weight: 700; color: ${BRAND.WHITE};
-  font-size: clamp(18px, ${U(2.6)}, 30px); font-variant-numeric: tabular-nums;
-}
+.beam-run__ref { display: flex; justify-content: center; }
+.beam-run__matched { margin: 0; display: flex; justify-content: center; }
+.beam-run__clock-line { display: flex; align-items: center; gap: 10px; }
+.beam-run__clock-label,
+.beam-run__clock-strong { display: flex; }
 
 /* Receipt — the four capabilities, each its own route to the Navigator. */
 .beam-run__receipt { width: 100%; max-width: 640px; display: flex; flex-direction: column; gap: 6px; }
-.beam-run__receipt-title {
-  font-size: clamp(11px, ${U(1.4)}, 16px); color: ${BRAND.LIGHT_GREY};
-  text-transform: uppercase; letter-spacing: 1.2px;
-}
+/* The receipt is a list, so its header, hint and footer line up with the rows
+   rather than centring like the rest of the screen. */
+.beam-run__receipt-title { display: flex; }
+.beam-run__receipt .beam-run__hint,
+.beam-run__receipt-wins { justify-content: flex-start; }
 .beam-run__receipt-list { display: flex; flex-direction: column; gap: 6px; width: 100%; }
+/*
+ * One row layout everywhere: mark | product + saving | stage underneath.
+ * Bitmap type is wider than the web type this replaced, and the four-column
+ * desktop variant needed ~550px — more than the receipt gets in the two-column
+ * win layout. Two lines also let the product and its saving sit together, which
+ * is the pairing that matters.
+ */
 .beam-run__receipt-row {
   font: inherit; cursor: pointer; text-align: left; width: 100%;
-  display: grid; grid-template-columns: 22px minmax(0, 1fr) minmax(0, 1fr) auto;
-  align-items: center; gap: 10px;
+  display: grid; grid-template-columns: 22px minmax(0, 1fr) auto;
+  align-items: center; gap: 4px 10px;
   min-height: 44px; padding: 8px 14px; border-radius: 0;
   background: rgba(0, 22, 29, 0.72);
   border: 2px solid rgba(150, 205, 218, 0.22);
@@ -565,22 +574,21 @@ export const CSS = `
 }
 .beam-run__receipt-row:hover { filter: brightness(1.18); border-color: rgba(255, 84, 0, 0.5); }
 .beam-run__receipt-row:focus-visible { outline: 3px solid ${BRAND.WHITE}; outline-offset: 2px; }
-.beam-run__receipt-mark::before { content: '\\25CB'; opacity: 0.5; }
-.beam-run__receipt-product { font-weight: 700; color: ${BRAND.WHITE}; font-size: clamp(12px, ${U(1.6)}, 17px); }
-.beam-run__receipt-stage { font-size: clamp(11px, ${U(1.4)}, 15px); }
+/* The mark is a drawn pixel glyph (hollow box / check), not a font character:
+   \\25CB and \\2713 come from whatever typeface the host has, which is exactly
+   the mismatch the rest of this screen just got rid of. */
+.beam-run__receipt-mark { display: flex; align-items: center; grid-row: 1 / -1; }
+.beam-run__receipt-product { display: flex; grid-column: 2; grid-row: 1; }
 .beam-run__receipt-detail {
-  font-size: clamp(10px, ${U(1.3)}, 14px); text-align: right; white-space: nowrap; opacity: 0.75;
+  display: flex; justify-content: flex-end; grid-column: 3; grid-row: 1;
 }
+.beam-run__receipt-stage { display: flex; grid-column: 2 / -1; grid-row: 2; }
 /* Engaged rows carry the value accent; unreached rows stay dim but clickable. */
 .beam-run__receipt-row--engaged {
   background: rgba(60, 20, 0, 0.6); border-color: rgba(255, 84, 0, 0.55);
   box-shadow: inset 4px 0 0 ${BRAND.ORANGE};
 }
-.beam-run__receipt-row--engaged .beam-run__receipt-mark::before {
-  content: '\\2713'; color: ${BRAND.ORANGE}; opacity: 1; font-weight: 700;
-}
-.beam-run__receipt-row--engaged .beam-run__receipt-detail { color: ${BRAND.ORANGE}; opacity: 1; }
-.beam-run__receipt-wins { margin-top: 2px; }
+.beam-run__receipt-wins { margin-top: 2px; display: flex; }
 
 .beam-run__actions {
   display: flex; flex-wrap: wrap; justify-content: center; align-items: center;
@@ -674,6 +682,11 @@ export const CSS = `
 .beam-run__touch--autorun.beam-run__touch--large .beam-run__touch-btn--jump { width: 140px; height: 140px; }
 
 /* Assist options dialog ------------------------------------------------- */
+/* Web type here is deliberate: real form controls, real sentences. */
+.beam-run__assist-intro {
+  margin: 0; font-size: clamp(11px, ${U(1.4)}, 16px); color: ${BRAND.LIGHT_GREY};
+  text-shadow: 0 2px 0 rgba(0, 16, 22, 0.85);
+}
 .beam-run__assist-list {
   display: flex; flex-direction: column; gap: 10px;
   text-align: left; width: 100%; max-width: 520px;
@@ -746,28 +759,17 @@ export const CSS = `
   .beam-run__brand-word { font-size: clamp(19px, 5.6vw, 28px); }
   .beam-run__brand-title { font-size: clamp(11px, 3.2vw, 16px); }
   .beam-run__brand-rule { height: clamp(14px, 4vw, 21px); }
-  .beam-run__bar { grid-template-columns: minmax(58px, 30%) minmax(0, 1fr) 3ch; gap: 8px; }
-  .beam-run__bar-label { font-size: clamp(9px, 2.6vw, 12px); letter-spacing: 0.06em; }
-  .beam-run__bar-value { font-size: clamp(11px, 3vw, 15px); }
-  .beam-run__hint,
-  .beam-run__ref,
-  .beam-run__months-label,
-  .beam-run__clock-label,
-  .beam-run__receipt-title { font-size: clamp(12px, 3.2vw, 16px); }
-  .beam-run__months-unit { font-size: clamp(15px, 4vw, 22px); }
-  .beam-run__matched { font-size: clamp(14px, 3.8vw, 18px); }
+  /* Bitmap labels need more of the row than web type did; the per-glyph floors
+     in Overlays' PX_TYPE now handle the "too small on a phone" problem, so the
+     font-size overrides that used to live here are gone. */
+  .beam-run__bar {
+    grid-template-columns: minmax(70px, 36%) minmax(0, 1fr) clamp(22px, 6vw, 34px);
+    gap: 8px;
+  }
   .beam-run__actions { flex-direction: column; width: 100%; }
   .beam-run__btn { width: 100%; max-width: 380px; min-height: 48px; padding: 14px 20px; }
   .beam-run__assist-row { font-size: clamp(15px, 4vw, 18px); min-height: 44px; }
   .beam-run__receipt-row { grid-template-columns: 20px minmax(0, 1fr) auto; row-gap: 2px; }
-  .beam-run__receipt-mark { grid-row: 1 / -1; }
-  .beam-run__receipt-product { grid-column: 2; grid-row: 1; font-size: clamp(13px, 3.6vw, 17px); }
-  .beam-run__receipt-detail {
-    grid-column: 3; grid-row: 1; font-size: clamp(11px, 3vw, 14px);
-  }
-  .beam-run__receipt-stage {
-    grid-column: 2 / -1; grid-row: 2; font-size: clamp(12px, 3.2vw, 15px);
-  }
 }
 
 .beam-run__sr {
