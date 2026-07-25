@@ -1,93 +1,70 @@
 import { describe, it, expect } from 'vitest';
-import { Simulation } from './Simulation';
 import { makeInput } from './Input';
-import { LOOP, RESOLUTION, POWERUPS } from '../data/tuning.config';
+import { JOURNEY } from '../data/tuning.config';
+import { Gates } from '../world/Hazards/Gates';
+import { DT, T, driveToScreen, engageBadge, expireGrace, stepN } from '../test/helpers';
 
-const DT = LOOP.FIXED_DT;
-const T = RESOLUTION.TILE;
-
-function driveToScreen(target: number): Simulation {
-  const sim = new Simulation();
-  sim.step(DT, makeInput({ anyPressed: true }));
-  let guard = 0;
-  while (!(sim.screenId === target && sim.state === 'PLAYING')) {
-    if (++guard > 4000) break;
-    if (sim.state === 'TITLE_CARD') sim.step(DT, makeInput());
-    else if (sim.state === 'PLAYING' && sim.screenId < target) {
-      sim.player.box.x = sim.screen.exitX!;
-      sim.step(DT, makeInput());
-    } else sim.step(DT, makeInput());
-  }
-  return sim;
+/** Park Beam where a barrier arm sweeps (gate rows sit at gy14). */
+function standAtGate(sim: ReturnType<typeof driveToScreen>, gx: number): void {
+  sim.player.box.x = gx * T + 6;
+  sim.player.box.y = 14 * T - 12;
 }
 
-function expireInvuln(sim: Simulation): void {
-  for (let i = 0; i < 60 && sim.player.isInvulnerable; i += 1) sim.step(DT, makeInput());
-}
-
-/** Place Beam directly on top of the first plant's base column. */
-function standOnFirstPlant(sim: Simulation): void {
-  const plant = sim.screen.data.plants![0]!;
-  sim.player.box.x = plant.gx * T + T / 2 - sim.player.box.w / 2;
-  sim.player.box.y = 14 * T;
-}
-
-describe('Screen 3 — Compliance Maze (plants + Pass-through)', () => {
-  it('grants a 4s Pass-through on badge pickup', () => {
+describe('Screen 3 — Compliance (thread the approvals → GCC-BOT → cleared)', () => {
+  it('is the GCC-BOT capability screen with barriers on both sides of the badge', () => {
     const sim = driveToScreen(3);
-    expect(sim.screen.data.badge!.type).toBe('PASS_THROUGH');
-    expireInvuln(sim);
-    const b = sim.screen.data.badge!;
-    sim.player.box.x = b.gx * T + 2;
-    sim.player.box.y = b.gy * T + 2;
-    sim.step(DT, makeInput());
-    expect(sim.powerups.isPassThrough).toBe(true);
-    expect(sim.activePower?.duration).toBe(POWERUPS.PASS_THROUGH.duration);
+    expect(sim.screen.data.badge!.type).toBe('CLEAR_PATH');
+    expect(sim.screen.data.hazard).toBe('gates');
+    expect(sim.activeHazard).toBeInstanceOf(Gates);
+    const badgeGx = sim.screen.data.badge!.gx;
+    const gates = sim.screen.data.gates!;
+    expect(gates.some((g) => g.gx < badgeGx)).toBe(true);
+    expect(gates.some((g) => g.gx > badgeGx)).toBe(true);
   });
 
-  it('walks through plants unharmed while active, then plants are lethal again', () => {
+  it('a struggle barrier costs months, not a life', () => {
     const sim = driveToScreen(3);
-    expireInvuln(sim);
-    const b = sim.screen.data.badge!;
-    sim.player.box.x = b.gx * T + 2;
-    sim.player.box.y = b.gy * T + 2;
-    sim.step(DT, makeInput());
-    expect(sim.powerups.isPassThrough).toBe(true);
-
-    // Sit inside a plant while Pass-through is active → survive.
-    let diedWhileActive = false;
-    for (let i = 0; i < 120; i += 1) {
-      standOnFirstPlant(sim);
+    expireGrace(sim);
+    const before = sim.months;
+    const struggleGx = sim.screen.data.gates![0]!.gx;
+    for (let i = 0; i < 600; i += 1) {
+      if (!sim.inSetback) standAtGate(sim, struggleGx);
       sim.step(DT, makeInput());
-      if (sim.state === 'DEATH') diedWhileActive = true;
+      if (sim.months > before) break;
     }
-    expect(diedWhileActive).toBe(false);
-
-    // After Pass-through lapses, the plant becomes lethal.
-    let diedAfter = false;
-    for (let i = 0; i < 240; i += 1) {
-      if (sim.state === 'PLAYING') standOnFirstPlant(sim);
-      sim.step(DT, makeInput());
-      if (sim.state === 'DEATH') {
-        diedAfter = true;
-        break;
-      }
-    }
-    expect(diedAfter).toBe(true);
+    expect(sim.months).toBe(before + JOURNEY.SETBACK_MONTHS);
+    expect(sim.state).toBe('PLAYING');
   });
 
-  it('touching a plant without the badge is lethal', () => {
+  it('engaging GCC-BOT lifts nearby barriers for good', () => {
     const sim = driveToScreen(3);
-    expireInvuln(sim);
-    let died = false;
-    for (let i = 0; i < 200; i += 1) {
-      if (sim.state === 'PLAYING') standOnFirstPlant(sim);
+    expireGrace(sim);
+    engageBadge(sim);
+    const gates = sim.activeHazard as Gates;
+    const reliefGx = sim.screen.data.gates!.find(
+      (g) => g.gx > sim.screen.data.badge!.gx,
+    )!.gx;
+    standAtGate(sim, reliefGx);
+    stepN(sim, 2);
+    expect(gates.clearedCount).toBeGreaterThan(0);
+
+    // Standing right in a lifted barrier is free.
+    const before = sim.months;
+    for (let i = 0; i < 400; i += 1) {
+      standAtGate(sim, reliefGx);
       sim.step(DT, makeInput());
-      if (sim.state === 'DEATH') {
-        died = true;
-        break;
-      }
     }
-    expect(died).toBe(true);
+    expect(sim.months).toBe(before);
+  });
+
+  it('help does not lapse — cleared filings stay cleared', () => {
+    const sim = driveToScreen(3);
+    engageBadge(sim);
+    const gates = sim.activeHazard as Gates;
+    stepN(sim, 2);
+    const cleared = gates.clearedCount;
+    stepN(sim, 600);
+    expect(gates.clearedCount).toBeGreaterThanOrEqual(cleared);
+    expect(sim.activePower?.product).toBe('GCC-BOT');
   });
 });

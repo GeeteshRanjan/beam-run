@@ -36,6 +36,13 @@ describe('TouchControls', () => {
     tc.setLarger(true);
     expect(tc.root.classList.contains('beam-run__touch--large')).toBe(true);
   });
+
+  it('switches to the one-tap layout for auto-run', () => {
+    const tc = new TouchControls(parent(), { setVirtual: vi.fn() });
+    expect(tc.root.classList.contains('beam-run__touch--autorun')).toBe(false);
+    tc.setAutoRun(true);
+    expect(tc.root.classList.contains('beam-run__touch--autorun')).toBe(true);
+  });
 });
 
 describe('AssistMenu', () => {
@@ -48,17 +55,17 @@ describe('AssistMenu', () => {
     const menu = new AssistMenu(parent(), controller(), () => {});
     expect(menu.root.getAttribute('role')).toBe('dialog');
     expect(menu.root.getAttribute('aria-modal')).toBe('true');
-    expect(menu.root.querySelectorAll('.beam-run__assist-check').length).toBe(6);
+    expect(menu.root.querySelectorAll('.beam-run__assist-check').length).toBe(7);
   });
 
   it('checking a box routes through the controller into the sim', () => {
     const c = controller();
     const menu = new AssistMenu(parent(), c, () => {});
     const boxes = menu.root.querySelectorAll<HTMLInputElement>('.beam-run__assist-check');
-    const invincible = boxes[2]!; // order matches TOGGLES
-    invincible.checked = true;
-    invincible.dispatchEvent(new Event('change'));
-    expect(c.isOn('invincible')).toBe(true);
+    const noSetbacks = boxes[3]!; // order matches TOGGLES
+    noSetbacks.checked = true;
+    noSetbacks.dispatchEvent(new Event('change'));
+    expect(c.isOn('noSetbacks')).toBe(true);
   });
 
   it('opens (syncing checkboxes) and closes via Done', () => {
@@ -68,7 +75,7 @@ describe('AssistMenu', () => {
     const menu = new AssistMenu(parent(), c, onClose);
     menu.show();
     expect(menu.open).toBe(true);
-    const slow = menu.root.querySelectorAll<HTMLInputElement>('.beam-run__assist-check')[0]!;
+    const slow = menu.root.querySelectorAll<HTMLInputElement>('.beam-run__assist-check')[1]!;
     expect(slow.checked).toBe(true); // synced from controller
     const done = menu.root.querySelector('.beam-run__btn--primary') as HTMLButtonElement;
     done.click();

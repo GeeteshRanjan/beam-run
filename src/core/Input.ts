@@ -69,6 +69,9 @@ export class Input {
   private virtual = { left: false, right: false, jump: false };
   private virtualJumpEdge = false;
 
+  /** One-tap play: forward motion is automatic, the only decision is when to act. */
+  private autoRun = false;
+
   private target: (Window & typeof globalThis) | HTMLElement | null = null;
   private focused = true;
 
@@ -121,9 +124,27 @@ export class Input {
     }
   }
 
+  /**
+   * Enable/disable one-tap auto-run. The default on touch, because asking a
+   * non-gamer executive to drive a platformer with virtual d-pad buttons is the
+   * single biggest threat to finishing the run. Forward motion *is* the journey;
+   * the only real decision is when to act.
+   *
+   * Only the held directions are synthesised — never the edge signals — so
+   * auto-run can't start a run or skip a title card on its own.
+   */
+  setAutoRun(on: boolean): void {
+    this.autoRun = on;
+  }
+
+  get isAutoRun(): boolean {
+    return this.autoRun;
+  }
+
   getState(): InputState {
     const left = this.held.has('left') || this.virtual.left;
-    const right = this.held.has('right') || this.virtual.right;
+    // Holding left still overrides auto-run, so backing up remains possible.
+    const right = this.held.has('right') || this.virtual.right || (this.autoRun && !left);
     const jumpHeld = this.held.has('jump') || this.virtual.jump;
     const jumpPressed = this.edges.jump || this.virtualJumpEdge;
     return {

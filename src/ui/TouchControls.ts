@@ -106,6 +106,14 @@ export class TouchControls {
     this.root.classList.toggle('beam-run__touch--large', larger);
   }
 
+  /**
+   * One-tap layout: the move pad is hidden (forward motion is automatic) and the
+   * act button grows, so the whole game is playable with a single thumb.
+   */
+  setAutoRun(on: boolean): void {
+    this.root.classList.toggle('beam-run__touch--autorun', on);
+  }
+
   destroy(): void {
     for (const { el, type, fn } of this.bound) el.removeEventListener(type, fn);
     this.bound.length = 0;

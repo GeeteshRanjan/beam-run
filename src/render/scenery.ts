@@ -13,7 +13,12 @@
  *      entering, plus stage-specific silhouettes: reception desk, stalled
  *      paperwork, hiring crowd, regulation wall, a map of India missing local
  *      knowledge, and the Tech Park arrival) rendered in chunky pixels, kept
- *      low-contrast so hazards and the hero always read clearly.
+ *      behind gameplay but legible: signage uses solid dark plaques because the
+ *      struggle half of every screen is dimmed by the zone read in Game.ts.
+ *
+ * Every label here is deliberate. Reception names its three easy hops (business
+ * case, board approval, budget) so the tutorial is also the first story beat; the
+ * hazard screens name the real-world thing you are fighting.
  */
 import { RESOLUTION } from '../data/tuning.config';
 import { drawBricks, hash2, pxRect, type BrickOptions } from './PixelArt';
@@ -32,35 +37,38 @@ export interface TileMaterial extends BrickOptions {
  * (brand) with per-level shifts that carry meaning.
  */
 export const TILE_MATERIALS: Record<number, TileMaterial> = {
-  // L0 Reception — polished lobby floor: clean, inviting ("getting started is easy").
+  // L0 Reception — polished lobby floor: clean, inviting ("getting started is
+  // easy"). Bright cool teal so the walkable ground clearly lifts off the dark
+  // teal backdrop.
   0: {
-    face: '#0A4553', shade: '#063845', highlight: '#137084', mortar: '#00242E',
-    brickW: 40, brickH: 20, speckle: 0.06, edge: '#1C8296',
+    face: '#15788B', shade: '#0D5666', highlight: '#3AB4CA', mortar: '#053540',
+    brickW: 40, brickH: 20, speckle: 0.06, edge: '#57D4E8',
   },
-  // L1 Setup Delays — cracked "red-tape" ground: rougher, unfinished.
+  // L1 Setup Delays — cracked "red-tape" ground: warm muddy clay, rougher and
+  // unfinished (earthy, deliberately NOT the reserved value-orange).
   1: {
-    face: '#0A3D49', shade: '#062E38', highlight: '#125F70', mortar: '#001A22',
-    brickW: 24, brickH: 16, speckle: 0.2, edge: '#14708A',
+    face: '#6E4C3A', shade: '#4E3427', highlight: '#8F6448', mortar: '#281812',
+    brickW: 24, brickH: 16, speckle: 0.22, edge: '#A2744F',
   },
-  // L2 Hire Under Fire — scorched brick, warm-edged highlights.
+  // L2 Hire Under Fire — scorched brick: warm burnt terracotta.
   2: {
-    face: '#0C3B44', shade: '#07272E', highlight: '#8A4A2A', mortar: '#00161C',
-    brickW: 40, brickH: 20, speckle: 0.16, edge: '#B4622E',
+    face: '#7C3E2E', shade: '#57271B', highlight: '#A65C3E', mortar: '#2A120C',
+    brickW: 40, brickH: 20, speckle: 0.18, edge: '#C06B42',
   },
-  // L3 Compliance Maze — stamped document tile: tight regulatory grid.
+  // L3 Compliance Maze — stamped document tile: cool slate grey-blue grid.
   3: {
-    face: '#093845', shade: '#052a34', highlight: '#0F5A6C', mortar: '#001820',
-    brickW: 20, brickH: 20, speckle: 0.1, edge: '#136378',
+    face: '#41606C', shade: '#2C444E', highlight: '#648A99', mortar: '#16242A',
+    brickW: 20, brickH: 20, speckle: 0.1, edge: '#7CA6B4',
   },
-  // L4 Local Expertise — weathered dusk stone: uneven, unfamiliar terrain.
+  // L4 Local Expertise — weathered stone: warm sandy tan, uneven terrain.
   4: {
-    face: '#0A333F', shade: '#06232C', highlight: '#125464', mortar: '#04161C',
-    brickW: 32, brickH: 14, speckle: 0.22, edge: '#125C70',
+    face: '#7E7252', shade: '#5A5038', highlight: '#A6976E', mortar: '#2E281C',
+    brickW: 32, brickH: 14, speckle: 0.24, edge: '#BCAC7C',
   },
-  // L5 Tech Park — bright plaza pavers: the payoff.
+  // L5 Tech Park — bright plaza pavers: the payoff, brightest cyan of all.
   5: {
-    face: '#0E5566', shade: '#0A4553', highlight: '#1E8CA3', mortar: '#00323F',
-    brickW: 40, brickH: 20, speckle: 0.05, edge: '#2AA6C0',
+    face: '#1E92AA', shade: '#12708A', highlight: '#46C4DA', mortar: '#08414F',
+    brickW: 40, brickH: 20, speckle: 0.05, edge: '#5CE2F4',
   },
 };
 
@@ -175,17 +183,19 @@ function drawBoard(
 
 /**
  * A background "floor directory" sign that names the stage's problem, read as
- * an office building sign. Low-contrast so it sits behind gameplay.
+ * an office building sign. Sits behind gameplay but stays readable: the struggle
+ * side of each screen is dimmed by the zone read, so the plaque needs a solid
+ * dark fill rather than a faint wash.
  */
 function drawFloorSign(ctx: CanvasRenderingContext2D, cx: number, midY: number, text: string): void {
   drawLabelPlaque(ctx, text, cx, midY, {
     scale: 3,
-    fg: '#8FC7D4',
-    bg: 'rgba(0,26,34,0.55)',
-    frame: 'rgba(20,90,110,0.7)',
+    fg: '#B8DCE6',
+    bg: 'rgba(0,20,27,0.8)',
+    frame: 'rgba(28,120,142,0.75)',
     padX: 10,
     padY: 7,
-    alpha: 0.72,
+    alpha: 0.9,
   });
 }
 
@@ -193,9 +203,33 @@ function drawFloorSign(ctx: CanvasRenderingContext2D, cx: number, midY: number, 
 function drawPropLabel(ctx: CanvasRenderingContext2D, cx: number, topY: number, text: string): void {
   drawText(ctx, text, cx, topY, {
     scale: 2,
-    color: '#7FB6C4',
+    color: '#9FCEDB',
     align: 'center',
-    alpha: 0.8,
+    outline: 'rgba(0,18,24,0.85)',
+    alpha: 0.92,
+  });
+}
+
+/**
+ * A label pinned just above one of the Reception steps. The three easy hops are
+ * the three things that genuinely *are* easy — the paperwork before any of the
+ * real work starts — so naming them turns tutorial geometry into the first beat
+ * of the story ("on paper, this all looks fine").
+ */
+function drawStepLabel(
+  ctx: CanvasRenderingContext2D,
+  gx: number,
+  gy: number,
+  text: string,
+): void {
+  drawLabelPlaque(ctx, text, gx * TILE + TILE / 2, gy * TILE - 34, {
+    scale: 2,
+    fg: '#CFE6EC',
+    bg: 'rgba(0,20,27,0.78)',
+    frame: 'rgba(28,120,142,0.6)',
+    padX: 7,
+    padY: 5,
+    alpha: 0.95,
   });
 }
 
@@ -290,31 +324,37 @@ export function drawSceneBackground(
 ): void {
   switch (id) {
     case 0: {
-      drawSky(ctx, '#0A4553');
-      drawSkyline(ctx, 11, '#063a47', '#9FD8E4', t, reduced);
-      // Lobby interior read: reception desk + greenery flanking the entrance.
-      drawFloorSign(ctx, W * 0.5, 96, 'MARKET ENTRY');
-      drawReceptionDesk(ctx, W * 0.5 - 60, GROUND_TOP);
+      drawSky(ctx, '#053642');
+      drawSkyline(ctx, 11, '#053039', '#9FD8E4', t, reduced);
+      // Reception read: desk + greenery. The sign sets the honest frame — none of
+      // this is hard yet, because none of it has left the slide deck.
+      drawFloorSign(ctx, W * 0.5, 84, 'MARKET ENTRY: ON PAPER');
+      drawReceptionDesk(ctx, 440, GROUND_TOP);
       drawPottedPlant(ctx, 120, GROUND_TOP);
       drawPottedPlant(ctx, W - 150, GROUND_TOP);
+      // Name the three easy hops (geometry from levels.json screen 0).
+      drawStepLabel(ctx, 9, 14, 'BUSINESS CASE');
+      drawStepLabel(ctx, 16, 13, 'BOARD APPROVAL');
+      drawStepLabel(ctx, 23, 12, 'BUDGET');
       break;
     }
     case 1: {
-      drawSky(ctx, '#0A3D49');
-      drawSkyline(ctx, 23, '#06333d', '#7FC4D2', t, reduced);
+      drawSky(ctx, '#05303a');
+      drawSkyline(ctx, 23, '#042A33', '#7FC4D2', t, reduced);
       // Setup delays: stalled paperwork stacks + a slipping clock.
       drawFloorSign(ctx, W * 0.5, 70, 'SETUP DELAYS');
-      drawStalledStacks(ctx, 90, GROUND_TOP);
-      drawStalledStacks(ctx, W - 190, GROUND_TOP);
+      drawStalledStacks(ctx, 60, GROUND_TOP);
+      drawStalledStacks(ctx, W - 150, GROUND_TOP);
       drawClock(ctx, W * 0.5, 150, t, reduced);
       drawBoard(ctx, W * 0.5 - 40, 210, 80, 56, '#0A3642', '#0E4A57', '#0A2C36'); // permits form
       drawPropLabel(ctx, W * 0.5, 190, 'PERMITS');
-      drawPropLabel(ctx, 124, GROUND_TOP - 92, 'RED TAPE');
+      // Names the shallow sludge you wade through before the badge (cols 6-9).
+      drawPropLabel(ctx, 8 * TILE, GROUND_TOP - 58, 'RED TAPE');
       break;
     }
     case 2: {
-      drawSky(ctx, '#123A40'); // warm-edged horizon
-      drawSkyline(ctx, 37, '#07313a', '#FFB07A', t, reduced);
+      drawSky(ctx, '#0C2E33'); // cool, deep horizon behind the warm scorched ground
+      drawSkyline(ctx, 37, '#062930', '#FFB07A', t, reduced);
       // Hire under fire: a crowd of candidates + a job board.
       drawPerson(ctx, 120, GROUND_TOP, '#0B3B45');
       drawPerson(ctx, 150, GROUND_TOP, '#0E4854');
@@ -327,10 +367,11 @@ export function drawSceneBackground(
       break;
     }
     case 3: {
-      drawSky(ctx, '#083845');
-      drawSkyline(ctx, 51, '#06303b', '#8FCAD6', t, reduced);
-      // Compliance maze: a wall grid of stamped documents/regulations.
-      drawFloorSign(ctx, W * 0.5, 70, 'COMPLIANCE MAZE');
+      drawSky(ctx, '#062E38');
+      drawSkyline(ctx, 51, '#04262F', '#8FCAD6', t, reduced);
+      // Compliance: a wall grid of stamped documents/regulations. Not a "maze" —
+      // it never was one, it is a queue of approvals that will not line up.
+      drawFloorSign(ctx, W * 0.5, 70, 'COMPLIANCE');
       {
         const labels = ['TAX', 'GST', 'AUDIT', 'LEGAL', 'ENTITY'];
         let i = 0;
@@ -346,8 +387,8 @@ export function drawSceneBackground(
       break;
     }
     case 4: {
-      drawSky(ctx, '#0A333F'); // dusk
-      drawSkyline(ctx, 67, '#062b34', '#7FB8C6', t, reduced);
+      drawSky(ctx, '#07272F'); // dusk, deepened so the sandy stone ground reads forward
+      drawSkyline(ctx, 67, '#05222A', '#7FB8C6', t, reduced);
       // Lack of local expertise: a map of India + question marks.
       drawFloorSign(ctx, W * 0.5, 70, 'LOCAL EXPERTISE');
       drawIndiaMap(ctx, W * 0.5 - 44, 120);
@@ -362,8 +403,8 @@ export function drawSceneBackground(
       break;
     }
     default: {
-      drawSky(ctx, '#0A4553');
-      drawSkyline(ctx, 11, '#063a47', '#9FD8E4', t, reduced);
+      drawSky(ctx, '#053642');
+      drawSkyline(ctx, 11, '#053039', '#9FD8E4', t, reduced);
     }
   }
 }

@@ -11,11 +11,18 @@
  * symbols) — that reads as confident signage and halves the glyph count.
  */
 
-const GLYPH_W = 5;
-const GLYPH_H = 7;
+export const GLYPH_W = 5;
+export const GLYPH_H = 7;
 
-/** '#' = on, anything else = off. Each glyph is exactly 7 rows of 5 chars. */
-const FONT: Record<string, string[]> = {
+/**
+ * '#' = on, anything else = off. Each glyph is exactly 7 rows of 5 chars.
+ *
+ * Exported because the DOM overlays render their headlines from this *same*
+ * font (as inline SVG — see `ui/PixelType.ts`). One font for the world and the
+ * UI is the whole point: the start and end screens now look like the game
+ * instead of like a web page sitting on top of it.
+ */
+export const FONT: Record<string, string[]> = {
   A: ['.###.', '#...#', '#...#', '#####', '#...#', '#...#', '#...#'],
   B: ['####.', '#...#', '####.', '#...#', '#...#', '#...#', '####.'],
   C: ['.####', '#....', '#....', '#....', '#....', '#....', '.####'],

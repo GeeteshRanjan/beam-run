@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { Simulation } from './Simulation';
 import { makeInput } from './Input';
-import { LOOP, RUN, RESOLUTION } from '../data/tuning.config';
-
-const DT = LOOP.FIXED_DT;
+import { JOURNEY, RESOLUTION } from '../data/tuning.config';
+import { TOTAL_MONTHS_BASE } from '../data/levels';
+import { DT, stepN } from '../test/helpers';
 
 function toPlaying(sim: Simulation): void {
   sim.step(DT, makeInput({ anyPressed: true }));
@@ -13,7 +13,7 @@ function toPlaying(sim: Simulation): void {
 /** Advance through every screen by teleporting Beam to each exit / win trigger. */
 function driveToEnd(sim: Simulation): void {
   sim.step(DT, makeInput({ anyPressed: true }));
-  for (let guard = 0; guard < 4000 && sim.state !== 'WIN' && sim.state !== 'GAMEOVER'; guard += 1) {
+  for (let guard = 0; guard < 4000 && sim.state !== 'WIN'; guard += 1) {
     if (sim.state === 'PLAYING') {
       const s = sim.screen;
       if (s.winTriggerX !== undefined) sim.player.box.x = s.winTriggerX;
@@ -24,7 +24,7 @@ function driveToEnd(sim: Simulation): void {
 }
 
 describe('full state-machine flow', () => {
-  it('runs Lobby → … → Tech Park and reaches WIN on screen 5', () => {
+  it('runs Reception → … → Tech Park and reaches WIN on screen 5', () => {
     const sim = new Simulation();
     driveToEnd(sim);
     expect(sim.state).toBe('WIN');
@@ -39,64 +39,78 @@ describe('full state-machine flow', () => {
   });
 });
 
-describe('lives & game over', () => {
-  it('reaches GAME OVER after losing all lives', () => {
+describe('the run cannot fail', () => {
+  it('a clean run lands exactly on the ANSR benchmark', () => {
+    const sim = new Simulation();
+    driveToEnd(sim);
+    expect(sim.setbacks).toBe(0);
+    expect(sim.months).toBe(JOURNEY.ANSR_BENCHMARK_MONTHS);
+    expect(sim.months).toBe(TOTAL_MONTHS_BASE);
+    expect(sim.receipt.matchedBenchmark).toBe(true);
+  });
+
+  it('no number of setbacks can end the run — there is no game over', () => {
     const sim = new Simulation();
     toPlaying(sim);
-    for (let life = 0; life < RUN.STARTING_LIVES; life += 1) {
-      // Wait out spawn i-frames.
-      for (let i = 0; i < 60 && sim.state === 'PLAYING' && sim.player.isInvulnerable; i += 1) {
-        sim.step(DT, makeInput());
-      }
-      if (sim.state === 'PLAYING') {
-        sim.player.box.y = RESOLUTION.HEIGHT + 200;
-        sim.step(DT, makeInput());
-      }
-      for (let i = 0; i < 30 && sim.state === 'DEATH'; i += 1) sim.step(DT, makeInput());
+    for (let i = 0; i < 12; i += 1) {
+      stepN(sim, 80); // outlast the grace window
+      sim.player.box.y = RESOLUTION.HEIGHT + 200;
+      sim.step(DT, makeInput());
+      expect(sim.state).toBe('PLAYING');
     }
-    expect(sim.lives).toBe(0);
-    expect(sim.state).toBe('GAMEOVER');
+    expect(sim.setbacks).toBe(12);
+    // The run is still finishable, and still reaches the CTA.
+    driveToEnd(sim);
+    expect(sim.state).toBe('WIN');
+    expect(sim.receipt.matchedBenchmark).toBe(false);
+    expect(sim.months).toBeGreaterThan(JOURNEY.ANSR_BENCHMARK_MONTHS);
+    expect(sim.months).toBeLessThan(JOURNEY.BASELINE_MONTHS);
+  });
+
+  it('a full reset clears the clock and the receipt', () => {
+    const sim = new Simulation();
+    driveToEnd(sim);
+    sim.reset();
+    expect(sim.state).toBe('START');
+    expect(sim.months).toBe(0);
+    expect(sim.screenId).toBe(0);
+    expect(sim.engaged).toHaveLength(0);
   });
 });
 
-describe('Growth Points persistence rule', () => {
-  it('keeps collected points across a mid-screen respawn (and their value)', () => {
+describe('quick-win persistence rule', () => {
+  it('keeps collected quick wins across a setback (they do not reappear)', () => {
     const sim = new Simulation();
     toPlaying(sim);
-    // Wait out i-frames so a fall counts.
-    for (let i = 0; i < 60 && sim.player.isInvulnerable; i += 1) sim.step(DT, makeInput());
+    stepN(sim, 60);
 
     const pt = sim.screen.points[0]!;
     sim.player.box.x = pt.x - sim.player.box.w / 2;
     sim.player.box.y = pt.y - sim.player.box.h / 2;
     sim.step(DT, makeInput());
-    expect(sim.points).toBe(RUN.POINTS_PER_PICKUP);
+    expect(sim.quickWins).toBe(1);
     const collectedId = pt.id;
 
-    // Die by falling → respawn same screen.
     sim.player.box.y = RESOLUTION.HEIGHT + 200;
     sim.step(DT, makeInput());
-    for (let i = 0; i < 30 && sim.state !== 'PLAYING'; i += 1) sim.step(DT, makeInput());
+    stepN(sim, 30);
 
-    expect(sim.state).toBe('PLAYING');
-    expect(sim.points).toBe(RUN.POINTS_PER_PICKUP); // value retained
-    const still = sim.screen.points.find((p) => p.id === collectedId)!;
-    expect(still.collected).toBe(true); // does not reappear
+    expect(sim.quickWins).toBe(1);
+    expect(sim.screen.points.find((p) => p.id === collectedId)!.collected).toBe(true);
   });
 
-  it('banks points from a completed screen (they carry to the next)', () => {
+  it('banks quick wins from a completed screen', () => {
     const sim = new Simulation();
     toPlaying(sim);
     const pt = sim.screen.points[0]!;
     sim.player.box.x = pt.x - sim.player.box.w / 2;
     sim.player.box.y = pt.y - sim.player.box.h / 2;
     sim.step(DT, makeInput());
-    expect(sim.points).toBe(RUN.POINTS_PER_PICKUP);
+    expect(sim.quickWins).toBe(1);
 
-    // Reach the exit → advance to screen 1; banked points persist.
     sim.player.box.x = sim.screen.exitX!;
     sim.step(DT, makeInput());
     expect(sim.screenId).toBe(1);
-    expect(sim.points).toBe(RUN.POINTS_PER_PICKUP);
+    expect(sim.quickWins).toBe(1);
   });
 });

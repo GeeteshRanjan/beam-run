@@ -63,10 +63,30 @@ export class Player {
   }
 
   /**
+   * Extend the grace period (used after a setback, so a delay can't chain into
+   * another one while the player re-reads the screen). Never shortens it.
+   */
+  grantInvulnerability(seconds: number): void {
+    this.invulnTimer = Math.max(this.invulnTimer, seconds);
+  }
+
+  /** Age the grace period without simulating movement (setback hold beat). */
+  tickInvulnerability(dt: number): void {
+    if (this.invulnTimer > 0) this.invulnTimer = Math.max(0, this.invulnTimer - dt);
+  }
+
+  /**
    * Advance one fixed step.
    * @param speedMult horizontal drag from surfaces like quicksand (default 1).
+   * @param jumpMult jump-strength scale from the surface (sludge; default 1).
    */
-  update(dt: number, input: InputState, solids: readonly AABB[], speedMult = 1): void {
+  update(
+    dt: number,
+    input: InputState,
+    solids: readonly AABB[],
+    speedMult = 1,
+    jumpMult = 1,
+  ): void {
     this.prevX = this.box.x;
     this.prevY = this.box.y;
 
@@ -83,7 +103,11 @@ export class Player {
     if (dir !== 0) this.facing = dir > 0 ? 1 : -1;
     const target = dir * PLAYER.WALK_SPEED * speedMult;
     if (dir !== 0) {
-      const accel = this.onGround ? PLAYER.GROUND_ACCEL : PLAYER.AIR_ACCEL;
+      // A dragging surface costs traction as well as top speed: acceleration
+      // scales with the same multiplier, so stepping into sludge reads as
+      // bogging down over a beat instead of an instant change of pace (and the
+      // instant you leave it, full acceleration returns — the release is felt).
+      const accel = (this.onGround ? PLAYER.GROUND_ACCEL : PLAYER.AIR_ACCEL) * speedMult;
       this.vx = approach(this.vx, target, accel * dt);
     } else {
       const friction = this.onGround ? PLAYER.GROUND_FRICTION : PLAYER.AIR_FRICTION;
@@ -92,7 +116,7 @@ export class Player {
 
     // Jump (coyote + buffer). Consume both on success.
     if (this.jumpBufferTimer > 0 && this.coyoteTimer > 0) {
-      this.vy = PLAYER.JUMP_VELOCITY;
+      this.vy = PLAYER.JUMP_VELOCITY * jumpMult;
       this.jumpBufferTimer = 0;
       this.coyoteTimer = 0;
       this.onGround = false;

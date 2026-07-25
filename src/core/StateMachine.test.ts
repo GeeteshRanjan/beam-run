@@ -28,13 +28,20 @@ describe('StateMachine (game transitions)', () => {
     }
   });
 
-  it('supports the death → respawn and death → game-over branches', () => {
+  it('has no failure branch — PLAYING only leads onward or to WIN', () => {
     const sm = new StateMachine<GameState>('PLAYING', GAME_TRANSITIONS);
-    expect(sm.transitionTo('DEATH')).toBe(true);
-    expect(sm.transitionTo('PLAYING')).toBe(true); // respawn
-    expect(sm.transitionTo('DEATH')).toBe(true);
-    expect(sm.transitionTo('GAMEOVER')).toBe(true);
-    expect(sm.transitionTo('START')).toBe(true);
+    expect(sm.can('TITLE_CARD')).toBe(true); // next screen
+    expect(sm.can('WIN')).toBe(true); // finale
+    // Setbacks are handled inside PLAYING; there is no death or game-over state
+    // to fall into, so a run can never be walled off from the closing CTA.
+    expect(Object.keys(GAME_TRANSITIONS)).toEqual([
+      'BOOT',
+      'START',
+      'TITLE_CARD',
+      'PLAYING',
+      'WIN',
+    ]);
+    expect(GAME_TRANSITIONS.PLAYING).toEqual(['TITLE_CARD', 'WIN']);
   });
 
   it('fires onChange for accepted transitions only', () => {

@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { BRAND, RESOLUTION, PLAYER } from './tuning.config';
+import { BRAND, RESOLUTION, PLAYER, JOURNEY } from './tuning.config';
 import { PALETTE, SEMANTIC } from './tokens';
-import { COPY } from './copy';
-import { SCREENS, SCREEN_COUNT, getScreen, GRID } from './levels';
+import { COPY, CAPABILITIES, capabilityFor } from './copy';
+import { SCREENS, SCREEN_COUNT, getScreen, GRID, TOTAL_MONTHS_BASE } from './levels';
 
 describe('brand tokens', () => {
   it('exposes exactly the five brand colours', () => {
@@ -41,9 +41,47 @@ describe('tuning config import', () => {
 
 describe('copy', () => {
   it('has the branded title and understated win line', () => {
-    expect(COPY.meta.title).toBe('Beam Run: Market Entry');
+    // The game is ANSRcade; "Market Entry" is the edition (see COPY.meta).
+    expect(COPY.meta.name).toBe('ANSRcade');
+    expect(COPY.meta.title).toBe(`${COPY.meta.name}: ${COPY.meta.edition}`);
     expect(COPY.win.title).toBe('Market Entry Complete.');
-    expect(COPY.win.valuationLabel).toBe('Company Valuation');
+  });
+
+  it('leads with the stake, interpolated from the tuning model (never typed)', () => {
+    expect(COPY.start.stake(JOURNEY.BASELINE_MONTHS)).toContain('24');
+  });
+
+  it('names a capability, a product and a topic for every badge type', () => {
+    const badges = SCREENS.filter((s) => s.badge).map((s) => s.badge!.type);
+    for (const b of badges) {
+      const cap = capabilityFor(b);
+      expect(cap, `badge ${b} needs a capability entry`).toBeTruthy();
+      expect(cap!.product).toBeTruthy();
+      expect(cap!.topic).toBeTruthy();
+    }
+  });
+
+  it('blames the environment for every setback cause, never the player', () => {
+    for (const cause of ['delay', 'fire', 'gate', 'spike', 'fall']) {
+      expect(COPY.setback.tag[cause]).toBeTruthy();
+      expect(COPY.setback.reason[cause]).toBeTruthy();
+      expect(COPY.setback.reason[cause]!.toLowerCase()).not.toContain('you failed');
+    }
+  });
+});
+
+describe('the journey model', () => {
+  it('screen months sum to the ANSR benchmark, so a clean run lands on it', () => {
+    expect(TOTAL_MONTHS_BASE).toBe(JOURNEY.ANSR_BENCHMARK_MONTHS);
+  });
+
+  it('caps the clock below the going-alone baseline (the story cannot invert)', () => {
+    expect(JOURNEY.MAX_MONTHS).toBeLessThan(JOURNEY.BASELINE_MONTHS);
+  });
+
+  it('capability savings account for the whole baseline gap', () => {
+    const saved = CAPABILITIES.reduce((sum, c) => sum + c.monthsSaved, 0);
+    expect(saved).toBe(JOURNEY.BASELINE_MONTHS - JOURNEY.ANSR_BENCHMARK_MONTHS);
   });
 });
 

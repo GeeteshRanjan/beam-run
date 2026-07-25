@@ -118,7 +118,7 @@ describe('AudioEngine', () => {
     const engine = new AudioEngine({ createContext: () => null });
     await engine.unlock();
     expect(engine.suspended).toBe(true);
-    expect(engine.playSfx('death')).toBe(false);
+    expect(engine.playSfx('setback')).toBe(false);
     expect(() => engine.toggleMuteAll()).not.toThrow();
   });
 

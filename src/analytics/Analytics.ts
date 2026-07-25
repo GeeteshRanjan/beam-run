@@ -103,38 +103,49 @@ export class Analytics {
   screenEntered(screenId: number, screenName: string): void {
     this.track('screen_entered', { screen_id: screenId, screen_name: screenName });
   }
-  screenCleared(screenId: number, timeS: number, deaths: number): void {
+  screenCleared(screenId: number, timeS: number, setbacks: number, months: number): void {
     this.track('screen_cleared', {
       screen_id: screenId,
       time_s: round2(timeS),
-      deaths_on_screen: deaths,
+      setbacks_on_screen: setbacks,
+      months: months,
     });
   }
   badgeCollected(screenId: number, badgeType: string): void {
     this.track('badge_collected', { screen_id: screenId, badge_type: badgeType });
   }
-  playerDied(screenId: number, cause: string, livesLeft: number): void {
-    this.track('player_died', { screen_id: screenId, cause, lives_left: livesLeft });
+  /** A hazard cost the player time. Diagnostic (difficulty balancing), not an intent signal. */
+  setbackIncurred(screenId: number, cause: string, totalMonths: number): void {
+    this.track('setback_incurred', { screen_id: screenId, cause, months: totalMonths });
   }
-  gameOver(reachedScreen: number, totalPoints: number, durationS: number): void {
-    this.track('game_over', {
+  /** Mid-run exit: the summary receipt was shown instead of a game-over wall. */
+  runSummary(reachedScreen: number, months: number, durationS: number): void {
+    this.track('run_summary_shown', {
       reached_screen: reachedScreen,
-      total_points: totalPoints,
+      months,
       duration_s: round2(durationS),
     });
   }
-  gameCompleted(totalPoints: number, durationS: number, totalDeaths: number): void {
+  gameCompleted(
+    months: number,
+    durationS: number,
+    setbacks: number,
+    quickWins: number,
+    capabilities: number,
+  ): void {
     this.track('game_completed', {
-      total_points: totalPoints,
+      months,
       duration_s: round2(durationS),
-      total_deaths: totalDeaths,
+      total_setbacks: setbacks,
+      quick_wins: quickWins,
+      capabilities_engaged: capabilities,
     });
   }
   ctaShown(context: CtaContext): void {
     this.track('cta_shown', { context });
   }
-  ctaClicked(context: CtaContext, target: string): void {
-    this.track('cta_clicked', { context, target });
+  ctaClicked(context: CtaContext, target: string, topic?: string): void {
+    this.track('cta_clicked', { context, target, ...(topic ? { topic } : {}) });
   }
   gameSkipped(screenId: number): void {
     this.track('game_skipped', { screen_id: screenId });

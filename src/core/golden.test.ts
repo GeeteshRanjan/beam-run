@@ -1,27 +1,35 @@
 import { describe, it, expect } from 'vitest';
 import { Simulation } from './Simulation';
 import { makeInput } from './Input';
-import { LOOP, RUN } from '../data/tuning.config';
-import { SCREEN_COUNT } from '../data/levels';
-
-const DT = LOOP.FIXED_DT;
+import { JOURNEY } from '../data/tuning.config';
+import { SCREEN_COUNT, TOTAL_QUICK_WINS } from '../data/levels';
+import { CAPABILITIES } from '../data/copy';
+import { DT } from '../test/helpers';
 
 /**
  * Golden full playthrough: start → traverse all six screens → WIN.
  *
- * Runs with the "invincible practice" assist so the run is a pure completability
- * proof (hazards cannot end it) — this mirrors the level validator's invincible
- * traversal. We advance each PLAYING screen by moving Beam to its exit (or the
- * finale win trigger) and optionally sweeping up every Growth Point first.
+ * Runs with the "no setbacks" assist so the run is a pure completability proof —
+ * this mirrors the level validator's hazard-ignoring traversal. We advance each
+ * PLAYING screen by moving Beam to its exit (or the finale win trigger), first
+ * engaging the ANSR badge and optionally sweeping up every quick win.
  */
-function playToWin(collectPoints: boolean): Simulation {
-  const sim = new Simulation({ assist: { invincible: true } });
+function playToWin(opts: { collect?: boolean; engage?: boolean } = {}): Simulation {
+  const sim = new Simulation({ assist: { noSetbacks: true } });
   sim.step(DT, makeInput({ anyPressed: true })); // START → run begins (TITLE_CARD)
 
   let guard = 0;
   while (sim.state !== 'WIN' && guard++ < 8000) {
     if (sim.state === 'PLAYING') {
-      if (collectPoints) {
+      if (opts.engage) {
+        const b = sim.screen.data.badge;
+        if (b && !sim.powerups.collected) {
+          sim.player.box.x = b.gx * 40 + 2;
+          sim.player.box.y = b.gy * 40 + 2;
+          sim.step(DT, makeInput());
+        }
+      }
+      if (opts.collect) {
         for (const pt of sim.screen.points) {
           if (pt.collected) continue;
           sim.player.box.x = pt.x - sim.player.box.w / 2;
@@ -38,19 +46,31 @@ function playToWin(collectPoints: boolean): Simulation {
 }
 
 describe('Golden playthrough', () => {
-  it('reaches WIN after traversing all six screens with lives intact', () => {
-    const sim = playToWin(false);
+  it('reaches WIN across all six screens and lands on the benchmark', () => {
+    const sim = playToWin();
     expect(sim.state).toBe('WIN');
     expect(sim.screenId).toBe(SCREEN_COUNT - 1);
     expect(sim.screenId).toBe(5);
-    expect(sim.lives).toBe(RUN.STARTING_LIVES);
+    expect(sim.setbacks).toBe(0);
+    expect(sim.months).toBe(JOURNEY.ANSR_BENCHMARK_MONTHS);
   });
 
-  it('banks every Growth Point across the run into the final valuation', () => {
-    const sim = playToWin(true);
+  it('engages all four ANSR capabilities and reports them on the receipt', () => {
+    const sim = playToWin({ engage: true });
+    const r = sim.receipt;
+    expect(r.engaged).toHaveLength(4);
+    // Every capability in the copy deck is earned exactly once, in journey order.
+    expect(r.engaged).toEqual(CAPABILITIES.map((c) => c.badge));
+    expect(r.matchedBenchmark).toBe(true);
+    expect(r.benchmarkMonths).toBe(JOURNEY.ANSR_BENCHMARK_MONTHS);
+    expect(r.baselineMonths).toBe(JOURNEY.BASELINE_MONTHS);
+  });
+
+  it('collects every quick win across the run without touching the clock', () => {
+    const sim = playToWin({ collect: true });
     expect(sim.state).toBe('WIN');
-    // 3 + 4 + 5 + 4 + 4 + 3 = 23 pickups, banked and persisted across screens.
-    const totalPickups = 23;
-    expect(sim.points).toBe(totalPickups * RUN.POINTS_PER_PICKUP);
+    expect(sim.quickWins).toBe(TOTAL_QUICK_WINS);
+    expect(sim.receipt.quickWins).toBe(TOTAL_QUICK_WINS);
+    expect(sim.months).toBe(JOURNEY.ANSR_BENCHMARK_MONTHS);
   });
 });

@@ -1,35 +1,43 @@
 {
-  "$schema": "./levels.schema.md",
   "meta": {
     "grid": { "cols": 32, "rows": 18, "tile": 40 },
-    "notes": "All coordinates are in TILE units unless a field name ends in _px. Rows count from top (0) down. Ground band is rows 15-17. 'gx' = grid x, 'gy' = grid y, 'w'/'h' in tiles. Player hitbox is 28x44px; spawn places feet on the given tile top.",
+    "notes": "All coordinates are in TILE units unless a field name ends in _px. Rows count from top (0) down. Ground band is rows 15-17. 'gx' = grid x, 'gy' = grid y, 'w'/'h' in tiles. Player hitbox is 28x44px; spawn places feet on the given tile top. The typed shape of this file is src/data/levels.ts.",
+    "structure": "Every hazard screen is a BEFORE/AFTER of the same problem. Hazard instances sit on BOTH sides of a mid-screen ANSR badge: the struggle zone (left) is the buyer's current reality, the relief zone (right) is the same hazard once ANSR is engaged. The badge sits on the walking path - never signposted as optional, never labelled 'do it yourself'.",
+    "clock": "monthsBase is booked on clearing a screen. The six bases sum to JOURNEY.ANSR_BENCHMARK_MONTHS, so a clean assisted run lands exactly on ANSR's published benchmark. Setbacks add JOURNEY.SETBACK_MONTHS each, capped at JOURNEY.MAX_MONTHS.",
     "conventions": {
       "solid": "static collidable platform/wall (non-lethal). Walking into a wall stops you.",
       "spawn": "player entry point (feet), always near far-left",
       "exit": "reaching this x (right edge trigger) advances to next screen",
-      "badge": "ANSR powerup pickup for this screen",
-      "points": "Growth Point pickups (value from tuning RUN.POINTS_PER_PICKUP)"
+      "badge": "ANSR capability pickup; sits mid-screen between the struggle and relief zones",
+      "points": "Quick-win pickups - counted, never scored, never placed on a hazard"
     }
   },
 
   "screens": [
     {
       "id": 0,
-      "name": "Lobby",
+      "name": "Reception",
       "type": "intro",
       "hazard": "none",
+      "monthsBase": 1,
       "spawn": { "gx": 1, "gy": 15 },
       "exit": { "gx": 31 },
       "solids": [
         { "gx": 0, "gy": 15, "w": 32, "h": 3, "role": "ground" },
-        { "gx": 9,  "gy": 14, "w": 1, "h": 1, "role": "practice-wall" },
-        { "gx": 16, "gy": 13, "w": 1, "h": 2, "role": "practice-wall" },
-        { "gx": 23, "gy": 12, "w": 2, "h": 3, "role": "practice-step" }
+        { "gx": 9, "gy": 14, "w": 1, "h": 1, "role": "step-business-case" },
+        { "gx": 16, "gy": 13, "w": 1, "h": 2, "role": "step-board-approval" },
+        { "gx": 23, "gy": 12, "w": 2, "h": 3, "role": "step-budget" }
       ],
       "points": [
-        { "gx": 10, "gy": 12 }, { "gx": 17, "gy": 11 }, { "gx": 24, "gy": 10 }
+        { "gx": 10, "gy": 12 },
+        { "gx": 17, "gy": 11 },
+        { "gx": 24, "gy": 10 }
       ],
-      "copy": { "titleCard": "Reception", "hint": "Move: ← →  ·  Jump: Space / ↑" }
+      "copy": {
+        "titleCard": "Reception",
+        "hint": "Move: \u2190 \u2192  \u00b7  Jump: Space / \u2191",
+        "onClear": "Approved on paper."
+      }
     },
 
     {
@@ -38,24 +46,31 @@
       "type": "hazard",
       "hazard": "quicksand",
       "meaningTag": "speed-to-setup",
+      "monthsBase": 3,
       "spawn": { "gx": 1, "gy": 15 },
       "exit": { "gx": 31 },
       "solids": [
-        { "gx": 0,  "gy": 15, "w": 13, "h": 3, "role": "ground" },
-        { "gx": 20, "gy": 15, "w": 12, "h": 3, "role": "ground" }
+        { "gx": 0, "gy": 15, "w": 17, "h": 3, "role": "ground" },
+        { "gx": 24, "gy": 15, "w": 8, "h": 3, "role": "ground" }
       ],
       "quicksand": [
-        { "gx": 13, "gy": 16, "w": 7, "h": 2 }
+        { "gx": 6, "gy": 15, "w": 8, "h": 1, "deep": false, "zone": "struggle" },
+        { "gx": 17, "gy": 16, "w": 7, "h": 2, "deep": true, "zone": "relief" }
       ],
       "badge": {
-        "type": "PLACE_TILE", "gx": 8, "gy": 13,
-        "placesTileAt": { "gx": 14, "gy": 15, "w": 5, "h": 1 },
-        "note": "Lays a FLUSH bridge across the pit (setup 'solved once'). Permanent for the attempt; cleared on respawn — re-collect required. Without the badge the 7-tile pit exceeds max jump distance, so the badge is the intended solve."
+        "type": "PLACE_TILE",
+        "gx": 14,
+        "gy": 14,
+        "placesTileAt": { "gx": 18, "gy": 15, "w": 5, "h": 1 },
+        "note": "1Wrk lays a flush bridge over the deep pit: setup solved once, done right. The shallow sludge before the badge is the felt friction (drag only, never a setback) and is 8 tiles wide - more than twice max jump distance - so it cannot be leapt; sludge also damps jump strength, so it cannot be hopped across either. The 7-tile pit after it exceeds max jump distance, so ANSR is what makes the crossing possible."
       },
       "points": [
-        { "gx": 4, "gy": 13 }, { "gx": 8, "gy": 12 }, { "gx": 24, "gy": 13 }, { "gx": 28, "gy": 12 }
+        { "gx": 3, "gy": 13 },
+        { "gx": 15, "gy": 13 },
+        { "gx": 26, "gy": 13 },
+        { "gx": 30, "gy": 12 }
       ],
-      "copy": { "titleCard": "Level 1 — Setup Delays", "onClear": "Setup accelerated." }
+      "copy": { "titleCard": "Setup Delays", "onClear": "Setup accelerated." }
     },
 
     {
@@ -64,79 +79,104 @@
       "type": "hazard",
       "hazard": "fire",
       "meaningTag": "talent-at-scale",
+      "monthsBase": 3,
       "spawn": { "gx": 1, "gy": 15 },
       "exit": { "gx": 31 },
-      "solids": [
-        { "gx": 0,  "gy": 15, "w": 32, "h": 3, "role": "ground" },
-        { "gx": 11, "gy": 14, "w": 1, "h": 1, "role": "practice-wall" },
-        { "gx": 21, "gy": 13, "w": 1, "h": 2, "role": "practice-wall" }
-      ],
+      "solids": [{ "gx": 0, "gy": 15, "w": 32, "h": 3, "role": "ground" }],
       "fireLanes": [
-        { "gx": 8,  "phaseIndex": 0 },
-        { "gx": 14, "phaseIndex": 1 },
-        { "gx": 19, "phaseIndex": 2 },
-        { "gx": 26, "phaseIndex": 0 }
+        { "gx": 6, "phaseIndex": 0, "zone": "struggle" },
+        { "gx": 10, "phaseIndex": 1, "zone": "struggle" },
+        { "gx": 18, "phaseIndex": 2, "zone": "relief" },
+        { "gx": 22, "phaseIndex": 0, "zone": "relief" },
+        { "gx": 26, "phaseIndex": 1, "zone": "relief" }
       ],
-      "badge": { "type": "FIRE_SHIELD", "gx": 5, "gy": 13 },
+      "badge": {
+        "type": "EXTINGUISH",
+        "gx": 14,
+        "gy": 14,
+        "note": "Talent500 staffs the roles: lanes ahead go out for good as you approach, so you keep moving instead of stopping to wait."
+      },
       "points": [
-        { "gx": 5, "gy": 12 }, { "gx": 12, "gy": 13 }, { "gx": 17, "gy": 12 }, { "gx": 23, "gy": 13 }, { "gx": 29, "gy": 12 }
+        { "gx": 3, "gy": 13 },
+        { "gx": 8, "gy": 13 },
+        { "gx": 16, "gy": 13 },
+        { "gx": 20, "gy": 12 },
+        { "gx": 30, "gy": 13 }
       ],
-      "copy": { "titleCard": "Level 2 — Hire Under Fire", "onClear": "Talent secured." }
+      "copy": { "titleCard": "Hire Under Fire", "onClear": "Talent secured." }
     },
 
     {
       "id": 3,
-      "name": "Compliance Maze",
+      "name": "Compliance",
       "type": "hazard",
-      "hazard": "plants",
+      "hazard": "gates",
       "meaningTag": "entity-and-compliance",
+      "monthsBase": 2,
       "spawn": { "gx": 1, "gy": 15 },
       "exit": { "gx": 31 },
       "solids": [
         { "gx": 0, "gy": 15, "w": 32, "h": 3, "role": "ground" },
-        { "gx": 7,  "gy": 12, "w": 3, "h": 1, "role": "platform" },
-        { "gx": 15, "gy": 11, "w": 3, "h": 1, "role": "platform" },
-        { "gx": 23, "gy": 12, "w": 3, "h": 1, "role": "platform" }
+        { "gx": 7, "gy": 12, "w": 3, "h": 1, "role": "platform" },
+        { "gx": 19, "gy": 12, "w": 3, "h": 1, "role": "platform" }
       ],
-      "plants": [
-        { "gx": 6,  "gy": 14, "axis": "x", "phase": 0.0 },
-        { "gx": 11, "gy": 14, "axis": "x", "phase": 0.5 },
-        { "gx": 14, "gy": 14, "axis": "x", "phase": 1.0 },
-        { "gx": 19, "gy": 14, "axis": "x", "phase": 0.25 },
-        { "gx": 22, "gy": 14, "axis": "x", "phase": 0.75 },
-        { "gx": 27, "gy": 14, "axis": "x", "phase": 0.5 }
+      "gates": [
+        { "gx": 6, "gy": 14, "axis": "x", "phase": 0.0, "zone": "struggle" },
+        { "gx": 9, "gy": 14, "axis": "x", "phase": 0.5, "zone": "struggle" },
+        { "gx": 12, "gy": 14, "axis": "x", "phase": 0.25, "zone": "struggle" },
+        { "gx": 19, "gy": 14, "axis": "x", "phase": 0.75, "zone": "relief" },
+        { "gx": 22, "gy": 14, "axis": "x", "phase": 0.0, "zone": "relief" },
+        { "gx": 25, "gy": 14, "axis": "x", "phase": 0.5, "zone": "relief" },
+        { "gx": 28, "gy": 14, "axis": "x", "phase": 0.25, "zone": "relief" }
       ],
-      "badge": { "type": "PASS_THROUGH", "gx": 4, "gy": 13 },
+      "badge": {
+        "type": "CLEAR_PATH",
+        "gx": 15,
+        "gy": 14,
+        "note": "GCC-BOT clears the filings: approval barriers ahead lift for good as you approach."
+      },
       "points": [
-        { "gx": 8, "gy": 11 }, { "gx": 16, "gy": 10 }, { "gx": 24, "gy": 11 }, { "gx": 30, "gy": 13 }
+        { "gx": 3, "gy": 13 },
+        { "gx": 8, "gy": 11 },
+        { "gx": 20, "gy": 11 },
+        { "gx": 30, "gy": 13 }
       ],
-      "copy": { "titleCard": "Level 3 — Compliance Maze", "onClear": "Entity compliant." }
+      "copy": { "titleCard": "Compliance", "onClear": "Compliance cleared." }
     },
 
     {
       "id": 4,
-      "name": "Lack of Local Expertise",
+      "name": "Local Expertise",
       "type": "hazard",
       "hazard": "spikes",
       "meaningTag": "local-expertise",
+      "monthsBase": 2,
       "spawn": { "gx": 1, "gy": 15 },
       "exit": { "gx": 31 },
       "solids": [
-        { "gx": 0,  "gy": 15, "w": 32, "h": 3, "role": "ground" },
-        { "gx": 13, "gy": 13, "w": 2, "h": 1, "role": "platform" }
+        { "gx": 0, "gy": 15, "w": 32, "h": 3, "role": "ground" },
+        { "gx": 12, "gy": 12, "w": 2, "h": 1, "role": "platform" }
       ],
       "spikeColumns": [
-        { "gx": 7,  "phaseIndex": 0 },
-        { "gx": 11, "phaseIndex": 2 },
-        { "gx": 16, "phaseIndex": 1 },
-        { "gx": 20, "phaseIndex": 3 },
-        { "gx": 25, "phaseIndex": 0 }
+        { "gx": 6, "phaseIndex": 0, "zone": "struggle" },
+        { "gx": 9, "phaseIndex": 2, "zone": "struggle" },
+        { "gx": 18, "phaseIndex": 1, "zone": "relief" },
+        { "gx": 22, "phaseIndex": 3, "zone": "relief" },
+        { "gx": 26, "phaseIndex": 0, "zone": "relief" }
       ],
-      "badge": { "type": "FREEZE", "gx": 4, "gy": 13 },
+      "badge": {
+        "type": "FORESIGHT",
+        "gx": 15,
+        "gy": 14,
+        "note": "500Leaders give you local context: long advance warning and a marked safe line. Knowledge, not magic - the market keeps moving, you can just read it."
+      },
       "points": [
-        { "gx": 4, "gy": 12 }, { "gx": 13, "gy": 11 }, { "gx": 22, "gy": 13 }, { "gx": 29, "gy": 12 }
+        { "gx": 3, "gy": 13 },
+        { "gx": 12, "gy": 11 },
+        { "gx": 16, "gy": 13 },
+        { "gx": 30, "gy": 13 }
       ],
-      "copy": { "titleCard": "Level 4 — Lack of Local Expertise", "onClear": "Local expertise onboarded." }
+      "copy": { "titleCard": "Local Expertise", "onClear": "Local expertise onboarded." }
     },
 
     {
@@ -144,6 +184,7 @@
       "name": "ANSR Tech Park",
       "type": "finale",
       "hazard": "none",
+      "monthsBase": 0,
       "spawn": { "gx": 1, "gy": 15 },
       "winTrigger": { "gx": 26 },
       "solids": [
@@ -151,12 +192,14 @@
         { "gx": 22, "gy": 8, "w": 8, "h": 7, "role": "tower-facade-noncollide" }
       ],
       "points": [
-        { "gx": 8, "gy": 13 }, { "gx": 14, "gy": 13 }, { "gx": 19, "gy": 13 }
+        { "gx": 8, "gy": 13 },
+        { "gx": 14, "gy": 13 },
+        { "gx": 19, "gy": 13 }
       ],
       "copy": {
-        "titleCard": "Arrival — ANSR Tech Park",
+        "titleCard": "Arrival \u2014 ANSR Tech Park",
         "win": "Market Entry Complete.",
-        "valuationLabel": "Company Valuation"
+        "onClear": "Live."
       }
     }
   ]

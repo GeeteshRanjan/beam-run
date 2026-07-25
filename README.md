@@ -1,4 +1,4 @@
-# Beam Run: Market Entry
+# ANSRcade: The GCC Game
 
 A tasteful, on-brand HTML5 Canvas 2D platformer — a ~90-second "playable explainer" for ANSR's
 India GCC journey. Six fixed-camera screens (Lobby → Setup Delays → Hire Under Fire → Compliance
@@ -107,7 +107,7 @@ Navigator with a non-PII UTM/outcome payload.
 ```
 src/
   core/       Loop, StateMachine, Renderer, Input, Simulation, Game, Effects, AssistController, finaleScene
-  world/      Physics, Player, Screen, Powerups, Hazards/{Quicksand,Fire,Plants,Spikes}
+  world/      Physics, Player, Screen, Powerups, Hazards/{Quicksand,Fire,Gates,Spikes}
   ui/         Hud, Overlays, TouchControls, AssistMenu, styles
   audio/      AudioEngine
   analytics/  Analytics, navigator, Save

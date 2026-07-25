@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="color-scheme" content="dark" />
-    <title>Beam Run: Market Entry — Dev</title>
+    <title>ANSRcade: The GCC Game</title>
     <style>
       html,
       body {
@@ -14,9 +14,35 @@
         color: #e6e6e6;
         font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
       }
+      body {
+        /* Standalone page: the game is the page. Centre it and let it take the
+           whole viewport instead of capping it at a fixed pixel width. */
+        overflow: hidden;
+        overscroll-behavior: none;
+      }
+      main {
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      @supports (height: 100dvh) {
+        /* dvh, so the mobile URL bar can't push the game off the bottom. */
+        main { height: 100dvh; }
+      }
       #beam-run {
-        width: min(960px, 100vw);
-        margin: 24px auto;
+        width: 100%;
+        /* Lift the library's 1280px display cap: the frame is a 16:9 contain-fit,
+           so it stays sharp when scaled past its internal resolution. Height is
+           handled by the library default (100dvh, with a 100vh fallback). */
+        --beam-run-max-width: 100vw;
+        /* Portrait: this page is nothing but the game, so let the stage take the
+           whole screen. The HUD and thumb controls then sit in the bands above
+           and below the play frame instead of on top of it. */
+        --beam-run-portrait-band: 100vh;
+      }
+      @supports (height: 100dvh) {
+        #beam-run { --beam-run-portrait-band: 100dvh; }
       }
     </style>
   </head>

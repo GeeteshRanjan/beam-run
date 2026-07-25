@@ -8,7 +8,8 @@ function makeTargets() {
   const loop = { timeScale: 1 };
   const audio = { setMuted: vi.fn() };
   const setLargerControls = vi.fn();
-  return { sim, loop, audio, setLargerControls };
+  const setAutoRun = vi.fn();
+  return { sim, loop, audio, setLargerControls, setAutoRun };
 }
 
 describe('AssistController', () => {
@@ -24,13 +25,31 @@ describe('AssistController', () => {
     expect(t.loop.timeScale).toBe(1);
   });
 
-  it('invincible + extra time flow into the simulation assist state', () => {
+  it('no-setbacks + extra time flow into the simulation assist state', () => {
     const t = makeTargets();
     const c = new AssistController(t);
-    c.set('invincible', true);
+    c.set('noSetbacks', true);
     c.set('extraTime', true);
-    expect(t.sim.assist.invincible).toBe(true);
+    expect(t.sim.assist.noSetbacks).toBe(true);
     expect(t.sim.assist.extraTime).toBe(true);
+  });
+
+  it('auto-run drives the input/touch hook and the sim state', () => {
+    const t = makeTargets();
+    const c = new AssistController(t);
+    expect(t.setAutoRun).toHaveBeenLastCalledWith(false);
+    c.toggle('autoRun');
+    expect(c.isOn('autoRun')).toBe(true);
+    expect(t.sim.assist.autoRun).toBe(true);
+    expect(t.setAutoRun).toHaveBeenLastCalledWith(true);
+  });
+
+  it('defaults auto-run on for touch devices without any user action', () => {
+    const t = makeTargets();
+    const c = new AssistController(t, undefined, undefined, { autoRun: true });
+    expect(c.isOn('autoRun')).toBe(true);
+    expect(t.sim.assist.autoRun).toBe(true);
+    expect(t.setAutoRun).toHaveBeenLastCalledWith(true);
   });
 
   it('larger controls calls the sizing hook; mutes route to the correct bus', () => {
@@ -52,6 +71,14 @@ describe('AssistController', () => {
     expect(announce).toHaveBeenLastCalledWith(expect.stringContaining('On'));
     c.toggle('slowMode');
     expect(announce).toHaveBeenLastCalledWith(expect.stringContaining('Off'));
+  });
+
+  it('reports each change for analytics', () => {
+    const t = makeTargets();
+    const onChange = vi.fn();
+    const c = new AssistController(t, undefined, onChange);
+    c.set('noSetbacks', true);
+    expect(onChange).toHaveBeenLastCalledWith('noSetbacks', true);
   });
 
   it('syncMutes reflects an external master-mute into the toggle state', () => {

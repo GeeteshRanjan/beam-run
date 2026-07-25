@@ -2,12 +2,30 @@
  * Typed accessor for the shipped `levels.json` (single source of truth for all
  * geometry and hazard placement). The engine hardcodes no layouts — everything
  * is read from here. Coordinates are in TILE units unless a field ends in `_px`.
+ *
+ * Structural contract (enforced by `scripts/validate-levels.ts`): every hazard
+ * screen places hazard instances on BOTH sides of its badge, so each level plays
+ * as a before/after of the same problem.
  */
 import raw from './levels.json';
 
-export type HazardKind = 'none' | 'quicksand' | 'fire' | 'plants' | 'spikes';
-export type BadgeType = 'PLACE_TILE' | 'FIRE_SHIELD' | 'PASS_THROUGH' | 'FREEZE';
+export type HazardKind = 'none' | 'quicksand' | 'fire' | 'gates' | 'spikes';
+
+/**
+ * ANSR capability each badge grants. Four structurally different verbs, one per
+ * real service line — never one reskinned shield.
+ *
+ *  - `PLACE_TILE`  BUILD   1Wrk / assisted setup lays a permanent bridge
+ *  - `EXTINGUISH`  STAFF   Talent500 puts out the hiring lanes ahead of you
+ *  - `CLEAR_PATH`  CLEAR   GCC-BOT lifts the approval barriers ahead
+ *  - `FORESIGHT`   KNOW    500Leaders give long warning + a marked safe line
+ */
+export type BadgeType = 'PLACE_TILE' | 'EXTINGUISH' | 'CLEAR_PATH' | 'FORESIGHT';
+
 export type ScreenType = 'intro' | 'hazard' | 'finale';
+
+/** Which side of the badge a hazard instance sits on. */
+export type Zone = 'struggle' | 'relief';
 
 export interface GridPos {
   gx: number;
@@ -27,23 +45,30 @@ export interface QuicksandRect {
   gy: number;
   w: number;
   h: number;
+  /** Deep pits book a delay after continuous contact; shallow sludge only drags. */
+  deep?: boolean;
+  zone?: Zone;
 }
 
 export interface FireLane {
   gx: number;
   phaseIndex: number;
+  zone?: Zone;
 }
 
 export interface SpikeColumn {
   gx: number;
   phaseIndex: number;
+  zone?: Zone;
 }
 
-export interface Plant {
+/** A swaying approval barrier (Compliance). */
+export interface Gate {
   gx: number;
   gy: number;
   axis: 'x' | 'y';
   phase: number;
+  zone?: Zone;
 }
 
 export interface PlacedTileSpec {
@@ -66,7 +91,6 @@ export interface ScreenCopy {
   hint?: string;
   onClear?: string;
   win?: string;
-  valuationLabel?: string;
 }
 
 export interface ScreenData {
@@ -75,6 +99,8 @@ export interface ScreenData {
   type: ScreenType;
   hazard: HazardKind;
   meaningTag?: string;
+  /** Months booked on clearing this screen (the journey clock). */
+  monthsBase: number;
   spawn: GridPos;
   exit?: { gx: number };
   winTrigger?: { gx: number };
@@ -82,7 +108,7 @@ export interface ScreenData {
   quicksand?: QuicksandRect[];
   fireLanes?: FireLane[];
   spikeColumns?: SpikeColumn[];
-  plants?: Plant[];
+  gates?: Gate[];
   badge?: BadgeSpec;
   points?: GridPos[];
   copy?: ScreenCopy;
@@ -92,6 +118,8 @@ export interface LevelsFile {
   meta: {
     grid: { cols: number; rows: number; tile: number };
     notes?: string;
+    structure?: string;
+    clock?: string;
     conventions?: Record<string, string>;
   };
   screens: ScreenData[];
@@ -111,3 +139,9 @@ export function getScreen(id: number): ScreenData {
 }
 
 export const SCREEN_COUNT = SCREENS.length;
+
+/** Months a flawless run books (sum of every screen's base). */
+export const TOTAL_MONTHS_BASE = SCREENS.reduce((sum, s) => sum + (s.monthsBase ?? 0), 0);
+
+/** Total quick-win pickups placed across the run (for the closing receipt). */
+export const TOTAL_QUICK_WINS = SCREENS.reduce((sum, s) => sum + (s.points?.length ?? 0), 0);

@@ -66,3 +66,36 @@ describe('Input DOM key mapping', () => {
     expect(input.getState().jumpHeld).toBe(true);
   });
 });
+
+describe('Input auto-run (one-tap play)', () => {
+  it('drives forward motion on its own, without faking any edge signal', () => {
+    const input = new Input();
+    expect(input.isAutoRun).toBe(false);
+    expect(input.getState().right).toBe(false);
+
+    input.setAutoRun(true);
+    const s = input.getState();
+    expect(input.isAutoRun).toBe(true);
+    expect(s.right).toBe(true);
+    // Critically: auto-run must not look like a key press, or it would start a
+    // run and skip every title card by itself.
+    expect(s.anyPressed).toBe(false);
+    expect(s.jumpPressed).toBe(false);
+  });
+
+  it('still lets the player back up by holding left', () => {
+    const input = new Input();
+    input.setAutoRun(true);
+    input.pressAction('left');
+    const s = input.getState();
+    expect(s.left).toBe(true);
+    expect(s.right).toBe(false); // holding left overrides auto-run
+  });
+
+  it('can be turned back off (desktop players keep full control)', () => {
+    const input = new Input();
+    input.setAutoRun(true);
+    input.setAutoRun(false);
+    expect(input.getState().right).toBe(false);
+  });
+});

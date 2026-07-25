@@ -10,9 +10,10 @@ import { COPY } from '../data/copy';
 import type { AssistController, AssistToggle } from '../core/AssistController';
 
 const TOGGLES: { key: AssistToggle; label: string }[] = [
+  { key: 'autoRun', label: COPY.assist.autoRun },
   { key: 'slowMode', label: COPY.assist.slowMode },
   { key: 'extraTime', label: COPY.assist.extraTime },
-  { key: 'invincible', label: COPY.assist.invincible },
+  { key: 'noSetbacks', label: COPY.assist.noSetbacks },
   { key: 'largerControls', label: COPY.assist.largerControls },
   { key: 'muteMusic', label: COPY.assist.muteMusic },
   { key: 'muteSfx', label: COPY.assist.muteSfx },

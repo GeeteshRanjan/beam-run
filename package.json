@@ -26,6 +26,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "validate:levels": "tsx scripts/validate-levels.ts",
+    "build:mark": "node scripts/build-ansr-mark.mjs",
     "lint": "eslint \"src/**/*.{ts,tsx}\" \"scripts/**/*.ts\"",
     "lint:fix": "eslint --fix \"src/**/*.{ts,tsx}\" \"scripts/**/*.ts\"",
     "format": "prettier --write \"src/**/*.{ts,tsx,css,json}\"",

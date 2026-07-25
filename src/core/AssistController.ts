@@ -2,17 +2,20 @@
  * AssistController — the single source of truth for the accessibility "assist"
  * options, and the one place that pushes them into the running game.
  *
- * Toggles (all default OFF):
+ * Toggles:
  *  - slowMode        → scales the loop timeScale (−30%, geometry unchanged)
  *  - extraTime       → adds telegraph time (Simulation reads assist.extraTime)
- *  - invincible      → practice mode; Simulation.kill() no-ops
+ *  - noSetbacks      → explore freely; hazards stop booking months
+ *  - autoRun         → one-tap play; the hero runs forward on its own
+ *                      (defaults ON for touch, see Game — a non-gamer on a phone
+ *                      should not have to drive a virtual d-pad)
  *  - largerControls  → enlarges the on-screen touch controls
  *  - muteMusic       → mutes the music bus (independent of the master M mute)
  *  - muteSfx         → mutes the sfx bus
  *
  * It is headless (no DOM) so the wiring is unit-testable: it mutates the sim's
- * assist state, the loop's timeScale and the audio buses, and announces each
- * change through an injected callback (screen-reader `aria-live`).
+ * assist state, the loop's timeScale, the input mode and the audio buses, and
+ * announces each change through an injected callback (screen-reader `aria-live`).
  */
 import { ASSIST } from '../data/tuning.config';
 import { COPY } from '../data/copy';
@@ -21,7 +24,8 @@ import { DEFAULT_ASSIST, type AssistState } from './Simulation';
 export type AssistToggle =
   | 'slowMode'
   | 'extraTime'
-  | 'invincible'
+  | 'noSetbacks'
+  | 'autoRun'
   | 'largerControls'
   | 'muteMusic'
   | 'muteSfx';
@@ -31,22 +35,31 @@ export interface AssistTargets {
   loop: { timeScale: number };
   audio: { setMuted(bus: 'music' | 'sfx', value: boolean): void };
   setLargerControls?: (larger: boolean) => void;
+  setAutoRun?: (on: boolean) => void;
 }
 
 const LABELS: Record<AssistToggle, string> = {
   slowMode: COPY.assist.slowMode,
   extraTime: COPY.assist.extraTime,
-  invincible: COPY.assist.invincible,
+  noSetbacks: COPY.assist.noSetbacks,
+  autoRun: COPY.assist.autoRun,
   largerControls: COPY.assist.largerControls,
   muteMusic: COPY.assist.muteMusic,
   muteSfx: COPY.assist.muteSfx,
 };
 
+export interface AssistDefaults {
+  /** Start with one-tap auto-run on (touch devices). */
+  autoRun?: boolean;
+  largerControls?: boolean;
+}
+
 export class AssistController {
   readonly values: Record<AssistToggle, boolean> = {
     slowMode: DEFAULT_ASSIST.slowMode,
     extraTime: DEFAULT_ASSIST.extraTime,
-    invincible: DEFAULT_ASSIST.invincible,
+    noSetbacks: DEFAULT_ASSIST.noSetbacks,
+    autoRun: DEFAULT_ASSIST.autoRun,
     largerControls: DEFAULT_ASSIST.largerControls,
     muteMusic: false,
     muteSfx: false,
@@ -56,7 +69,12 @@ export class AssistController {
     private readonly targets: AssistTargets,
     private readonly announce?: (message: string) => void,
     private readonly onChange?: (option: AssistToggle, enabled: boolean) => void,
+    defaults: AssistDefaults = {},
   ) {
+    if (defaults.autoRun !== undefined) this.values.autoRun = defaults.autoRun;
+    if (defaults.largerControls !== undefined) {
+      this.values.largerControls = defaults.largerControls;
+    }
     this.applyGameplay();
   }
 
@@ -88,9 +106,11 @@ export class AssistController {
     const s = this.targets.sim.assist;
     s.slowMode = this.values.slowMode;
     s.extraTime = this.values.extraTime;
-    s.invincible = this.values.invincible;
+    s.noSetbacks = this.values.noSetbacks;
+    s.autoRun = this.values.autoRun;
     s.largerControls = this.values.largerControls;
     this.targets.loop.timeScale = this.values.slowMode ? ASSIST.SLOW_MODE_TIME_SCALE : 1;
     this.targets.setLargerControls?.(this.values.largerControls);
+    this.targets.setAutoRun?.(this.values.autoRun);
   }
 }

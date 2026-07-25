@@ -7,7 +7,7 @@
  *  - Autoplay-safe: NOTHING sounds until the first user gesture. The graph is
  *    created lazily and the context stays suspended (master gain 0) until
  *    `unlock()` (the Start button counts as the gesture).
- *  - Ducking: key SFX (badge / death / screen-clear / win) dip the music bus by
+ *  - Ducking: key SFX (badge / setback / screen-clear / win) dip the music bus by
  *    ~6 dB for the cue's length, then ramp back.
  *  - Cues are synthesised (oscillator + envelope), so there are zero audio
  *    bytes to ship and the game is fully playable muted. A real OGG/MP3 pack can
@@ -24,8 +24,8 @@ export type SfxCue =
   | 'land'
   | 'pickup'
   | 'badge'
-  | 'powerExpire'
-  | 'death'
+  /** A delay was booked. A dull thud, deliberately not a "death" sting. */
+  | 'setback'
   | 'screenClear'
   | 'win';
 
@@ -74,7 +74,7 @@ function defaultFactory(): AudioContextLike | null {
   return Ctor ? new Ctor() : null;
 }
 
-const KEY_CUES: ReadonlySet<SfxCue> = new Set(['badge', 'death', 'screenClear', 'win']);
+const KEY_CUES: ReadonlySet<SfxCue> = new Set(['badge', 'setback', 'screenClear', 'win']);
 
 export class AudioEngine {
   private readonly createContext: () => AudioContextLike | null;
@@ -202,11 +202,9 @@ export class AudioEngine {
         this.tone(660, 990, 'triangle', 0.14, 0.5);
         this.tone(990, 1320, 'sine', 0.18, 0.4, 0.08);
         break;
-      case 'powerExpire':
-        this.tone(440, 240, 'sine', 0.15, 0.4);
-        break;
-      case 'death':
-        this.tone(300, 120, 'sine', 0.4, 0.5);
+      case 'setback':
+        // Low, short, unglamorous: time lost, not a life lost.
+        this.tone(240, 150, 'sine', 0.24, 0.42);
         break;
       case 'screenClear':
         this.tone(523, 523, 'triangle', 0.12, 0.4);

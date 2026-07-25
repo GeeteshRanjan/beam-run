@@ -121,7 +121,10 @@ export class Effects {
   // --- triggers -------------------------------------------------------------
 
   /** Kick a camera shake (magnitude px, duration s). No-op under reduced motion. */
-  addShake(magnitude: number = CAMERA.SHAKE_MAGNITUDE, duration: number = CAMERA.SHAKE_ON_DEATH): void {
+  addShake(
+    magnitude: number = CAMERA.SHAKE_MAGNITUDE,
+    duration: number = CAMERA.SHAKE_ON_SETBACK,
+  ): void {
     if (this.reducedMotion) return;
     // Take the stronger of any ongoing shake.
     if (duration >= this.shakeT) {
@@ -131,7 +134,7 @@ export class Effects {
     this.shakeMag = Math.max(this.shakeMag, magnitude);
   }
 
-  /** Flash the screen (death). Suppressed under reduced motion (no strobe). */
+  /** Flash the screen (setback). Suppressed under reduced motion (no strobe). */
   addFlash(duration: number = 0.22): void {
     if (this.reducedMotion) return;
     this.flashT = duration;

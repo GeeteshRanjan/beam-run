@@ -1,99 +1,76 @@
 import { describe, it, expect } from 'vitest';
-import { Simulation } from './Simulation';
 import { makeInput } from './Input';
-import { LOOP, RESOLUTION, POWERUPS } from '../data/tuning.config';
+import { JOURNEY } from '../data/tuning.config';
+import { Fire } from '../world/Hazards/Fire';
+import {
+  DT,
+  T,
+  driveToScreen,
+  engageBadge,
+  expireGrace,
+  forceSetbackAt,
+  standAtColumn,
+  stepN,
+} from '../test/helpers';
 
-const DT = LOOP.FIXED_DT;
-const T = RESOLUTION.TILE;
+/** Struggle lanes come before the badge; relief lanes after it. */
+const STRUGGLE_LANE = 6;
+const RELIEF_LANE = 18;
 
-function driveToScreen(target: number): Simulation {
-  const sim = new Simulation();
-  sim.step(DT, makeInput({ anyPressed: true }));
-  let guard = 0;
-  while (!(sim.screenId === target && sim.state === 'PLAYING')) {
-    if (++guard > 4000) break;
-    if (sim.state === 'TITLE_CARD') sim.step(DT, makeInput());
-    else if (sim.state === 'PLAYING' && sim.screenId < target) {
-      sim.player.box.x = sim.screen.exitX!;
-      sim.step(DT, makeInput());
-    } else sim.step(DT, makeInput());
-  }
-  return sim;
-}
-
-function expireInvuln(sim: Simulation): void {
-  for (let i = 0; i < 60 && sim.player.isInvulnerable; i += 1) sim.step(DT, makeInput());
-}
-
-function collectFireShield(sim: Simulation): void {
-  const b = sim.screen.data.badge!;
-  sim.player.box.x = b.gx * T + 2;
-  sim.player.box.y = b.gy * T + 2;
-  sim.step(DT, makeInput());
-}
-
-describe('Screen 2 — Hire Under Fire (fire + Fire Shield)', () => {
-  it('grants a 5s Fire Shield on badge pickup', () => {
+describe('Screen 2 — Hire Under Fire (wait in line → Talent500 → keep moving)', () => {
+  it('is the Talent500 capability screen with lanes on both sides of the badge', () => {
     const sim = driveToScreen(2);
-    expect(sim.screen.data.badge!.type).toBe('FIRE_SHIELD');
-    expireInvuln(sim);
-    collectFireShield(sim);
-    expect(sim.powerups.isShield).toBe(true);
-    expect(sim.activePower?.duration).toBe(POWERUPS.FIRE_SHIELD.duration);
+    expect(sim.screen.data.badge!.type).toBe('EXTINGUISH');
+    expect(sim.activeHazard).toBeInstanceOf(Fire);
+    const badgeGx = sim.screen.data.badge!.gx;
+    const lanes = sim.screen.data.fireLanes!;
+    expect(lanes.some((l) => l.gx < badgeGx)).toBe(true);
+    expect(lanes.some((l) => l.gx > badgeGx)).toBe(true);
   });
 
-  it('the shield grants immunity while active, then fire is lethal again', () => {
+  it('standing in a struggle lane costs months, not a life', () => {
     const sim = driveToScreen(2);
-    expireInvuln(sim);
-    collectFireShield(sim);
+    expireGrace(sim);
+    const added = forceSetbackAt(sim, STRUGGLE_LANE);
+    expect(added).toBe(JOURNEY.SETBACK_MONTHS);
+    expect(sim.state).toBe('PLAYING');
+    expect(sim.setbacks).toBe(1);
+  });
 
-    // Stand inside the first fire lane (gx 8) on the ground.
-    const laneX = 8 * T;
-    sim.player.box.x = laneX + 5;
-    sim.player.box.y = 15 * T - sim.player.box.h;
+  it('engaging Talent500 puts nearby lanes out for good', () => {
+    const sim = driveToScreen(2);
+    expireGrace(sim);
+    engageBadge(sim);
+    const fire = sim.activeHazard as Fire;
+    // Walk into the relief zone; lanes ahead go out as they come into reach.
+    standAtColumn(sim, RELIEF_LANE);
+    stepN(sim, 2);
+    expect(fire.extinguishedCount).toBeGreaterThan(0);
+    expect(fire.laneStates().find((l) => l.x === RELIEF_LANE * T)!.state).toBe('out');
+  });
 
-    // While the shield is active (~5s), Beam survives fire.
-    let diedWhileShielded = false;
-    for (let i = 0; i < 150; i += 1) {
-      sim.player.box.x = laneX + 5; // hold position in the lane
-      sim.step(DT, makeInput());
-      if (sim.state === 'DEATH') diedWhileShielded = true;
-    }
-    expect(diedWhileShielded).toBe(false);
-    expect(sim.powerups.isShield).toBe(true); // still within 5s
-
-    // Keep standing until the shield lapses → fire becomes lethal.
-    let diedAfter = false;
+  it('the relief zone is genuinely free — no months lost standing in a doused lane', () => {
+    const sim = driveToScreen(2);
+    expireGrace(sim);
+    engageBadge(sim);
+    const before = sim.months;
     for (let i = 0; i < 400; i += 1) {
-      if (sim.state === 'PLAYING') {
-        sim.player.box.x = laneX + 5;
-        sim.player.box.y = 15 * T - sim.player.box.h;
-      }
+      standAtColumn(sim, RELIEF_LANE);
       sim.step(DT, makeInput());
-      if (sim.state === 'DEATH') {
-        diedAfter = true;
-        break;
-      }
     }
-    expect(diedAfter).toBe(true);
+    expect(sim.months).toBe(before);
+    expect(sim.setbacks).toBe(0);
   });
 
-  it('walking into an active lane without the shield is lethal', () => {
+  it('help does not lapse: doused lanes stay out for the rest of the screen', () => {
     const sim = driveToScreen(2);
-    expireInvuln(sim);
-    const laneX = 8 * T;
-    let died = false;
-    for (let i = 0; i < 200; i += 1) {
-      if (sim.state === 'PLAYING') {
-        sim.player.box.x = laneX + 5;
-        sim.player.box.y = 15 * T - sim.player.box.h;
-      }
-      sim.step(DT, makeInput());
-      if (sim.state === 'DEATH') {
-        died = true;
-        break;
-      }
-    }
-    expect(died).toBe(true);
+    engageBadge(sim);
+    standAtColumn(sim, RELIEF_LANE);
+    stepN(sim, 2);
+    const fire = sim.activeHazard as Fire;
+    const doused = fire.extinguishedCount;
+    stepN(sim, 600); // 10s — longer than any old timed shield
+    expect(fire.extinguishedCount).toBeGreaterThanOrEqual(doused);
+    expect(sim.activePower?.product).toBe('Talent500');
   });
 });

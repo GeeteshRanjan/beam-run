@@ -1,32 +1,43 @@
 /**
- * Level validator (CI gate) — Task 9: physics-aware completability proof.
+ * Level validator (CI gate) — blocking, non-zero exit fails the build.
  *
- * Two layers of checks, both blocking (non-zero exit fails the build):
+ * Three layers of checks:
  *
  *  1. STRUCTURAL — every screen has ground, a far-left spawn, an exit/win
- *     trigger, at most one hazard family (with matching data + a badge), and
- *     in-bounds coordinates.
+ *     trigger, at most one hazard family (with matching data + a badge), a
+ *     months base, and in-bounds coordinates.
  *
- *  2. PHYSICS-AWARE — using the SAME headless Player + collision code the game
+ *  2. NARRATIVE — the things that make this a playable explainer rather than a
+ *     platformer with logos on it, now machine-enforced:
+ *       · every hazard screen puts hazard instances on BOTH sides of its badge,
+ *         so each level plays as a before/after of the same problem;
+ *       · declared `zone` labels agree with the geometry;
+ *       · each of the four ANSR capabilities appears exactly once;
+ *       · the month model adds up — screen bases sum to the ANSR benchmark, the
+ *         capability savings sum to the full gap, and the cap keeps every run
+ *         strictly better than going it alone.
+ *
+ *  3. PHYSICS-AWARE — using the SAME headless Player + collision code the game
  *     runs (`src/world/Player`, `moveAndCollide`) and the real tuning numbers,
  *     we breadth-first search the reachable state space from the spawn:
  *       · the exit / win trigger must be reachable (screen is completable);
  *       · the badge must be reachable;
  *       · for a PLACE_TILE screen the exit must be reachable ONLY once the
- *         placed bridge is added (proving the badge is the intended solve);
- *       · no Growth Point may sit inside a hazard's lethal region.
+ *         placed bridge is added (proving ANSR is the real solve);
+ *       · no quick-win pickup may sit inside a hazard's lethal region.
  *
- *     The search ignores hazards, which is exactly the "invincible practice"
- *     assist; slow mode only rescales time and cannot change geometry, so a
- *     reachable route here is also reachable under slow + invincible.
+ *     The search ignores hazards, which is exactly the "no setbacks" assist;
+ *     slow mode only rescales time and cannot change geometry, so a reachable
+ *     route here is also reachable with the assists on.
  */
-import { RESOLUTION, PLAYER, LOOP, HAZARDS } from '../src/data/tuning.config';
-import { SCREENS, type ScreenData, GRID } from '../src/data/levels';
+import { RESOLUTION, PLAYER, LOOP, HAZARDS, JOURNEY } from '../src/data/tuning.config';
+import { SCREENS, TOTAL_MONTHS_BASE, type ScreenData, GRID } from '../src/data/levels';
+import { CAPABILITIES } from '../src/data/copy';
 import { Player } from '../src/world/Player';
 import { aabbOverlap, type AABB } from '../src/world/Physics';
 import { makeInput } from '../src/core/Input';
 
-type Problem = { screen: number; message: string };
+type Problem = { screen: number | 'model'; message: string };
 
 const T = RESOLUTION.TILE;
 const DT = LOOP.FIXED_DT;
@@ -35,7 +46,7 @@ const { WIDTH, HEIGHT } = RESOLUTION;
 const HAZARD_FIELDS: Record<string, keyof ScreenData> = {
   quicksand: 'quicksand',
   fire: 'fireLanes',
-  plants: 'plants',
+  gates: 'gates',
   spikes: 'spikeColumns',
 };
 
@@ -50,6 +61,10 @@ function validateStructure(s: ScreenData): Problem[] {
   if (s.type !== 'finale' && !s.exit) push('non-finale screen missing exit');
   if (s.type === 'finale' && !s.winTrigger) push('finale missing winTrigger');
   if (s.spawn && s.spawn.gx > 4) push(`spawn gx=${s.spawn.gx} is not far-left`);
+
+  if (typeof s.monthsBase !== 'number' || s.monthsBase < 0) {
+    push(`monthsBase must be a non-negative number (got ${String(s.monthsBase)})`);
+  }
 
   const present = Object.entries(HAZARD_FIELDS).filter(([, field]) => {
     const v = s[field] as unknown[] | undefined;
@@ -66,10 +81,92 @@ function validateStructure(s: ScreenData): Problem[] {
   const inBounds = (gx: number, gy: number) =>
     gx >= 0 && gx <= GRID.cols && gy >= 0 && gy <= GRID.rows;
   for (const p of s.points ?? []) {
-    if (!inBounds(p.gx, p.gy)) push(`point out of bounds at (${p.gx},${p.gy})`);
+    if (!inBounds(p.gx, p.gy)) push(`quick win out of bounds at (${p.gx},${p.gy})`);
   }
   if (s.badge && !inBounds(s.badge.gx, s.badge.gy)) {
     push(`badge out of bounds at (${s.badge.gx},${s.badge.gy})`);
+  }
+  return problems;
+}
+
+// --- narrative checks -------------------------------------------------------
+
+/** Every hazard instance's grid column, with its declared zone (if any). */
+function hazardInstances(s: ScreenData): { gx: number; zone?: string }[] {
+  if (s.hazard === 'quicksand') return (s.quicksand ?? []).map((q) => ({ gx: q.gx, zone: q.zone }));
+  if (s.hazard === 'fire') return (s.fireLanes ?? []).map((l) => ({ gx: l.gx, zone: l.zone }));
+  if (s.hazard === 'gates') return (s.gates ?? []).map((g) => ({ gx: g.gx, zone: g.zone }));
+  if (s.hazard === 'spikes') return (s.spikeColumns ?? []).map((c) => ({ gx: c.gx, zone: c.zone }));
+  return [];
+}
+
+/**
+ * The structure that makes each level an argument: the same problem before and
+ * after ANSR. Without hazards on both sides of the badge there is no contrast to
+ * feel, and the screen goes back to being decoration.
+ */
+function validateNarrative(s: ScreenData): Problem[] {
+  const problems: Problem[] = [];
+  const push = (message: string) => problems.push({ screen: s.id, message });
+  if (s.hazard === 'none' || !s.badge) return problems;
+
+  const badgeGx = s.badge.gx;
+  const instances = hazardInstances(s);
+  const before = instances.filter((i) => i.gx < badgeGx);
+  const after = instances.filter((i) => i.gx > badgeGx);
+
+  if (before.length === 0) {
+    push('no hazard before the badge — the player never feels the problem first');
+  }
+  if (after.length === 0) {
+    push('no hazard after the badge — the ANSR relief is never demonstrated');
+  }
+  for (const i of instances) {
+    if (i.zone === 'struggle' && i.gx > badgeGx) {
+      push(`hazard at gx=${i.gx} is labelled "struggle" but sits after the badge`);
+    }
+    if (i.zone === 'relief' && i.gx < badgeGx) {
+      push(`hazard at gx=${i.gx} is labelled "relief" but sits before the badge`);
+    }
+  }
+  return problems;
+}
+
+/** Run-wide checks on the month model and the capability set. */
+function validateModel(): Problem[] {
+  const problems: Problem[] = [];
+  const push = (message: string) => problems.push({ screen: 'model', message });
+
+  if (TOTAL_MONTHS_BASE !== JOURNEY.ANSR_BENCHMARK_MONTHS) {
+    push(
+      `screen monthsBase sums to ${TOTAL_MONTHS_BASE} but the ANSR benchmark is ` +
+        `${JOURNEY.ANSR_BENCHMARK_MONTHS} — a flawless run must land exactly on the benchmark`,
+    );
+  }
+  if (JOURNEY.MAX_MONTHS >= JOURNEY.BASELINE_MONTHS) {
+    push(
+      `MAX_MONTHS (${JOURNEY.MAX_MONTHS}) must stay below BASELINE_MONTHS ` +
+        `(${JOURNEY.BASELINE_MONTHS}) so leaning on ANSR always beats going alone`,
+    );
+  }
+  const saved = CAPABILITIES.reduce((sum, c) => sum + c.monthsSaved, 0);
+  const gap = JOURNEY.BASELINE_MONTHS - JOURNEY.ANSR_BENCHMARK_MONTHS;
+  if (saved !== gap) {
+    push(`capability monthsSaved sums to ${saved} but the baseline gap is ${gap}`);
+  }
+
+  // Each capability must be earned exactly once across the run.
+  const badges = SCREENS.filter((s) => s.badge).map((s) => s.badge!.type);
+  for (const cap of CAPABILITIES) {
+    const count = badges.filter((b) => b === cap.badge).length;
+    if (count !== 1) {
+      push(`capability ${cap.product} (${cap.badge}) appears on ${count} screens, expected 1`);
+    }
+  }
+  for (const b of badges) {
+    if (!CAPABILITIES.some((c) => c.badge === b)) {
+      push(`badge type ${b} has no entry in CAPABILITIES (no product name to show)`);
+    }
   }
   return problems;
 }
@@ -105,23 +202,28 @@ function pointBox(gx: number, gy: number): AABB {
   return { x: cx - 12, y: cy - 12, w: 24, h: 24 };
 }
 
-/** Maximal (over-time) lethal regions per hazard family, for the point check. */
+/** Maximal (over-time) lethal regions per hazard family, for the pickup check. */
 function lethalRegions(s: ScreenData): AABB[] {
   const out: AABB[] = [];
   if (s.hazard === 'quicksand') {
-    for (const q of s.quicksand ?? []) out.push({ x: q.gx * T, y: q.gy * T, w: q.w * T, h: q.h * T });
+    // Shallow struggle sludge only drags — it never books a delay, so a pickup
+    // sitting above it is fine. Deep pits are the lethal ones.
+    for (const q of s.quicksand ?? []) {
+      if (q.deep === false) continue;
+      out.push({ x: q.gx * T, y: q.gy * T, w: q.w * T, h: q.h * T });
+    }
   } else if (s.hazard === 'fire') {
     // Flame fills the whole lane column while active.
     for (const l of s.fireLanes ?? []) out.push({ x: l.gx * T, y: 0, w: T, h: HEIGHT });
   } else if (s.hazard === 'spikes') {
     // Spike sweeps the column from the top down to the ground while falling.
     for (const c of s.spikeColumns ?? []) out.push({ x: c.gx * T, y: 0, w: T, h: 15 * T });
-  } else if (s.hazard === 'plants') {
-    // Swept lateral range of the swaying stalk (± amplitude, plant is 26×56).
-    const sweep = HAZARDS.PLANTS.SWAY_AMPLITUDE;
-    for (const p of s.plants ?? []) {
-      const cx = p.gx * T + T / 2;
-      out.push({ x: cx - sweep - 13, y: p.gy * T - 16, w: 2 * (sweep + 13), h: 56 });
+  } else if (s.hazard === 'gates') {
+    // Swept lateral range of the barrier arm (± amplitude, gate is 26×56).
+    const sweep = HAZARDS.GATES.SWAY_AMPLITUDE;
+    for (const g of s.gates ?? []) {
+      const cx = g.gx * T + T / 2;
+      out.push({ x: cx - sweep - 13, y: g.gy * T - 16, w: 2 * (sweep + 13), h: 56 });
     }
   }
   return out;
@@ -223,10 +325,10 @@ function validatePhysics(s: ScreenData): Problem[] {
 
   const bridge = bridgeTile(s);
   if (bridge) {
-    // Without the bridge the exit must be UNreachable (badge is the real solve);
+    // Without the bridge the exit must be UNreachable (ANSR is the real solve);
     // with the bridge it must become reachable.
     if (reachesTarget(base)) {
-      push('PLACE_TILE screen is completable without the bridge (badge not required)');
+      push('PLACE_TILE screen is completable without the bridge (ANSR not required)');
     }
     if (!reachesTarget([...base, bridge])) {
       push('PLACE_TILE screen is NOT completable even with the placed bridge');
@@ -235,12 +337,12 @@ function validatePhysics(s: ScreenData): Problem[] {
     push('exit / win trigger is not reachable from spawn (screen not completable)');
   }
 
-  // No Growth Point may sit in a lethal region.
+  // No quick win may sit in a lethal region.
   const lethal = lethalRegions(s);
   for (const pt of s.points ?? []) {
     const pb = pointBox(pt.gx, pt.gy);
     if (lethal.some((r) => aabbOverlap(pb, r))) {
-      push(`Growth Point at (${pt.gx},${pt.gy}) sits in a lethal ${s.hazard} region`);
+      push(`quick win at (${pt.gx},${pt.gy}) sits in a lethal ${s.hazard} region`);
     }
   }
 
@@ -257,20 +359,22 @@ function main(): void {
     process.exit(1);
   }
 
+  problems.push(...validateModel());
   for (const s of SCREENS) {
     problems.push(...validateStructure(s));
+    problems.push(...validateNarrative(s));
     problems.push(...validatePhysics(s));
   }
 
   if (problems.length > 0) {
     console.error(`✗ Level validation failed (${problems.length} problem(s)):`);
-    for (const p of problems) console.error(`  · screen ${p.screen}: ${p.message}`);
+    for (const p of problems) console.error(`  · ${p.screen}: ${p.message}`);
     process.exit(1);
   }
 
   console.log(
     `✓ Level validation passed for ${SCREENS.length} screens ` +
-      `(structural + physics-aware completability, badge reachability, lethal-point check).`,
+      `(structural + before/after narrative + month model + physics-aware completability).`,
   );
 }
 

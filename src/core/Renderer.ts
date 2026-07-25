@@ -49,6 +49,19 @@ export function computeViewport(
   return { scale, offsetX, offsetY, drawW, drawH };
 }
 
+/**
+ * Backing-store scale cap. Past 2× the extra pixels are invisible on flat pixel
+ * art but cost real fill rate: a 3× phone held in portrait would ask for a
+ * ~1170×2532 canvas and repaint all of it every frame. Pure + exported so it is
+ * testable without a canvas.
+ */
+export const MAX_PIXEL_RATIO = 2;
+
+export function clampPixelRatio(raw: number | undefined): number {
+  if (typeof raw !== 'number' || !Number.isFinite(raw) || raw <= 0) return 1;
+  return Math.min(raw, MAX_PIXEL_RATIO);
+}
+
 export class Renderer {
   readonly canvas: HTMLCanvasElement;
   readonly ctx: CanvasRenderingContext2D;
@@ -74,7 +87,7 @@ export class Renderer {
 
   /** Recompute backing store + viewport from the canvas's CSS size. */
   resize(): void {
-    this.dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
+    this.dpr = clampPixelRatio(typeof window !== 'undefined' ? window.devicePixelRatio : 1);
     const rect = this.canvas.getBoundingClientRect();
     const cssW = rect.width || this.internalW;
     const cssH = rect.height || this.internalH;

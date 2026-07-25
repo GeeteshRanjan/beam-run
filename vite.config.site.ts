@@ -1,4 +1,6 @@
 import { defineConfig } from 'vite';
+// @ts-expect-error — plain-JS build helper, no types needed.
+import { cssMinifyPlugin } from './scripts/css-minify.mjs';
 
 /**
  * Standalone SITE build (for Vercel / static hosting).
@@ -11,6 +13,7 @@ import { defineConfig } from 'vite';
  * script). The library build (vite.config.ts) is left unchanged.
  */
 export default defineConfig(() => ({
+  plugins: [cssMinifyPlugin()],
   base: './',
   build: {
     outDir: 'dist-site',
