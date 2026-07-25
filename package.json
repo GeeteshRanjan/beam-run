@@ -21,7 +21,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "build:site": "vite build --config vite.config.site.ts",
+    "build:site": "vite build --config vite.config.site.ts && npm run build:404",
+    "build:404": "tsx scripts/build-404.ts",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",

@@ -236,6 +236,26 @@ export const COPY = {
     jump: 'Jump',
   },
 
+  /**
+   * The custom not-found page for the standalone deployment.
+   *
+   * This exists because the two Navigator routes (the title screen's "Skip to
+   * the Navigator" and the closing receipt) deep-link a path the static host
+   * does not serve, so the last thing a prospect saw was the host's raw 404.
+   * A dead end is a dead end whoever renders it, so the page is ours: same
+   * cabinet, same bitmap type, one route back.
+   */
+  notFound: {
+    pageTitle: 'Page not found \u2014 ANSRcade: The GCC Game',
+    /** Big arcade figure. */
+    code: '404',
+    /** Accessible sentence behind the figure. */
+    codeLabel: 'Error 404. Page not found.',
+    title: 'Off the map.',
+    body: 'This route is not part of the journey. The game is one press away.',
+    play: 'Back to the game',
+  },
+
   fallback: {
     title: 'ANSRcade: The GCC Game',
     body: 'Play the journey before you plan it.',

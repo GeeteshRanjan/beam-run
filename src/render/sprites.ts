@@ -103,6 +103,13 @@ const FALL: readonly string[] = [
 export const HERO_GRID_W = maxWidth(IDLE);
 export const HERO_GRID_H = IDLE.length;
 
+/**
+ * The idle pose as raw rows. Exported for the static not-found page, which
+ * paints the hero as SVG rects at build time (there is no canvas on that page).
+ * Tree-shaken out of the game bundle, which reaches the grid through `drawHero`.
+ */
+export const HERO_IDLE: readonly string[] = IDLE;
+
 export type HeroMotion = 'idle' | 'run' | 'jump' | 'fall';
 
 export interface HeroDrawState {
