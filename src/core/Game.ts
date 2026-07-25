@@ -24,12 +24,12 @@ import { Gates } from '../world/Hazards/Gates';
 import { Spikes } from '../world/Hazards/Spikes';
 import { Effects } from './Effects';
 import { finaleLayout } from './finaleScene';
+import { drawFinaleScene } from '../render/finale';
 import { AudioEngine } from '../audio/AudioEngine';
 import { drawHero, drawGrowthPoint, drawBadgeDisc, type HeroMotion } from '../render/sprites';
 import { drawTileRect, drawSceneBackground } from '../render/scenery';
 import { drawTitleScene } from '../render/titleScene';
 import { pxRect, hash2 } from '../render/PixelArt';
-import { drawAnsrLogo, LOGO_ORANGE } from '../render/ansrLogo';
 import { drawText, drawLabelPlaque } from '../render/PixelText';
 import { AssistController } from './AssistController';
 import { TouchControls, isTouchDevice } from '../ui/TouchControls';
@@ -1045,104 +1045,13 @@ export class Game {
     }
   }
 
-  /** The Tech Park hero scene: layered sky, plaza, glowing glass tower, bloom. */
-  private drawFinale(ctx: CanvasRenderingContext2D): void {
-    const { WIDTH: w } = RESOLUTION;
-    const l = finaleLayout();
-    const t = this.reducedMotion ? 0 : this.now();
-
-    // Layered gradient sky.
-    const sky = ctx.createLinearGradient(0, 0, 0, l.horizonY);
-    for (const s of l.sky) sky.addColorStop(s.offset, s.color);
-    ctx.fillStyle = sky;
-    ctx.fillRect(0, 0, w, l.horizonY);
-
-    // Warm dawn glow behind the tower.
-    const dawn = ctx.createRadialGradient(l.bloom.x, l.horizonY, 0, l.bloom.x, l.horizonY, 460);
-    dawn.addColorStop(0, 'rgba(255, 84, 0, 0.26)');
-    dawn.addColorStop(1, 'rgba(255, 84, 0, 0)');
-    ctx.fillStyle = dawn;
-    ctx.fillRect(0, 0, w, l.horizonY);
-
-    // Plaza.
-    const plaza = ctx.createLinearGradient(0, l.plaza.y, 0, l.plaza.y + l.plaza.h);
-    plaza.addColorStop(0, '#0A5566');
-    plaza.addColorStop(1, '#00242E');
-    ctx.fillStyle = plaza;
-    ctx.fillRect(l.plaza.x, l.plaza.y, l.plaza.w, l.plaza.h);
-    ctx.strokeStyle = 'rgba(230, 230, 230, 0.15)';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(0, l.horizonY + 1);
-    ctx.lineTo(w, l.horizonY + 1);
-    ctx.stroke();
-
-    // Glass tower body.
-    const body = ctx.createLinearGradient(l.tower.x, 0, l.tower.x + l.tower.w, 0);
-    body.addColorStop(0, '#013947');
-    body.addColorStop(0.5, '#0A5566');
-    body.addColorStop(1, '#013947');
-    ctx.fillStyle = body;
-    ctx.fillRect(l.tower.x, l.tower.y, l.tower.w, l.tower.h);
-    ctx.strokeStyle = 'rgba(230, 230, 230, 0.35)';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(l.tower.x + 1, l.tower.y + 1, l.tower.w - 2, l.tower.h - 2);
-
-    // Glowing window grid (gentle twinkle; steady under reduced motion).
-    for (let i = 0; i < l.windows.length; i += 1) {
-      const win = l.windows[i]!;
-      const lit = this.reducedMotion ? 0.5 : 0.32 + 0.32 * (0.5 + 0.5 * Math.sin(t * 1.4 + i * 1.3));
-      ctx.fillStyle = `rgba(255, 190, 110, ${lit})`;
-      ctx.fillRect(win.x, win.y, win.w, win.h);
-    }
-
-    // Bloom crown (orange = the value earned at the finish).
-    const pulse = this.reducedMotion ? 1 : 0.85 + 0.15 * Math.sin(t * 2);
-    const r = l.bloom.r * pulse;
-    const bloom = ctx.createRadialGradient(l.bloom.x, l.bloom.y, 0, l.bloom.x, l.bloom.y, r);
-    bloom.addColorStop(0, 'rgba(255, 84, 0, 0.5)');
-    bloom.addColorStop(1, 'rgba(255, 84, 0, 0)');
-    ctx.fillStyle = bloom;
-    ctx.beginPath();
-    ctx.arc(l.bloom.x, l.bloom.y, r, 0, Math.PI * 2);
-    ctx.fill();
-
-    // ANSR sunburst mark on the plaza (rendered in the logo's own orange).
-    this.drawAnsrMark(ctx, l.mark.x, l.mark.y, l.mark.r, t);
-  }
-
   /**
-   * The ANSR mark on the Tech Park plaza — the real brand sunburst (same path the
-   * DOM lockup uses), not the 28-ray approximation that stood here before. It is
-   * the arrival marker at the end of the run, so it is the one place in the world
-   * that should be the actual logo. Revolves slowly; still under reduced motion.
+   * The Tech Park arrival. Layout comes from the pure finaleScene; the painting
+   * lives in render/finale.ts (it is the densest picture in the game and has no
+   * business inside the host class).
    */
-  private drawAnsrMark(
-    ctx: CanvasRenderingContext2D,
-    x: number,
-    y: number,
-    r: number,
-    t: number,
-  ): void {
-    const spin = this.reducedMotion ? 0 : t * 0.05;
-    // A soft glow first, so the mark reads against the plaza gradient.
-    const glow = ctx.createRadialGradient(x, y, 0, x, y, r * 1.9);
-    glow.addColorStop(0, 'rgba(240, 87, 34, 0.26)');
-    glow.addColorStop(1, 'rgba(240, 87, 34, 0)');
-    ctx.fillStyle = glow;
-    ctx.beginPath();
-    ctx.arc(x, y, r * 1.9, 0, Math.PI * 2);
-    ctx.fill();
-
-    drawAnsrLogo(ctx, x, y, r * 2, spin);
-
-    // Wordmark under the mark, in the brand typeface (the logo's own lettering
-    // is deliberately not shipped as artwork — see ui/ansrMark.ts).
-    ctx.fillStyle = LOGO_ORANGE;
-    ctx.font = "700 22px 'Moderat', system-ui, sans-serif";
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('ANSR', x, y + r + 18);
+  private drawFinale(ctx: CanvasRenderingContext2D): void {
+    drawFinaleScene(ctx, finaleLayout(), this.reducedMotion ? 0 : this.now(), this.reducedMotion);
   }
 
   // --- teardown -------------------------------------------------------------
