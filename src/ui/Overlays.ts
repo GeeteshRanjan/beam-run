@@ -14,7 +14,12 @@
 import { COPY, CAPABILITIES } from '../data/copy';
 import { JOURNEY } from '../data/tuning.config';
 import { createBrandLockup } from './BrandMark';
-import { createPixelHeading, createPixelSvg, paintPixelSvg } from './PixelType';
+import {
+  createPixelHeading,
+  createPixelSvg,
+  paintPixelSvg,
+  setPixelButtonLabel,
+} from './PixelType';
 
 /**
  * Authored-pixel size as a % of the frame width, per role. These are the type
@@ -262,7 +267,7 @@ export class Overlays {
     this.winMatched.textContent = r.matchedBenchmark ? COPY.win.matched : '';
     this.winMatched.hidden = !r.matchedBenchmark;
     // A clean run gets the plain CTA; anything else gets the "close the gap" one.
-    this.winCta.textContent = r.matchedBenchmark ? COPY.win.cta : COPY.win.ctaGap;
+    setPixelButtonLabel(this.winCta, r.matchedBenchmark ? COPY.win.cta : COPY.win.ctaGap, 'primary');
     this.fillReceipt(this.winReceipt, r);
   }
 
@@ -325,7 +330,7 @@ export class Overlays {
     b.type = 'button';
     b.className =
       'beam-run__btn' + (variant !== 'default' ? ` beam-run__btn--${variant}` : '');
-    b.textContent = text;
+    setPixelButtonLabel(b, text, variant);
     b.addEventListener('click', onClick);
     return b;
   }

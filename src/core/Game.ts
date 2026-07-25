@@ -548,7 +548,11 @@ export class Game {
     if (hudVisible) {
       const power = this.sim.activePower;
       this.hud.update({
-        levelLabel: this.sim.screenLabel,
+        // The plaque gets the place name, not the title card's framing line
+        // ("Arrival — ANSR Tech Park"): a 24-character string set in the bitmap
+        // font would run into the clock on a phone frame. The title card still
+        // shows the full line on entry.
+        levelLabel: this.sim.screen.name,
         months: this.sim.months,
         quickWins: this.sim.quickWins,
         totalQuickWins: TOTAL_QUICK_WINS,

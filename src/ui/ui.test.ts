@@ -1,8 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { Hud } from './Hud';
+import { Hud, HUD_PX, HUD_PLAQUE_CHROME, pixelWidthPx } from './Hud';
 import { Overlays, type ReceiptModel } from './Overlays';
 import { injectStyles, STYLE_ELEMENT_ID, CSS } from './styles';
 import { COPY, CAPABILITIES } from '../data/copy';
+import { SCREENS } from '../data/levels';
+import { wrapPixelLabel } from './PixelType';
 import { JOURNEY } from '../data/tuning.config';
 
 function makeParent(): HTMLDivElement {
@@ -91,6 +93,91 @@ describe('Hud', () => {
     expect(wins.textContent).toContain('7');
     expect(wins.textContent).toContain('/23');
     expect(wins.getAttribute('aria-label')).toContain('7 of 23');
+  });
+
+  it('sets the stage and clock plaques in the bitmap font, not web type', () => {
+    hud.update({
+      levelLabel: 'Compliance Maze',
+      months: 7,
+      quickWins: 0,
+      totalQuickWins: 23,
+      power: null,
+    });
+    for (const sel of ['.beam-run__hud-level', '.beam-run__hud-clock']) {
+      const row = parent.querySelector(sel)!;
+      // Bitmap art present, and every glyph SVG is decorative.
+      const art = Array.from(row.querySelectorAll('svg.beam-run__pixels'));
+      expect(art.length).toBeGreaterThan(1);
+      for (const svg of art) {
+        expect(svg.getAttribute('aria-hidden')).toBe('true');
+        expect(svg.querySelector('path')!.getAttribute('shape-rendering')).toBe('crispEdges');
+        // Sized in frame units, never as a % of a shrink-wrapped plaque.
+        expect(svg.getAttribute('style')).toContain('var(--beam-run-u)');
+        expect(svg.getAttribute('style')).not.toContain('%');
+      }
+    }
+    // The prose is still there for assistive tech / textContent.
+    expect(parent.querySelector('.beam-run__hud-level')!.textContent).toContain('Compliance Maze');
+    expect(parent.querySelector('.beam-run__hud-clock')!.textContent).toContain(
+      COPY.hud.monthsLabel,
+    );
+  });
+
+  it('draws the months counter zero-padded so the plaque cannot resize', () => {
+    hud.update({ levelLabel: 'x', months: 7, quickWins: 0, totalQuickWins: 23, power: null });
+    const art = parent.querySelector('.beam-run__hud-clock-value svg')!;
+    const single = art.getAttribute('width');
+    // Accessible value stays "7"; only the artwork is padded.
+    expect(parent.querySelector('.beam-run__hud-clock-value')!.textContent).toBe('7');
+    hud.update({ levelLabel: 'x', months: 18, quickWins: 0, totalQuickWins: 23, power: null });
+    expect(art.getAttribute('width')).toBe(single);
+  });
+
+  it('keeps the stage and clock plaques apart on the narrowest phone frame', () => {
+    // Bitmap glyphs bottom out at their floor on a narrow frame, so the two top
+    // plaques are at their *widest, relative to the frame*, on a phone. They are
+    // anchored to opposite corners of the same row: if the floors are raised
+    // without checking this, they overlap (the long finale label did exactly
+    // that before the HUD switched to the screen's place name).
+    const longest = SCREENS.reduce((a, s) => (s.name.length > a.length ? s.name : a), '');
+    // 280 = Galaxy Fold cover screen; 320 = iPhone SE 1st gen.
+    for (const frame of [280, 320, 360, 390, 430, 560, 768, 1280]) {
+      const gutter = Math.min(22, frame * 0.022) * 2;
+      const stage = Math.max(
+        pixelWidthPx(longest, HUD_PX.stage, frame),
+        pixelWidthPx(COPY.hud.stageLabel, HUD_PX.caption, frame),
+      );
+      const clock = Math.max(
+        pixelWidthPx(COPY.hud.monthsLabel, HUD_PX.caption, frame),
+        pixelWidthPx('00', HUD_PX.months, frame) +
+          7 +
+          pixelWidthPx(COPY.hud.monthsUnit, HUD_PX.unit, frame),
+      );
+      const total = stage + clock + 2 * HUD_PLAQUE_CHROME + gutter;
+      expect(total, `frame ${frame}px`).toBeLessThan(frame);
+
+      // In portrait the wins count and the capability chip share a row too.
+      const wins = pixelWidthPx('23/23', HUD_PX.chip, frame);
+      const longestPower = Object.values(COPY.powers).reduce(
+        (a, n) => (n.length > a.length ? n : a),
+        '',
+      );
+      const chip = Math.max(
+        pixelWidthPx('Talent500', HUD_PX.chip, frame),
+        pixelWidthPx(longestPower, HUD_PX.chipSub, frame),
+      );
+      expect(wins + chip + 2 * HUD_PLAQUE_CHROME + gutter, `bottom row @ ${frame}px`).toBeLessThan(
+        frame,
+      );
+    }
+  });
+
+  it('wears the 8-bit plaque: solid fill, pixel bevel, hard rail, no radius', () => {
+    expect(CSS).toContain('inset 3px 3px 0 rgba(150, 205, 218, 0.22)');
+    expect(CSS).toContain('inset -3px -3px 0 rgba(0, 0, 0, 0.45)');
+    expect(CSS).not.toMatch(/beam-run__hud-row[\s\S]*?border: 1px solid/);
+    // The delay nudge holds each frame instead of easing between them.
+    expect(CSS).toContain('animation: beam-run-bump 0.36s steps(1, end) both');
   });
 
   it('shows a persistent capability chip with no countdown bar', () => {
@@ -314,6 +401,35 @@ describe('Overlays', () => {
     expect(cb.onStart).toHaveBeenCalledOnce();
     buttons(parent).find((b) => b.textContent === COPY.start.skip)!.click();
     expect(cb.onSkip).toHaveBeenCalledOnce();
+  });
+
+  it('sets every button label in the bitmap font, wrapped, text intact', () => {
+    for (const screen of ['start', 'win', 'summary', 'pause'] as const) {
+      overlays.show(screen, { receipt: receipt() });
+      // The action caps. (Receipt rows are a three-column data list, not caps,
+      // and stay in web type so the numbers read as facts.)
+      const caps = buttons(parent).filter((b) => b.classList.contains('beam-run__btn'));
+      expect(caps.length).toBeGreaterThan(0);
+      for (const b of caps) {
+        const svg = b.querySelector('svg.beam-run__pixels');
+        expect(svg, `${screen}: ${b.textContent}`).not.toBeNull();
+        // Decorative artwork; the real string stays in a hidden span, so the
+        // label still reads as prose for assistive tech and for these tests.
+        expect(svg!.getAttribute('aria-hidden')).toBe('true');
+        expect(b.querySelector('.beam-run__sr')!.textContent).toBe(b.textContent);
+        // No stray text node next to the artwork.
+        expect(b.childNodes).toHaveLength(2);
+        // Sized in frame units so a shrink-wrapping cap can't size itself.
+        expect(svg!.getAttribute('style')).toContain('var(--beam-run-u)');
+        expect(svg!.getAttribute('style')).not.toContain('%');
+      }
+    }
+    // Long CTA copy wraps instead of overflowing, and the arrow folds to '>'.
+    const lines = wrapPixelLabel(COPY.win.cta);
+    expect(lines.length).toBeGreaterThan(1);
+    expect(lines.every((l) => l.length <= 26)).toBe(true);
+    expect(lines.join(' ')).toContain('NAVIGATOR');
+    expect(wrapPixelLabel(COPY.start.play)).toEqual(['START']);
   });
 
   it('keeps the title screen to the stake, the challenge and the two routes', () => {

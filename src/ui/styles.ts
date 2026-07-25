@@ -28,13 +28,25 @@ export const STYLE_ELEMENT_ID = 'beam-run-styles';
  */
 const U = (n: number): string => `calc(${n} * var(--beam-run-u))`;
 
-/** Shared panel treatment behind HUD readouts (the legibility fix). */
+/**
+ * Shared plaque behind every HUD readout: the legibility fix (never bare text
+ * over pixel art) rendered as an 8-bit panel rather than a web card.
+ *
+ * A 1px hairline border with a soft drop shadow and 82% alpha is a modern-UI
+ * device and read as a widget pasted over the game. 8-bit hardware had no alpha
+ * and no sub-pixel edges, so: solid fill, square corners, a 3px light/dark inner
+ * bevel and a hard 3px dark rail — the same treatment as the NES buttons below.
+ */
+const RAIL = 'rgba(0, 14, 20, 0.92)';
 const PANEL = `
-  background: rgba(0, 22, 29, 0.82);
-  border: 1px solid rgba(150, 205, 218, 0.28);
+  background: #00161D;
+  border: 0;
   border-radius: 0;
-  box-shadow: 0 3px 0 rgba(0, 14, 20, 0.55);
-  padding: 6px 12px;
+  box-shadow:
+    inset 3px 3px 0 rgba(150, 205, 218, 0.22),
+    inset -3px -3px 0 rgba(0, 0, 0, 0.45),
+    0 0 0 3px ${RAIL};
+  padding: 7px 11px;
 `;
 
 
@@ -165,57 +177,76 @@ export const CSS = `
 .beam-run__hud-row {
   position: absolute; top: calc(clamp(8px, 2.2%, 22px) + env(safe-area-inset-top, 0px));
   display: flex; align-items: center; gap: 8px;
-  font-size: clamp(11px, ${U(1.5)}, 17px); font-weight: 600;
   ${PANEL}
 }
+/* Plaques shrink-wrap their art, so the shared 100% cap has nothing to measure
+   against here; the width is already bounded in frame units by Hud.ts. */
+.beam-run__hud .beam-run__pixels { max-width: none; }
+/* Captions wrap a hidden prose span plus the bitmap art; flex keeps the art on
+   its own line with no inline-baseline gap under it. */
+.beam-run__hud-caption,
+.beam-run__hud-clock-label { display: flex; }
+/* Stage: caption stacked over the stage name, arcade level-readout style. */
 .beam-run__hud-level {
   left: calc(clamp(8px, 2.2%, 22px) + env(safe-area-inset-left, 0px));
-  letter-spacing: 0.5px;
+  flex-direction: column; align-items: flex-start; gap: 5px;
 }
 
 /* The journey clock: the loudest readout on screen. */
 .beam-run__hud-clock {
   right: calc(clamp(8px, 2.2%, 22px) + env(safe-area-inset-right, 0px));
-  gap: 10px; align-items: baseline;
-  border-color: rgba(255, 84, 0, 0.45);
+  flex-direction: column; align-items: flex-end; gap: 5px;
+  /* Orange rail: this readout is the stake. Bevel warmed to match. */
+  box-shadow:
+    inset 3px 3px 0 rgba(255, 158, 116, 0.2),
+    inset -3px -3px 0 rgba(0, 0, 0, 0.45),
+    0 0 0 3px rgba(255, 84, 0, 0.6);
 }
-.beam-run__hud-clock-label {
-  font-size: 0.72em; text-transform: uppercase; letter-spacing: 1.2px;
-  color: ${BRAND.LIGHT_GREY};
-}
-.beam-run__hud-clock-value {
-  font-family: ${TYPOGRAPHY.monoFamily};
-  font-size: 1.7em; font-weight: 700; color: ${BRAND.WHITE};
-  font-variant-numeric: tabular-nums; font-feature-settings: 'tnum' 1;
-  line-height: 1;
-}
-.beam-run__hud-clock-unit { font-size: 0.78em; color: ${BRAND.LIGHT_GREY}; }
-.beam-run__hud-clock--bump { animation: beam-run-bump 0.42s ease-out both; }
+/* Number and unit share a line, sitting on the same pixel baseline. */
+.beam-run__hud-clock-figure { display: flex; align-items: flex-end; gap: 7px; }
+.beam-run__hud-clock-value { display: flex; }
+.beam-run__hud-clock-unit { display: flex; padding-bottom: 2px; }
+/*
+ * The bump used to be an eased scale + border fade — a CSS gesture. Now it is a
+ * stepped 4-frame flash: whole-pixel hops and a hard rail change, held (steps)
+ * rather than interpolated, which is how an 8-bit machine would draw it.
+ */
+.beam-run__hud-clock--bump { animation: beam-run-bump 0.36s steps(1, end) both; }
 @keyframes beam-run-bump {
-  0% { transform: scale(1); border-color: rgba(255, 84, 0, 0.45); }
-  35% { transform: scale(1.08); border-color: rgba(255, 255, 255, 0.9); }
-  100% { transform: scale(1); border-color: rgba(255, 84, 0, 0.45); }
+  0% { transform: translateY(-4px); box-shadow: 0 0 0 3px ${BRAND.WHITE}; }
+  25% { transform: none; box-shadow: 0 0 0 3px ${BRAND.WHITE}; }
+  50% { transform: translateY(-2px); box-shadow: 0 0 0 3px rgba(255, 84, 0, 0.6); }
+  75% { transform: none; box-shadow: 0 0 0 3px ${BRAND.WHITE}; }
+  100% {
+    transform: none;
+    box-shadow:
+      inset 3px 3px 0 rgba(255, 158, 116, 0.2),
+      inset -3px -3px 0 rgba(0, 0, 0, 0.45),
+      0 0 0 3px rgba(255, 84, 0, 0.6);
+  }
 }
 
 .beam-run__hud-wins {
   left: calc(clamp(8px, 2.2%, 22px) + env(safe-area-inset-left, 0px));
   top: auto; bottom: calc(clamp(8px, 2.2%, 22px) + env(safe-area-inset-bottom, 0px));
-  color: ${BRAND.LIGHT_GREY};
+  color: ${BRAND.LIGHT_GREY}; gap: 7px;
 }
-.beam-run__hud-wins-total { opacity: 0.62; font-size: 0.84em; }
+.beam-run__hud-wins-icon { color: #7FD9AE; }
 
 /* Engaged ANSR capability — persistent chip, no countdown (help doesn't lapse). */
 .beam-run__hud-power {
   right: calc(clamp(8px, 2.2%, 22px) + env(safe-area-inset-right, 0px));
   top: auto; bottom: calc(clamp(8px, 2.2%, 22px) + env(safe-area-inset-bottom, 0px));
-  display: none; flex-direction: column; align-items: flex-end; gap: 2px;
-  background: rgba(60, 20, 0, 0.82); border-color: rgba(255, 84, 0, 0.6);
+  display: none; flex-direction: column; align-items: flex-end; gap: 5px;
+  background: #2A1000;
+  box-shadow:
+    inset 3px 3px 0 rgba(255, 158, 116, 0.22),
+    inset -3px -3px 0 rgba(0, 0, 0, 0.45),
+    0 0 0 3px rgba(255, 84, 0, 0.75);
 }
 .beam-run__hud-power--visible { display: flex; }
-.beam-run__hud-power-product {
-  color: ${BRAND.ORANGE}; font-size: 0.95em; font-weight: 700; letter-spacing: 0.4px;
-}
-.beam-run__hud-power-name { color: ${BRAND.WHITE}; font-size: 0.78em; font-weight: 500; }
+.beam-run__hud-power-product,
+.beam-run__hud-power-name { display: flex; }
 
 /* Overlays ------------------------------------------------------------- */
 .beam-run__overlay {
@@ -561,10 +592,12 @@ export const CSS = `
  * 3px and flips the bevel, which is the tactile bit that sells the era.
  */
 .beam-run__btn {
-  font: inherit; font-weight: 700; cursor: pointer;
+  font: inherit; cursor: pointer;
+  /* The cap centres its artwork: labels are bitmap SVG, not text (a proportional
+     web font on an NES cap was the last web-native thing on these screens). */
+  display: inline-flex; align-items: center; justify-content: center;
   padding: 13px 24px; min-height: 44px; border-radius: 0;
   border: 0; color: ${BRAND.WHITE};
-  text-transform: uppercase; letter-spacing: 0.08em;
   background: ${BRAND.LIGHT_TEAL};
   box-shadow:
     inset -4px -4px 0 rgba(0, 0, 0, 0.34),
@@ -581,6 +614,9 @@ export const CSS = `
     0 0 0 4px rgba(0, 16, 22, 0.88);
 }
 .beam-run__btn:focus-visible { outline: 4px solid ${BRAND.WHITE}; outline-offset: 4px; }
+/* The label is sized in frame units (see PixelType); a cap that shrink-wraps it
+   has nothing for a percentage to measure against, and clicks belong to the cap. */
+.beam-run__btn .beam-run__pixels { max-width: none; pointer-events: none; }
 .beam-run__btn--primary { background: ${BRAND.ORANGE}; color: ${BRAND.DEEP_TEAL}; }
 .beam-run__btn--ghost {
   background: rgba(0, 22, 29, 0.6); color: ${BRAND.LIGHT_GREY};
@@ -589,10 +625,9 @@ export const CSS = `
     inset 4px 4px 0 rgba(150, 205, 218, 0.18),
     0 0 0 4px rgba(0, 16, 22, 0.7);
 }
-/* The one button we most want pressed on the title screen. */
-.beam-run__stack--start .beam-run__btn--primary {
-  font-size: 1.12em; padding: 15px 36px;
-}
+/* The one button we most want pressed on the title screen. Its label already
+   sets one step larger (see BUTTON_TYPE); this gives the cap room to match. */
+.beam-run__stack--start .beam-run__btn--primary { padding: 15px 36px; }
 
 /* Touch controls (safe-area aware, ≥44px targets) ---------------------- */
 .beam-run__touch { position: absolute; inset: 0; pointer-events: none; display: none; z-index: 3; }
@@ -693,14 +728,15 @@ export const CSS = `
 @media (orientation: portrait) {
   /* All four readouts move into the band ABOVE the frame: the band below belongs
      to the thumb controls, and a bottom-anchored HUD would sit under them. */
+  /* 76px clears the taller top plaques: at the portrait type floors the clock
+     stands 7 + 14.4 + 5 + 25.6 + 7 ≈ 59px plus its 3px rail. */
   .beam-run__hud-wins,
   .beam-run__hud-power {
-    top: calc(clamp(8px, 2.2%, 22px) + env(safe-area-inset-top, 0px) + 52px);
+    top: calc(clamp(8px, 2.2%, 22px) + env(safe-area-inset-top, 0px) + 76px);
     bottom: auto;
   }
 }
 @media (orientation: portrait), (max-width: 560px) {
-  .beam-run__hud-row { font-size: clamp(13px, 3.4vw, 19px); }
   .beam-run__subtitle { font-size: clamp(15px, 4.2vw, 22px); }
 
   /* Phones: the column takes the full width and the bar labels give up width to
@@ -721,10 +757,7 @@ export const CSS = `
   .beam-run__months-unit { font-size: clamp(15px, 4vw, 22px); }
   .beam-run__matched { font-size: clamp(14px, 3.8vw, 18px); }
   .beam-run__actions { flex-direction: column; width: 100%; }
-  .beam-run__btn {
-    width: 100%; max-width: 380px; min-height: 48px; padding: 14px 20px;
-    font-size: clamp(15px, 4vw, 18px);
-  }
+  .beam-run__btn { width: 100%; max-width: 380px; min-height: 48px; padding: 14px 20px; }
   .beam-run__assist-row { font-size: clamp(15px, 4vw, 18px); min-height: 44px; }
   .beam-run__receipt-row { grid-template-columns: 20px minmax(0, 1fr) auto; row-gap: 2px; }
   .beam-run__receipt-mark { grid-row: 1 / -1; }

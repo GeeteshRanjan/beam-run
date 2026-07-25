@@ -28,7 +28,7 @@ import { BRAND } from '../data/tuning.config';
 import { TYPOGRAPHY } from '../data/tokens';
 import { CSS } from './styles';
 import { createBrandLockup } from './BrandMark';
-import { createPixelHeading, createPixelSvg } from './PixelType';
+import { createPixelHeading, createPixelSvg, setPixelButtonLabel } from './PixelType';
 import { HERO_IDLE, HERO_GRID_W, HERO_GRID_H, HERO_PALETTE } from '../render/sprites';
 import { hash2 } from '../render/PixelArt';
 
@@ -397,7 +397,7 @@ export function createNotFoundBody(doc: Document, homeHref = '/'): HTMLElement {
   const home = doc.createElement('a');
   home.className = 'beam-run__btn beam-run__btn--primary';
   home.setAttribute('href', homeHref);
-  home.textContent = COPY.notFound.play;
+  setPixelButtonLabel(home, COPY.notFound.play, 'primary');
   actions.appendChild(home);
 
   stack.append(code, title, body, actions);

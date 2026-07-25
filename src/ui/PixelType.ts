@@ -70,6 +70,18 @@ export interface PixelTextOptions {
   shadow?: string;
   /** Extra class on the <svg>. */
   className?: string;
+  /**
+   * Hard ceiling on the rendered width as a % of the *play frame*, replacing the
+   * default `min(96%, …)` cap.
+   *
+   * The percentage cap is right inside a fixed-width column (the overlay stack),
+   * but wrong inside a box that shrink-wraps its contents — a HUD plaque or a
+   * button — because there the panel width comes from the glyph width, so a
+   * percentage is circular. Frame units (`--beam-run-u`, a container query unit
+   * on the stage) have no such dependency, and they also let the glyphs shrink
+   * gracefully on very narrow frames instead of overflowing.
+   */
+  maxShare?: number;
 }
 
 /** Width of a rendered line in authored cells (glyphs + inter-glyph spacing). */
@@ -123,7 +135,8 @@ export function paintPixelSvg(
     const ideal = `calc(var(--beam-run-u) * ${(w * opts.unit).toFixed(2)})`;
     const floor = `${(w * (opts.minPx ?? 2)).toFixed(0)}px`;
     const ceil = `${(w * (opts.maxPx ?? 12)).toFixed(0)}px`;
-    svg.style.width = `min(96%, clamp(${floor}, ${ideal}, ${ceil}))`;
+    const cap = opts.maxShare ? `calc(var(--beam-run-u) * ${opts.maxShare})` : '96%';
+    svg.style.width = `min(${cap}, clamp(${floor}, ${ideal}, ${ceil}))`;
   }
 
   const paint = (dx: number, dy: number, fill: string): void => {
@@ -156,6 +169,82 @@ export function paintPixelSvg(
 
   if (opts.shadow) paint(1, 1, opts.shadow);
   paint(0, 0, color);
+}
+
+/**
+ * Greedy word wrap for a bitmap label, in authored characters.
+ *
+ * Button copy runs long ("Plan your real journey → GCC Opportunity Navigator"),
+ * and bitmap glyphs cannot reflow the way web type does — one line would either
+ * overflow the frame or shrink to nothing. Wrapping is done here rather than
+ * hand-authored per button so a copy change can't quietly break a screen.
+ */
+export function wrapPixelLabel(text: string, maxChars = 26): string[] {
+  const words = normalizeForPixels(text).split(' ').filter(Boolean);
+  const lines: string[] = [];
+  let line = '';
+  for (const word of words) {
+    const next = line ? `${line} ${word}` : word;
+    if (next.length <= maxChars || line === '') line = next;
+    else {
+      lines.push(line);
+      line = word;
+    }
+  }
+  if (line) lines.push(line);
+  return lines.length > 0 ? lines : [''];
+}
+
+export type PixelButtonVariant = 'primary' | 'ghost' | 'default';
+
+/**
+ * Type scale and ink per button variant.
+ *
+ * The primary cap is set one step larger, which is how it keeps the emphasis it
+ * used to get from `font-size: 1.12em` on the title screen. Its fill is orange,
+ * so its dark glyphs need no drop shadow — a light halo under dark type only
+ * muddies edges whose whole point is that they are hard.
+ *
+ * `maxShare` matters here: "Plan your real journey → GCC Opportunity Navigator"
+ * wraps to 25 characters, whose floor width alone would overflow a phone frame.
+ */
+const BUTTON_TYPE: Record<PixelButtonVariant, PixelTextOptions> = {
+  primary: { unit: 0.19, minPx: 2.1, maxPx: 3, maxShare: 70, color: '#00242E' },
+  ghost: {
+    unit: 0.16,
+    minPx: 1.8,
+    maxPx: 2.6,
+    maxShare: 70,
+    color: '#E6E6E6',
+    shadow: 'rgba(0, 16, 22, 0.85)',
+  },
+  default: {
+    unit: 0.16,
+    minPx: 1.8,
+    maxPx: 2.6,
+    maxShare: 70,
+    color: '#FFFFFF',
+    shadow: 'rgba(0, 16, 22, 0.85)',
+  },
+};
+
+/**
+ * Set a button's label in the bitmap font: the real string stays in a hidden
+ * span (so `textContent`, `aria` and tests are unchanged) and the visible label
+ * is pixel artwork, wrapped to fit. Used by every `.beam-run__btn` — the
+ * overlays, the assist dialog and the 404 page — so they can't drift apart.
+ */
+export function setPixelButtonLabel(
+  el: Element,
+  text: string,
+  variant: PixelButtonVariant = 'default',
+): void {
+  const doc = el.ownerDocument;
+  while (el.firstChild) el.removeChild(el.firstChild);
+  const sr = doc.createElement('span');
+  sr.className = 'beam-run__sr';
+  sr.textContent = text;
+  el.append(sr, createPixelSvg(doc, wrapPixelLabel(text), BUTTON_TYPE[variant]));
 }
 
 /**

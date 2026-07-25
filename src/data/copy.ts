@@ -120,6 +120,7 @@ export const COPY = {
   },
 
   hud: {
+    stageLabel: 'Stage',
     monthsLabel: 'Time to market',
     monthsUnit: 'months',
     quickWinsLabel: 'Quick wins',

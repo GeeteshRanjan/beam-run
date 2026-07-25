@@ -8,6 +8,7 @@
  */
 import { COPY } from '../data/copy';
 import type { AssistController, AssistToggle } from '../core/AssistController';
+import { setPixelButtonLabel } from './PixelType';
 
 const TOGGLES: { key: AssistToggle; label: string }[] = [
   { key: 'autoRun', label: COPY.assist.autoRun },
@@ -67,7 +68,7 @@ export class AssistMenu {
     this.doneBtn = doc.createElement('button');
     this.doneBtn.type = 'button';
     this.doneBtn.className = 'beam-run__btn beam-run__btn--primary';
-    this.doneBtn.textContent = COPY.assist.close;
+    setPixelButtonLabel(this.doneBtn, COPY.assist.close, 'primary');
     this.doneBtn.addEventListener('click', () => this.hide());
     actions.append(this.doneBtn);
 
