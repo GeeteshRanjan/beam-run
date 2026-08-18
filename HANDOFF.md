@@ -21,17 +21,15 @@ since then has been post-launch passes: a meaning-model rebuild (§4), layout an
 mobile adaptivity, an 8-bit visual conversion of every remaining web-native
 surface, the finale rebuild, and a custom 404 page.
 
-- **Tests:** 264 passing (34 files)
-- **Bundle:** ESM 43.49 KB / IIFE 43.73 KB gzip · budget gate **85.2 KB of 90 KB**
+- **Tests:** 280 passing (36 files)
+- **Bundle:** ESM 44.08 KB / IIFE 44.35 KB gzip · budget gate **86.4 KB of 90 KB**
 - **Validator:** green on all 6 screens (structural + physics-aware + meaning layers)
-- **Next:** no queued task — see §7 for what is open. The owner has said the four
-  powerup *effects* will be specified one screen at a time, so expect that next.
+- **Next:** no queued task — see §7 for what is open. The owner is specifying the
+  powerup *effects* one screen at a time; screen 1 is done (§4.5), so expect one of
+  screens 2–4 next.
 
-Task list, for the record: 1 scaffold · 2 loop/state/renderer/input · 3 physics+player ·
-4 HUD/overlays/persistence · 5 quicksand+bridge · 6 fire+extinguish · 7 gates+clear-path ·
-8 spikes+foresight · 9 finale+physics-aware validator · 10 art pass · 11 finale hero scene ·
-12 audio · 13 touch+assist+a11y · 14 analytics+CTA · 15 React/IIFE embed+budget gate ·
-16 hardening. All ticked. Details per task in `docs/JOURNAL.md`.
+The original 16-task build list (scaffold → hardening) is all ticked; it lives in
+`docs/JOURNAL.md` along with the detail of every task and every pass since.
 
 ---
 
@@ -119,12 +117,15 @@ both revisions and still describe a no-lives model; `analytics-events.json` matc
    purpose, which is what gives the life-lost screen's instruction something to say. The
    validator fails the build if any obstacle sits at or before the badge, or if none sit beyond
    it. Never label or offer a "do it yourself" route — self-build is the actual competitor.
-5. **Four distinct verbs, not one reskinned shield.** `PLACE_TILE` builds a permanent bridge
-   (1Wrk) · `EXTINGUISH` puts hiring lanes out for good (Talent500) · `CLEAR_PATH` lifts
-   approval barriers for good (GCC-BOT) · `FORESIGHT` shows landing spots and stops setbacks
-   (500Leaders). `SAFE_PASSAGE` is the non-capability badge on Reception and the Tech Park (the
-   two screens with nothing to defend against); its effect is deliberately unassigned. **Help
-   never expires** — a 5-second shield would say ANSR helps briefly then leaves.
+5. **Four distinct verbs, not one reskinned shield.** `PLACE_TILE` slows the DENIED stamps to a
+   walk-through pace *and* shields the player, so a stamp cannot press them at all (1Wrk —
+   owner-specified, the first of the four effects to be nailed down) · `EXTINGUISH` puts hiring
+   lanes out for good (Talent500) · `CLEAR_PATH` lifts approval barriers for good (GCC-BOT) ·
+   `FORESIGHT` shows landing spots and stops setbacks (500Leaders). `SAFE_PASSAGE` is the
+   non-capability badge on Reception and the Tech Park (the two screens with nothing to defend
+   against); its effect is deliberately unassigned. **Help never expires** — a 5-second shield
+   would say ANSR helps briefly then leaves. No badge places geometry any more: `PLACE_TILE`
+   used to lay a bridge over screen 1's pit, and that pit is gone.
 6. **No score collectibles.** The Growth Points are gone (owner call): a second score competed
    with the only figure the game argues about, and picking one up said nothing about ANSR.
 7. **The receipt is the conversion surface.** The win screen shows the run's months, two
@@ -148,11 +149,12 @@ both revisions and still describe a no-lives model; `analytics-events.json` matc
   `NEUTRAL_INPUT`/`makeInput()` for headless use.
 - `Simulation.ts` — **authoritative headless sim.** Owns state machine, Player, Screen, `months`,
   `setbacks`, `lives`, `log`/`logPanel`/`delayMonths`, `clock`, `badgeBox`, `engaged`, `receipt`,
-  `lifeLost`, `powerups`, `hazard`. `buildHazard()` switches on `screen.data.hazard`.
-  `setback(cause)` books months, spends a life, pushes a log entry and transitions to LIFE_LOST;
-  `continueAfterLifeLost()` reloads the same screen or resets the attempt. `forceSetback('fall')`
-  still relocates via the bounded safe-ground history (sludge never counts as safe) when the fall
-  is *not* chargeable — that is the only remaining use of it. Events: onStateChange /
+  `lifeLost`, `powerups`, `hazard`, `shielded`. `buildHazard()` switches on `screen.data.hazard`.
+  `setback(cause)` books months, spends a life, pushes a log entry and transitions to LIFE_LOST
+  (it does **not** reset the hazard — see §6); `continueAfterLifeLost()` reloads the same screen or
+  resets the attempt. `forceSetback('fall')` still relocates via the bounded safe-ground history
+  (ground a hazard is dragging on never counts as safe) when the fall is *not* chargeable — that is
+  the only remaining use of it. Events: onStateChange /
   onScreenEnter / onScreenClear / onSetback / onOutOfLives / onBadgeCollected.
 - `setbackLog.ts` — pure: `SetbackLogEntry`, `ledgerRows()` (groups repeats), `logPanelView()`
   (bounded — newest `LIVES.LOG_VISIBLE_ROWS`, the rest rolled up, total counts everything).
@@ -167,20 +169,24 @@ both revisions and still describe a no-lives model; `analytics-events.json` matc
 **World (`src/world/`, headless)**
 - `Physics.ts` — `AABB`, `aabbOverlap`, `isOnGround`, `moveAndCollide` (≤8px substeps, axis-separated).
 - `Player.ts` — walk/air accel + friction, gravity clamp, coyote + buffer, jump-cut, i-frames.
-  `update(dt, input, solids, speedMult, jumpMult)` — accel is scaled by `speedMult` too, so sludge
-  has traction, not just a top-speed cap.
+  `update(dt, input, solids, speedMult, jumpMult)` — accel is scaled by `speedMult` too, so a
+  dragging hazard costs traction, not just top speed. No hazard uses either multiplier today.
 - `Screen.ts` (grid→px, skips `noncollide`; no collectibles any more), `Powerups.ts` (timer-free;
-  permanent help), `badgeFloat.ts` (**pure** `badgeCenter`/`badgeBoxAt`/`badgeLowestBox` — the one
-  source of the badge's position, read by the sim *and* the renderer with the same clock),
-  `types.ts` (`Hazard {solids, speedMultAt, jumpMultAt?, blocksJump?, update, reset}`,
+  permanent help; badges carry no geometry), `badgeFloat.ts` (**pure**
+  `badgeCenter`/`badgeBoxAt`/`badgeLowestBox` — the one source of the badge's position, read by the
+  sim *and* the renderer with the same clock), `types.ts`
+  (`Hazard {solids, speedMultAt, shieldsPlayer?, update, reset}`,
   `HazardContext {assisted, extraTelegraph}`).
-- `Hazards/` — `Quicksand.ts` (shallow wade + deep pit that blocks jumping), `Fire.ts`,
-  `Gates.ts` (replaced the old `Plants.ts`), `Spikes.ts`. Each answers `assisted` in its own way.
+- `Hazards/` — `Stamps.ts` (screen 1's slamming DENIED stamps; replaced `Quicksand.ts`), `Fire.ts`,
+  `Gates.ts` (replaced the old `Plants.ts`), `Spikes.ts`. Each answers `assisted` in its own way;
+  only `Stamps` sets `shieldsPlayer`, which is what licenses the bubble on the player.
 
 **Render (`src/render/`, canvas)** — `PixelArt.ts` (crisp fillRect core), `PixelText.ts` (5×7 font,
-`FONT` exported), `sprites.ts` (hero, badge), `scenery.ts` (per-level materials, skies,
-signage), `titleScene.ts` (attract screen), `finale.ts` (screen 5 painting), `ansrLogo.ts`
-(cached `Path2D` of the real brand mark; resolves to null without `Path2D`, draw is a no-op).
+`FONT` exported), `sprites.ts` (hero incl. the `squash` pose, badge, `drawAnsrBubble`),
+`stamps.ts` (screen 1's hazard — pure, no wall clock, so it can be rasterised alone),
+`scenery.ts` (per-level materials, skies, signage), `titleScene.ts` (attract screen),
+`finale.ts` (screen 5 painting), `ansrLogo.ts` (cached `Path2D` of the real brand mark;
+resolves to null without `Path2D`, draw is a no-op).
 
 **UI (`src/ui/`, DOM)** — `styles.ts` (scoped CSS in a TS template literal, minified by a Vite plugin),
 `Hud.ts` (two absolutely-positioned flex **columns**: left = stage · lives · engaged capability,
@@ -268,9 +274,21 @@ it, capabilities unique, months sum to the benchmark) · `check-budget.mjs` + `b
   the next delay.
 - Orange stays off the delay log (a ledger of avoidable months is the opposite of value); only the
   running total is warmed.
-- A struggle zone must not be skippable. Screen 1's wade is 8 tiles precisely because a running
-  jump carries ~172px, and `SLUDGE_JUMP_MULT` exists because hop-chaining otherwise crossed it
-  in a third of the walking time.
+- **Every hazard telegraphs, and the tell has to be where the player is looking.** Screen 1's
+  stamps slam in 0.14s; with no wind-up a probe of 20 reactive policies could not clear the stage
+  at all — unfair, not hard. `HAZARDS.STAMPS.WARN_TIME` fixed it, but only once the cue was drawn
+  *down the column* instead of on the head: a parked stamp hangs mostly above the frame, so a tell
+  up there is a tell nobody sees.
+- **A hazard's cycle length is a measured number.** Column width + player width ÷ walk speed is the
+  crossing time (124px ≈ 0.48s on screen 1); the fully-safe part of the cycle must stay comfortably
+  above it or the screen is a wall, not a test. Tune `CYCLE`, never the gaps — the geometry is the
+  argument. Re-run the probe (`docs/JOURNAL.md`) after any change to either.
+- `Simulation.setback()` does **not** reset the hazard: `loadScreen` rebuilds it on every retry, and
+  resetting wiped the pose the host paints the impact from (the stamp holding the player flat).
+  `Stamps.struckAt` survives `reset()` for the same reason.
+- Only draw a shield on the player where contact is genuinely harmless (`Hazard.shieldsPlayer` →
+  `Simulation.shielded`). On the screens where help means "the obstacles ahead are cleared", a
+  bubble would promise protection the rules do not give.
 
 **Testing**
 - For time-windowed hazards, read the hazard's own state getter right after `update()` rather than
@@ -288,14 +306,13 @@ it, capabilities unique, months sum to the benchmark) · `check-budget.mjs` + `b
    `DEFAULT_OPTIONS`). Every CTA in the game lands on our own 404 page until it points at the real
    GCC Opportunity Navigator, or a Vercel rewrite is added. Highest-value fix outstanding.
 2. Does the Navigator accept a parameter that **pre-selects a stage**? If so, wire `br_topic` to it.
-3. **The per-screen powerup effects.** The owner has said the effect each badge gives will be
-   specified one screen at a time. Screens 1–4 keep their existing capability behaviour; the two
+3. **The per-screen powerup effects.** Specified one screen at a time. **Screen 1 is done** (the
+   DENIED stamps — see §4.5). Screens 2–4 keep their existing capability behaviour; the two
    `SAFE_PASSAGE` badges (Reception, Tech Park) collect and do nothing yet, by design.
-4. **Screen 1 is the one stage that is impossible without its badge** (the 7-tile pit exceeds max
-   jump; only the 1Wrk bridge crosses it). A player who walks past a missable badge three times
-   will game-over there. The float band was authored to dip into the walking line to make that
-   unlikely and the life-lost screen names the fix — but if telemetry shows attempts ending on
-   screen 1, make *that one* badge unmissable rather than softening the pit.
+4. **Screen 1 unassisted is deliberately punishing.** A probe's best reactive policy took ~28s and
+   most policies died on the first pair of stamps. That is the teaching loop working (lose a life,
+   get told to take the badge), but if telemetry shows attempts ending here, lengthen
+   `HAZARDS.STAMPS.CYCLE` rather than widening the gaps.
 5. Are these four pains the ones the pipeline actually voices, or the four service lines? Swapping
    a pain is cheap now (level data + re-skin), expensive after launch.
 6. Mobile traffic share, to confirm the auto-run default.
@@ -329,6 +346,15 @@ must already be in §6.
 
 ## 10. Recent passes (newest first — full entries in `docs/JOURNAL.md`)
 
+- **Setup Delays rebuilt: DENIED stamps replace the red-tape sludge (owner call, and the first
+  per-stage badge *effect* to be specified).** Four stamps slam from the ceiling in two
+  half-cycle-offset pairs either side of a small wall; 1Wrk drops the whole mechanism to 26% speed
+  and shields the player, so a press aborts and retracts from where it touched. Unassisted, a stamp
+  flattens you. Two probe findings changed the design: with no wind-up the stage was **unclearable**
+  by any reactive policy (added `WARN_TIME`, drawn down the column because a parked stamp hangs
+  above the frame), and `CYCLE` had to go 1.5 → 1.8 so the safe window clears the 0.48s crossing
+  time. Deleted with the pit: `Quicksand`, the placed-tile mechanism, and two unused `Hazard` hooks.
+  280 tests (36 files); gate **86.4 KB of 90**.
 - **Lives, the delay log, and the badge on every screen (owner model change — see §4).** 3 lives,
   a `LIFE_LOST` state that restarts the *same* stage and becomes the closing ledger on the last
   life, a bounded delay log hanging top-right, Growth Points deleted, and the ANSR badge on all six
@@ -339,7 +365,3 @@ must already be in §6.
   `!__DEV__`, so every CTA silently no-oped in dev; and Vite's SPA fallback re-served the game for
   `/gcc-opportunity-navigator`. Added `scripts/not-found-plugin.ts` (real 404 in dev + preview,
   byte-identical to the built file) and removed the dev gate. 245 tests; gate 85.5 KB.
-- **Win screen symmetry** — the closing months figure was rendering ~46px instead of ~110px
-  (`PX_TYPE.figure` had no `maxShare`; the percentage cap is circular in a shrink-wrapped box).
-  Fixed on four specs; buttons moved out of the right column to span both, columns top-aligned.
-  245 tests (33 files); gate 85.5 KB.

@@ -18,6 +18,7 @@ import type { GameState } from './gameStates';
 import { Hud } from '../ui/Hud';
 import { Overlays, type OverlayName, type CtaContext } from '../ui/Overlays';
 import { injectStyles } from '../ui/styles';
+import { Stamps } from '../world/Hazards/Stamps';
 import { Fire } from '../world/Hazards/Fire';
 import { Gates } from '../world/Hazards/Gates';
 import { Spikes } from '../world/Hazards/Spikes';
@@ -25,7 +26,8 @@ import { Effects } from './Effects';
 import { finaleLayout } from './finaleScene';
 import { drawFinaleScene } from '../render/finale';
 import { AudioEngine } from '../audio/AudioEngine';
-import { drawHero, drawBadgeDisc, type HeroMotion } from '../render/sprites';
+import { drawHero, drawBadgeDisc, drawAnsrBubble, type HeroMotion } from '../render/sprites';
+import { drawInkPads, drawStamps as drawStampHeads } from '../render/stamps';
 import { badgeCenter } from '../world/badgeFloat';
 import { drawTileRect, drawSceneBackground } from '../render/scenery';
 import { drawTitleScene } from '../render/titleScene';
@@ -114,9 +116,9 @@ export class Game {
   private prevOnGround = false;
   /**
    * Walk-cycle phase (s), advanced by *distance covered* rather than wall clock,
-   * so wading the sludge visibly slows the stride. A time-driven cycle made a
-   * dragged hero look like he was running at full pace on the spot — the main
-   * reason the slowdown read as "not slow" even when it was.
+   * so any hazard that drags the player visibly slows the stride too. A
+   * time-driven cycle made a slowed hero look like he was running at full pace on
+   * the spot.
    */
   private strideClock = 0;
   private readonly popups: Popup[] = [];
@@ -627,7 +629,6 @@ export class Game {
 
     this.drawZoneRead(ctx);
     this.drawHazards(ctx);
-    this.drawPlacedTile(ctx);
     this.drawBadge(ctx);
 
     const p = this.sim.player;
@@ -662,17 +663,11 @@ export class Game {
     const fromX = badge.gx * T + T / 2;
 
     // Cap each solid's own top edge, not one band across the screen: a single
-    // full-width rect drew a bright line hanging in mid-air across screen 1's
-    // pit. Per-solid also means the platforms get the edge, which is right —
-    // everything you can stand on from here is ANSR-backed.
+    // full-width rect drew a bright line hanging in mid-air wherever the ground
+    // was broken. Per-solid also means platforms and walls get the edge, which is
+    // right — everything you can stand on from here is ANSR-backed.
     ctx.fillStyle = 'rgba(92, 226, 244, 0.85)';
     for (const s of screen.solids) {
-      const x = Math.max(fromX, s.x);
-      if (s.x + s.w <= x) continue;
-      ctx.fillRect(x, s.y - 3, s.x + s.w - x, 3);
-    }
-    // Also cap the bridge ANSR just laid, so the relief reads as continuous.
-    for (const s of this.sim.powerups.extraSolids()) {
       const x = Math.max(fromX, s.x);
       if (s.x + s.w <= x) continue;
       ctx.fillRect(x, s.y - 3, s.x + s.w - x, 3);
@@ -690,17 +685,46 @@ export class Game {
   private drawPlayer(ctx: CanvasRenderingContext2D, centerX: number, feetY: number): void {
     const p = this.sim.player;
     let motion: HeroMotion;
-    if (!p.onGround) motion = p.vy < 0 ? 'jump' : 'fall';
+    if (this.flattened) motion = 'squash';
+    else if (!p.onGround) motion = p.vy < 0 ? 'jump' : 'fall';
     else motion = Math.abs(p.vx) > 20 ? 'run' : 'idle';
+    // The bubble goes behind the figure so the hero stays the readable thing.
+    if (this.sim.shielded) this.drawShield(ctx, centerX, feetY);
     // Feet land ~2px into the tile so the shoes sit on the surface. The 16×20
-    // grid at scale 3 → a 48×60 figure (bigger, clearly a person).
+    // grid at scale 3 → a 48×60 figure (bigger, clearly a person). The squash
+    // pose gets scale 4: it is 22×9, so at scale 3 it read as a 66×27 smudge —
+    // pressed out to 88px wide it reads as a person who has just been flattened,
+    // which is the entire point of the frame.
     drawHero(
       ctx,
       { motion, facing: p.facing, time: this.strideClock, still: this.reducedMotion },
       centerX,
       feetY + 2,
-      3,
+      motion === 'squash' ? 4 : 3,
     );
+  }
+
+  /**
+   * True on the life-lost frames that follow a DENIED stamp: the player is drawn
+   * flat on the floor with the stamp still holding them there. Presentation only
+   * — the sim booked the delay the instant the stamp landed.
+   */
+  private get flattened(): boolean {
+    return this.sim.state === 'LIFE_LOST' && this.sim.lifeLost?.cause === 'stamp';
+  }
+
+  /**
+   * The ANSR bubble: what "the power is active" looks like on the player rather
+   * than on the world.
+   *
+   * Only drawn where contact is genuinely harmless (`Simulation.shielded`), so it
+   * never promises protection the rules do not give. The pulse is the only
+   * wall-clock part; under `prefers-reduced-motion` it holds mid-pulse, which is a
+   * steady ring rather than no ring (the bubble is information, not decoration).
+   */
+  private drawShield(ctx: CanvasRenderingContext2D, centerX: number, feetY: number): void {
+    const pulse = this.reducedMotion ? 0.5 : 0.5 + 0.5 * Math.sin(this.now() * 3.2);
+    drawAnsrBubble(ctx, centerX, feetY, pulse);
   }
 
   // --- floating value popups ------------------------------------------------
@@ -754,6 +778,10 @@ export class Game {
 
   private drawHazards(ctx: CanvasRenderingContext2D): void {
     const data = this.sim.screen.data;
+    if (data.hazard === 'stamps') {
+      this.drawStamps(ctx);
+      return;
+    }
     if (data.hazard === 'fire') {
       this.drawFire(ctx);
       return;
@@ -766,51 +794,26 @@ export class Game {
       this.drawSpikes(ctx);
       return;
     }
-    if (data.hazard === 'quicksand' && data.quicksand) {
-      const T = RESOLUTION.TILE;
-      const t = this.reducedMotion ? 0 : this.now();
-      const PX = 5;
-      for (const q of data.quicksand) {
-        const x = q.gx * T;
-        const y = q.gy * T;
-        const w = q.w * T;
-        const h = q.h * T;
-        const deep = q.deep ?? true;
-        // Base sludge + stable dithered churn. Shallow struggle sludge is
-        // lighter and clearly wadeable; the deep pit is near-black so the
-        // "you are not getting across this alone" read is instant.
-        ctx.fillStyle = deep ? '#06222A' : '#12495A';
-        ctx.fillRect(x, y, w, h);
-        for (let py = 0; py < h; py += PX) {
-          for (let pxi = 0; pxi < w; pxi += PX) {
-            const n = hash2((x + pxi) >> 0, (y + py) >> 0);
-            if (n < 0.16) pxRect(ctx, '#06232B', x + pxi, y + py, PX, PX, PX);
-            else if (n > 0.9) pxRect(ctx, '#12505E', x + pxi, y + py, PX, PX, PX);
-          }
-        }
-        // Slow chunky ripple bands rolling across the surface (shape + motion).
-        for (let row = 0; row < h; row += 15) {
-          for (let px = 0; px <= w; px += PX) {
-            const yy = y + row + Math.round(Math.sin((px + t * 60 + row * 8) * 0.06) * 4);
-            pxRect(ctx, 'rgba(230,230,230,0.22)', x + px, yy, PX, PX, PX);
-          }
-        }
-        // Sinking paperwork flecks — you are literally stuck in the "red tape".
-        for (let f = 0; f < 6; f += 1) {
-          const seed = hash2(q.gx * 13 + f, q.gy + f * 5);
-          const fx = x + 12 + seed * (w - 28);
-          const phase = ((t * 0.22 + seed) % 1 + 1) % 1;
-          const fy = y + 6 + phase * (h - 18);
-          const a = 0.55 * (1 - phase);
-          pxRect(ctx, `rgba(207,230,236,${a})`, fx, fy, 10, 8, 2); // sheet
-          pxRect(ctx, `rgba(10,44,53,${a})`, fx + 2, fy + 3, 6, 2, 2); // text line
-        }
-        // A hard bright lip on the deep pit so the drop edge is unmissable.
-        if (deep) {
-          pxRect(ctx, 'rgba(230,230,230,0.5)', x, y, w, 3, 3);
-        }
-      }
-    }
+  }
+
+  /**
+   * DENIED rubber stamps slamming down from the top of the frame. The painting
+   * lives in `render/stamps.ts` — it is pure, so it can be rasterised and
+   * inspected on its own, and it needs nothing from this host but the snapshot.
+   *
+   * The ink pads go down *before* the world's own decoration reads over them and
+   * the heads after, so a pressed stamp covers its own pad.
+   */
+  private drawStamps(ctx: CanvasRenderingContext2D): void {
+    const hazard = this.sim.activeHazard;
+    if (!(hazard instanceof Stamps)) return;
+    drawInkPads(ctx, hazard.columns);
+    drawStampHeads(
+      ctx,
+      hazard.stampStates(),
+      hazard.isSlowed,
+      this.flattened ? hazard.struckAt : null,
+    );
   }
 
   private drawFire(ctx: CanvasRenderingContext2D): void {
@@ -1013,21 +1016,6 @@ export class Game {
         pxRect(ctx, 'rgba(230,230,230,0.25)', cx - PX / 2, top - 28, PX, 18, PX);
       }
       ctx.restore();
-    }
-  }
-
-  private drawPlacedTile(ctx: CanvasRenderingContext2D): void {
-    const tile = this.sim.powerups.placedTile;
-    if (!tile) return;
-    // The ANSR "solved-once" bridge: rendered in the bright finale/plaza
-    // material so it reads as the solution laid across the red-tape pit.
-    drawTileRect(ctx, 5, tile.x, tile.y, tile.w, tile.h);
-    // Bright walkable cap + subtle stud marks so it clearly reads as placed.
-    ctx.fillStyle = 'rgba(230,230,230,0.85)';
-    ctx.fillRect(tile.x, tile.y, tile.w, 3);
-    ctx.fillStyle = 'rgba(230,230,230,0.35)';
-    for (let sx = tile.x + 8; sx < tile.x + tile.w - 6; sx += 20) {
-      ctx.fillRect(sx, tile.y + 8, 4, 4);
     }
   }
 

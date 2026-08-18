@@ -10,13 +10,14 @@
  */
 import raw from './levels.json';
 
-export type HazardKind = 'none' | 'quicksand' | 'fire' | 'gates' | 'spikes';
+export type HazardKind = 'none' | 'stamps' | 'fire' | 'gates' | 'spikes';
 
 /**
  * ANSR capability each badge grants. Four structurally different verbs, one per
  * real service line — never one reskinned shield.
  *
- *  - `PLACE_TILE`  BUILD   1Wrk / assisted setup lays a permanent bridge
+ *  - `PLACE_TILE`  SET UP  1Wrk slows the DENIED stamps to a walk-through pace
+ *                          and shields you, so a stamp cannot press you at all
  *  - `EXTINGUISH`  STAFF   Talent500 puts out the hiring lanes ahead of you
  *  - `CLEAR_PATH`  CLEAR   GCC-BOT lifts the approval barriers ahead
  *  - `FORESIGHT`   KNOW    500Leaders give long warning + a marked safe line
@@ -55,13 +56,15 @@ export interface SolidRect {
   role?: string;
 }
 
-export interface QuicksandRect {
+/**
+ * A "DENIED" rubber stamp that slams down from the top of the frame (Setup
+ * Delays). `phase` is a fraction of `HAZARDS.STAMPS.CYCLE` (0..1): author a pair
+ * half a cycle apart and they alternate rapid-fire, with barely a beat between
+ * one lifting and the next dropping.
+ */
+export interface StampSpec {
   gx: number;
-  gy: number;
-  w: number;
-  h: number;
-  /** Deep pits book a delay after continuous contact; shallow sludge only drags. */
-  deep?: boolean;
+  phase: number;
   zone?: Zone;
 }
 
@@ -86,19 +89,21 @@ export interface Gate {
   zone?: Zone;
 }
 
-export interface PlacedTileSpec {
-  gx: number;
-  gy: number;
-  w: number;
-  h: number;
-}
-
+/**
+ * A badge is a pickup and nothing else — it contributes no geometry.
+ *
+ * It used to be able to lay a tile (`placesTileAt`): 1Wrk bridged Setup Delays'
+ * red-tape pit. That screen's obstacles were replaced with the DENIED stamps, so
+ * nothing in the game placed a tile any more and the whole mechanism — spec
+ * field, `Powerups.placedTile`, `extraSolids()`, the renderer's bridge pass and
+ * the validator's "uncompletable without the bridge" rule — was dead weight. See
+ * `docs/JOURNAL.md` if a future badge needs to build again.
+ */
 export interface BadgeSpec {
   type: BadgeType;
   gx: number;
   /** Anchor row. The badge floats vertically around this — see `badgeCenter`. */
   gy: number;
-  placesTileAt?: PlacedTileSpec;
   note?: string;
 }
 
@@ -121,7 +126,7 @@ export interface ScreenData {
   exit?: { gx: number };
   winTrigger?: { gx: number };
   solids: SolidRect[];
-  quicksand?: QuicksandRect[];
+  stamps?: StampSpec[];
   fireLanes?: FireLane[];
   spikeColumns?: SpikeColumn[];
   gates?: Gate[];

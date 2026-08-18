@@ -11,23 +11,22 @@
  * Each badge is a structurally different verb, mirroring a real service line
  * (see `CAPABILITIES` in data/copy.ts):
  *
- *  - `PLACE_TILE` BUILD  — lays a permanent bridge across the pit (1Wrk)
+ *  - `PLACE_TILE` SET UP — the DENIED stamps slow to a walk-through pace and can
+ *                          no longer press you at all (1Wrk)
  *  - `EXTINGUISH` STAFF  — fire lanes ahead go out for good (Talent500)
  *  - `CLEAR_PATH` CLEAR  — approval gates ahead lift for good (GCC-BOT)
  *  - `FORESIGHT`  KNOW   — spike landing spots are shown (500Leaders)
  *
  * The hazards themselves implement the behaviour via `HazardContext.assisted`;
- * this class only tracks *whether* the capability is engaged, plus the one piece
- * of geometry a badge can add (the bridge).
+ * this class only tracks *whether* the capability is engaged. It used to also own
+ * the one piece of geometry a badge could add — 1Wrk's bridge over Setup Delays'
+ * pit — but that screen's obstacles were replaced by the stamps, so no badge
+ * builds anything any more and the geometry went with it.
  *
  * Orange (the "value" accent) is reserved for the engaged-capability indicator.
  */
-import { RESOLUTION } from '../data/tuning.config';
 import { COPY, capabilityFor } from '../data/copy';
 import type { BadgeSpec, BadgeType } from '../data/levels';
-import type { AABB } from './Physics';
-
-const T = RESOLUTION.TILE;
 
 export interface ActivePowerView {
   type: BadgeType;
@@ -39,12 +38,10 @@ export interface ActivePowerView {
 
 export class Powerups {
   collected = false;
-  placedTile: AABB | null = null;
   private activeType: BadgeType | null = null;
 
   reset(): void {
     this.collected = false;
-    this.placedTile = null;
     this.activeType = null;
   }
 
@@ -53,10 +50,6 @@ export class Powerups {
     if (this.collected) return false;
     this.collected = true;
     this.activeType = badge.type;
-    if (badge.type === 'PLACE_TILE' && badge.placesTileAt) {
-      const t = badge.placesTileAt;
-      this.placedTile = { x: t.gx * T, y: t.gy * T, w: t.w * T, h: t.h * T };
-    }
     return true;
   }
 
@@ -67,11 +60,6 @@ export class Powerups {
 
   get type(): BadgeType | null {
     return this.activeType;
-  }
-
-  /** Geometry a badge contributes (the laid bridge). */
-  extraSolids(): AABB[] {
-    return this.placedTile ? [this.placedTile] : [];
   }
 
   /**

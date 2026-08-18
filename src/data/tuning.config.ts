@@ -121,34 +121,78 @@ export const POWERUPS = {
 
 /** Hazard behaviour, per family. */
 export const HAZARDS = {
-  QUICKSAND: {
-    SINK_SETBACK_TIME: 1.4,   // s of continuous contact before a delay is booked
-    SINK_VISUAL_RATE: 18,     // px/s the avatar visibly sinks while in contact
+  /**
+   * DENIED stamps (Screen 1 — Setup Delays). Owner-specified replacement for the
+   * old red-tape sludge.
+   *
+   * One cycle is: parked at the top of the frame → SLAM down → held pressed on
+   * the floor → lifted back up → a short beat. Stamps are authored in pairs half
+   * a cycle out of phase, so the busy part of the cycle (DROP+HOLD+LIFT = 0.72s)
+   * is just under half of CYCLE: the second stamp starts dropping ~0.03s after
+   * the first finishes lifting. That "barely a beat" alternation is the whole
+   * feel of the screen at full speed.
+   *
+   * A stamp only costs you time at the bottom of its stroke — you are flattened
+   * by the landing, not brushed by the descent — so the reflex test is about not
+   * being in the column when the drop starts.
+   */
+  STAMPS: {
     /**
-     * Drag while wading the shallow struggle sludge. Deliberately low: at 0.55
-     * the hero still moved at 143 px/s and playtesting could not tell the sludge
-     * from dry ground, which quietly killed the screen's whole claim. 0.26 →
-     * ~68 px/s, so the 8-tile wade takes ~4.7s instead of ~1.2s.
+     * s for one full parked → wind-up → slam → press → lift → beat cycle.
+     *
+     * 1.8 is not a feel number, it is a measured one. A stamp column plus the
+     * player is 124px wide, which takes ~0.48s to clear at walk speed, so the
+     * fully-safe part of the cycle (CYCLE − DROP − HOLD − LIFT − WARN = 0.86s)
+     * has to stay comfortably above that or the screen stops being a test and
+     * starts being a wall. A probe that drives the stage with a reactive policy
+     * could not clear it at 1.5s; it can at 1.8s.
      */
-    WALK_SPEED_MULT: 0.26,
-    /** The deep pit is worse still — you barely inch forward once you're in it. */
-    DEEP_WALK_SPEED_MULT: 0.14,
+    CYCLE: 1.8,
+    DROP_TIME: 0.14,          // s of the slam itself (too fast to react to)
+    HOLD_TIME: 0.34,          // s held flat on the floor
+    LIFT_TIME: 0.24,          // s to rise back to the ceiling
     /**
-     * Jump strength while standing in the shallow sludge. A full jump carries
-     * ~140px, which meant the wade could be cleared in one leap (and chained
-     * hops skipped it whatever its length) — the drag was optional, so the
-     * screen's claim went unfelt. At 0.55 the hop clears ~1 tile of height and
-     * ~2 tiles of ground: enough to still reach anything the level asks for,
-     * far too little to vault the zone.
+     * s of visible wind-up before the slam, at the END of the cycle.
+     *
+     * Every hazard in this game telegraphs (fire glows, spikes mark the landing);
+     * a stamp that dropped with no tell was the one that did not, and it was
+     * unfair rather than hard — the drop is 0.14s, so by the time the head moves
+     * you are already under it. Nothing about the geometry changes during the
+     * wind-up, only the picture.
      */
-    SLUDGE_JUMP_MULT: 0.55,
+    WARN_TIME: 0.22,
+    /** px: head bottom while parked, i.e. how far it hangs into the frame. */
+    REST_BOTTOM: 64,
     /**
-     * How far above the shallow sludge its drag still applies (px). Damped jumps
-     * peak ~42px up, so the whole hop stays inside this band: hopping across the
-     * wade is no longer faster than walking it, which is the point — you cannot
-     * hop over setup delays. Above the band, full control returns instantly.
+     * px: hitbox = the pressing face. Drawn exactly this wide, never wider.
+     * 96 rather than a tidier 80 because the face has to carry the word DENIED at
+     * bitmap scale 2 (~71px) inside its plate — at 76 the D and the D fell off
+     * the plate onto the frame, which is the only thing this hazard has to say.
      */
-    SLUDGE_AIR_HEIGHT: 56,
+    WIDTH: 96,
+    /** px: height of the stamp head (the block that carries the DENIED face). */
+    HEAD_H: 88,
+    /**
+     * Assisted (1Wrk): approvals move at ANSR speed, so the whole mechanism runs
+     * at this fraction of real time. 0.26 turns a 1.5s cycle into ~5.8s and the
+     * safe gap into ~3s — wide enough to walk through at a stroll.
+     */
+    ASSIST_TIME_SCALE: 0.26,
+    /**
+     * s for a press that met an ANSR-backed player to retract from where it
+     * touched. It never completes the stamp: it cannot press you, so it goes
+     * back up from there.
+     */
+    RETRACT_TIME: 0.28,
+    /** "Extra reaction time" assist: run the mechanism this much slower again. */
+    EXTRA_TIME_SCALE: 0.8,
+    /**
+     * px the guilty stamp is lifted on the life-lost frames so the flattened
+     * player is visible under it. Presentation only — the delay was booked the
+     * instant it landed. Without it the whole gag happens inside an 88px block
+     * and the player never sees what became of them.
+     */
+    REVEAL_LIFT: 52,
   },
   FIRE: {
     INTERVAL: 2.2,            // s between drop cycles on a lane

@@ -168,7 +168,7 @@ export const COPY = {
 
   /** Short label for the persistent HUD chip once a capability is engaged. */
   powers: {
-    PLACE_TILE: 'Bridge laid',
+    PLACE_TILE: 'Setup stood up',
     EXTINGUISH: 'Roles filled',
     CLEAR_PATH: 'Filings cleared',
     FORESIGHT: 'Local context',
@@ -195,7 +195,7 @@ export const COPY = {
   setback: {
     /** Short uppercase tag for the in-world popup (pixel font: A-Z 0-9 + - . , : ! ? / >). */
     tag: {
-      delay: 'RED TAPE',
+      stamp: 'SETUP DENIED',
       fire: 'OFFER DECLINED',
       gate: 'FILING REJECTED',
       spike: 'NO LOCAL CONTEXT',
@@ -203,7 +203,7 @@ export const COPY = {
     } as Record<string, string>,
     /** Full sentence for the aria-live announcement. */
     reason: {
-      delay: 'Red tape. The filing went back to the start.',
+      stamp: 'Setup denied. The paperwork goes back to the start.',
       fire: 'An offer was declined. The hiring cycle restarts.',
       gate: 'Approval refused. The filing is resubmitted.',
       spike: 'No local context, so it was the wrong call.',

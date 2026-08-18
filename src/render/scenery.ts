@@ -44,7 +44,7 @@ export const TILE_MATERIALS: Record<number, TileMaterial> = {
     face: '#15788B', shade: '#0D5666', highlight: '#3AB4CA', mortar: '#053540',
     brickW: 40, brickH: 20, speckle: 0.06, edge: '#57D4E8',
   },
-  // L1 Setup Delays — cracked "red-tape" ground: warm muddy clay, rougher and
+  // L1 Setup Delays — cracked, ink-stained ground: warm muddy clay, rougher and
   // unfinished (earthy, deliberately NOT the reserved value-orange).
   1: {
     face: '#6E4C3A', shade: '#4E3427', highlight: '#8F6448', mortar: '#281812',
@@ -342,14 +342,18 @@ export function drawSceneBackground(
       drawSky(ctx, '#05303a');
       drawSkyline(ctx, 23, '#042A33', '#7FC4D2', t, reduced);
       // Setup delays: stalled paperwork stacks + a slipping clock.
-      drawFloorSign(ctx, W * 0.5, 70, 'SETUP DELAYS');
+      // The stage sign hangs lower here than on every other screen (100 vs 70)
+      // because the DENIED stamps park at the ceiling: at 70 the col-12 stamp
+      // clipped the S off "SETUP DELAYS" every time it was up.
+      drawFloorSign(ctx, W * 0.5, 100, 'SETUP DELAYS');
       drawStalledStacks(ctx, 60, GROUND_TOP);
       drawStalledStacks(ctx, W - 150, GROUND_TOP);
       drawClock(ctx, W * 0.5, 150, t, reduced);
       drawBoard(ctx, W * 0.5 - 40, 210, 80, 56, '#0A3642', '#0E4A57', '#0A2C36'); // permits form
       drawPropLabel(ctx, W * 0.5, 190, 'PERMITS');
-      // Names the shallow sludge you wade through before the badge (cols 6-9).
-      drawPropLabel(ctx, 8 * TILE, GROUND_TOP - 58, 'RED TAPE');
+      // The floor label used to name a sludge wade at col 8. That is now a stamp
+      // column, and the stamps say DENIED loudly enough on their own — a label
+      // under a slamming block is a label nobody reads.
       break;
     }
     case 2: {

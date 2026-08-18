@@ -100,6 +100,25 @@ const FALL: readonly string[] = [
   '...BBB....BBB...',
 ];
 
+/**
+ * Flattened. Drawn only on the life-lost frames after a DENIED stamp lands on
+ * the player: the figure is pressed out sideways into the floor, hair splayed,
+ * blazer spread, shoes squeezed out of both ends. Wider and far shorter than the
+ * other frames, which is why `drawHero` measures the frame it is drawing rather
+ * than assuming the 16×20 grid.
+ */
+const SQUASH: readonly string[] = [
+  '......HHHHHHHHHH......',
+  '....HHhSSSSSSSShHH....',
+  '..HHhSSOSSssSSOSSHH...',
+  '..SSSSSssssssSSSSS....',
+  'jJJLWWWWTTTTWWWWLJJj..',
+  'jJJJWWWWWTTWWWWWJJJj..',
+  '.SPPPPPPPPPPPPPPPPPS..',
+  '.PPPPPPPPPPPPPPPPPPP..',
+  'BBB..PPPPPPPPPPPP..BBB',
+];
+
 export const HERO_GRID_W = maxWidth(IDLE);
 export const HERO_GRID_H = IDLE.length;
 
@@ -110,7 +129,7 @@ export const HERO_GRID_H = IDLE.length;
  */
 export const HERO_IDLE: readonly string[] = IDLE;
 
-export type HeroMotion = 'idle' | 'run' | 'jump' | 'fall';
+export type HeroMotion = 'idle' | 'run' | 'jump' | 'fall' | 'squash';
 
 export interface HeroDrawState {
   motion: HeroMotion;
@@ -123,6 +142,7 @@ export interface HeroDrawState {
 
 /** Choose the frame grid for the current motion state. */
 function heroFrame(state: HeroDrawState): readonly string[] {
+  if (state.motion === 'squash') return SQUASH;
   if (state.motion === 'jump') return JUMP;
   if (state.motion === 'fall') return FALL;
   if (state.motion === 'run' && !state.still) {
@@ -144,8 +164,10 @@ export function drawHero(
   alpha = 1,
 ): void {
   const grid = heroFrame(state);
-  const w = HERO_GRID_W * scale;
-  const h = HERO_GRID_H * scale;
+  // Measured per frame, not from the idle grid: the squash pose is 20×7, so a
+  // fixed 16×20 assumption would draw it off-centre and floating.
+  const w = maxWidth(grid) * scale;
+  const h = grid.length * scale;
   drawPixels(ctx, grid, HERO_PALETTE, centerX - w / 2, feetY - h, {
     scale,
     flip: state.facing === -1,
@@ -186,6 +208,40 @@ const BADGE_PALETTE: Palette = {
 };
 
 export const BADGE_GRID_W = maxWidth(BADGE_GRID);
+
+/**
+ * The ANSR bubble around an ANSR-backed player: a soft orange field with a
+ * pulsing outline. `pulse` is 0..1 and comes from the host's presentation clock,
+ * so this stays a pure function of its arguments.
+ *
+ * Orange is allowed here and nowhere else on the player — the active capability
+ * is exactly what the value accent is for. It is drawn *behind* the figure so the
+ * hero stays the readable thing on screen.
+ */
+export function drawAnsrBubble(
+  ctx: CanvasRenderingContext2D,
+  centerX: number,
+  feetY: number,
+  pulse: number,
+): void {
+  const cy = feetY - 26;
+  const r = 42 + pulse * 3;
+
+  const glow = ctx.createRadialGradient(centerX, cy, r * 0.45, centerX, cy, r);
+  glow.addColorStop(0, 'rgba(255, 84, 0, 0.06)');
+  glow.addColorStop(0.72, `rgba(255, 84, 0, ${0.12 + 0.08 * pulse})`);
+  glow.addColorStop(1, 'rgba(255, 84, 0, 0)');
+  ctx.fillStyle = glow;
+  ctx.beginPath();
+  ctx.arc(centerX, cy, r, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.strokeStyle = `rgba(255, 84, 0, ${0.45 + 0.35 * pulse})`;
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.arc(centerX, cy, r - 2, 0, Math.PI * 2);
+  ctx.stroke();
+}
 
 /** Draw the ANSR badge disc centred at (cx,cy) at the given pixel scale. */
 export function drawBadgeDisc(

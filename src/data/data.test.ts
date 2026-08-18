@@ -69,7 +69,7 @@ describe('copy', () => {
   });
 
   it('blames the environment for every setback cause, never the player', () => {
-    for (const cause of ['delay', 'fire', 'gate', 'spike', 'fall']) {
+    for (const cause of ['stamp', 'fire', 'gate', 'spike', 'fall']) {
       expect(COPY.setback.tag[cause]).toBeTruthy();
       expect(COPY.setback.reason[cause]).toBeTruthy();
       expect(COPY.setback.reason[cause]!.toLowerCase()).not.toContain('you failed');

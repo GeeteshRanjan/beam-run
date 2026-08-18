@@ -44,7 +44,7 @@ import {
   type LogPanelView,
   type SetbackLogEntry,
 } from './setbackLog';
-import { Quicksand } from '../world/Hazards/Quicksand';
+import { Stamps } from '../world/Hazards/Stamps';
 import { Fire } from '../world/Hazards/Fire';
 import { Gates } from '../world/Hazards/Gates';
 import { Spikes } from '../world/Hazards/Spikes';
@@ -327,8 +327,8 @@ export class Simulation {
   private buildHazard(): Hazard | null {
     const d = this._screen.data;
     switch (d.hazard) {
-      case 'quicksand':
-        return new Quicksand(d.quicksand ?? []);
+      case 'stamps':
+        return new Stamps(d.stamps ?? []);
       case 'fire':
         return new Fire(d.fireLanes ?? []);
       case 'gates':
@@ -343,6 +343,19 @@ export class Simulation {
   /** Current hazard (for rendering). */
   get activeHazard(): Hazard | null {
     return this.hazard;
+  }
+
+  /**
+   * The engaged capability makes hazard *contact* harmless on this screen, so the
+   * host may draw the player inside the ANSR bubble.
+   *
+   * Only true where the hazard actually says so (`Hazard.shieldsPlayer`): on the
+   * screens where help means "the obstacles ahead are cleared" rather than "you
+   * cannot be hit", a shield visual would promise protection the rules do not
+   * give.
+   */
+  get shielded(): boolean {
+    return this.powerups.isAssisted && this.hazard?.shieldsPlayer === true;
   }
 
   private enterTitleCard(): void {
@@ -407,9 +420,9 @@ export class Simulation {
   }
 
   /**
-   * Remember solid ground the player is genuinely standing on. Sludge contact
-   * (speed multiplier below 1) is never "safe", so a setback can't drop you back
-   * into the pit you just climbed out of.
+   * Remember solid ground the player is genuinely standing on. Ground a hazard
+   * is dragging on (speed multiplier below 1) is never "safe", so a fall can't
+   * put you back into the thing you just climbed out of.
    */
   private recordSafeSpot(): void {
     if (!this._player.onGround) return;
@@ -457,7 +470,10 @@ export class Simulation {
       months: JOURNEY.SETBACK_MONTHS,
     });
 
-    this.hazard?.reset();
+    // The hazard is deliberately NOT reset here. A retry rebuilds it from
+    // scratch (`loadScreen`), so resetting bought nothing — and it wiped the
+    // pose the host needs to paint the moment of impact on the life-lost frames
+    // (the DENIED stamp holding the player flat under it).
     this.lifeLostT = 0;
 
     this.events.onSetback?.(cause, JOURNEY.SETBACK_MONTHS, this.months, this._lives);
@@ -529,20 +545,12 @@ export class Simulation {
     // Advanced before anything reads a badge position this step.
     this.screenClock += dt;
 
-    // Collidables = static solids + the laid bridge + hazard bodies.
-    const solids: AABB[] = this._screen.solids
-      .concat(this.powerups.extraSolids())
-      .concat(this.hazard ? this.hazard.solids() : []);
+    // Collidables = static solids + any bodies the hazard contributes.
+    const solids: AABB[] = this._screen.solids.concat(
+      this.hazard ? this.hazard.solids() : [],
+    );
     const speedMult = this.hazard ? this.hazard.speedMultAt(this._player) : 1;
-    // Some hazards suppress jumping (deep red-tape sludge). Strip the jump bits
-    // rather than special-casing the Player, so this stays a hazard concern.
-    const effective =
-      this.hazard?.blocksJump?.(this._player) === true
-        ? { ...input, jumpPressed: false, jumpHeld: false }
-        : input;
-    // …and some only weigh jumps down (shallow sludge: laboured hops, not leaps).
-    const jumpMult = this.hazard?.jumpMultAt?.(this._player) ?? 1;
-    this._player.update(dt, effective, solids, speedMult, jumpMult);
+    this._player.update(dt, input, solids, speedMult);
 
     this.tryCollectBadge();
     this.recordSafeSpot();

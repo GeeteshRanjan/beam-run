@@ -45,25 +45,26 @@
       "id": 1,
       "name": "Setup Delays",
       "type": "hazard",
-      "hazard": "quicksand",
+      "hazard": "stamps",
       "meaningTag": "speed-to-setup",
       "monthsBase": 3,
       "spawn": { "gx": 1, "gy": 15 },
       "exit": { "gx": 31 },
       "solids": [
-        { "gx": 0, "gy": 15, "w": 17, "h": 3, "role": "ground" },
-        { "gx": 24, "gy": 15, "w": 8, "h": 3, "role": "ground" }
+        { "gx": 0, "gy": 15, "w": 32, "h": 3, "role": "ground" },
+        { "gx": 15, "gy": 13, "w": 2, "h": 2, "role": "wall-paperwork" }
       ],
-      "quicksand": [
-        { "gx": 6, "gy": 15, "w": 8, "h": 1, "deep": false, "zone": "struggle" },
-        { "gx": 17, "gy": 16, "w": 7, "h": 2, "deep": true, "zone": "relief" }
+      "stamps": [
+        { "gx": 7, "phase": 0.0, "zone": "struggle" },
+        { "gx": 12, "phase": 0.5, "zone": "struggle" },
+        { "gx": 20, "phase": 0.25, "zone": "relief" },
+        { "gx": 25, "phase": 0.75, "zone": "relief" }
       ],
       "badge": {
         "type": "PLACE_TILE",
         "gx": 4,
         "gy": 12,
-        "placesTileAt": { "gx": 18, "gy": 15, "w": 5, "h": 1 },
-        "note": "1Wrk lays a flush bridge over the deep pit: setup solved once, done right. Taken at the top of the screen, so the shallow sludge (drag only, never a setback, 8 tiles wide - more than twice max jump distance, and sludge damps jump strength so it cannot be hopped) is walked with the bridge already waiting. The 7-tile pit beyond exceeds max jump distance, so ANSR is what makes the crossing possible."
+        "note": "1Wrk stands the setup up properly, so the approvals stop coming back DENIED. Taken at the top of the screen, before the first pair of stamps. With it the whole mechanism runs at ASSIST_TIME_SCALE - wide windows you can walk through - and a stamp that touches an ANSR-backed player cannot press: it retracts from where it touched. Without it, being under a stamp when it lands flattens you."
       },
       "copy": { "titleCard": "Setup Delays", "onClear": "Setup accelerated." }
     },

@@ -33,9 +33,12 @@
  *       · the exit / win trigger must be reachable (screen is completable);
  *       · the badge must be reachable — proved against the BOTTOM of its float,
  *         which is the easiest phase to intercept and therefore the honest test
- *         of "can this be taken at all";
- *       · for a PLACE_TILE screen the exit must be reachable ONLY once the
- *         placed bridge is added (proving ANSR is the real solve).
+ *         of "can this be taken at all".
+ *
+ *     There used to be a fourth rule here: on a PLACE_TILE screen the exit had to
+ *     be reachable ONLY with the bridge that badge laid. Setup Delays was the one
+ *     screen it applied to, and its pit has been replaced by the DENIED stamps,
+ *     so no badge places geometry any more and the rule had nothing to guard.
  *
  *     The search ignores hazards, which is exactly the "no setbacks" assist;
  *     slow mode only rescales time and cannot change geometry, so a reachable
@@ -56,7 +59,7 @@ const DT = LOOP.FIXED_DT;
 const { WIDTH, HEIGHT } = RESOLUTION;
 
 const HAZARD_FIELDS: Record<string, keyof ScreenData> = {
-  quicksand: 'quicksand',
+  stamps: 'stamps',
   fire: 'fireLanes',
   gates: 'gates',
   spikes: 'spikeColumns',
@@ -113,7 +116,7 @@ function validateStructure(s: ScreenData): Problem[] {
 
 /** Every hazard instance's grid column, with its declared zone (if any). */
 function hazardInstances(s: ScreenData): { gx: number; zone?: string }[] {
-  if (s.hazard === 'quicksand') return (s.quicksand ?? []).map((q) => ({ gx: q.gx, zone: q.zone }));
+  if (s.hazard === 'stamps') return (s.stamps ?? []).map((p) => ({ gx: p.gx, zone: p.zone }));
   if (s.hazard === 'fire') return (s.fireLanes ?? []).map((l) => ({ gx: l.gx, zone: l.zone }));
   if (s.hazard === 'gates') return (s.gates ?? []).map((g) => ({ gx: g.gx, zone: g.zone }));
   if (s.hazard === 'spikes') return (s.spikeColumns ?? []).map((c) => ({ gx: c.gx, zone: c.zone }));
@@ -213,14 +216,6 @@ function screenSolids(s: ScreenData): AABB[] {
     out.push({ x: r.gx * T, y: r.gy * T, w: r.w * T, h: r.h * T });
   }
   return out;
-}
-
-/** The bridge a PLACE_TILE badge lays down (or null). */
-function bridgeTile(s: ScreenData): AABB | null {
-  const b = s.badge;
-  if (!b || b.type !== 'PLACE_TILE' || !b.placesTileAt) return null;
-  const t = b.placesTileAt;
-  return { x: t.gx * T, y: t.gy * T, w: t.w * T, h: t.h * T };
 }
 
 /**
@@ -335,17 +330,7 @@ function validatePhysics(s: ScreenData): Problem[] {
     }
   }
 
-  const bridge = bridgeTile(s);
-  if (bridge) {
-    // Without the bridge the exit must be UNreachable (ANSR is the real solve);
-    // with the bridge it must become reachable.
-    if (reachesTarget(base)) {
-      push('PLACE_TILE screen is completable without the bridge (ANSR not required)');
-    }
-    if (!reachesTarget([...base, bridge])) {
-      push('PLACE_TILE screen is NOT completable even with the placed bridge');
-    }
-  } else if (!reachesTarget(base)) {
+  if (!reachesTarget(base)) {
     push('exit / win trigger is not reachable from spawn (screen not completable)');
   }
 
