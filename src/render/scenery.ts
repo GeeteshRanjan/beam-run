@@ -13,8 +13,8 @@
  *      entering, plus stage-specific silhouettes: reception desk, stalled
  *      paperwork, hiring crowd, regulation wall, a map of India missing local
  *      knowledge, and the Tech Park arrival) rendered in chunky pixels, kept
- *      behind gameplay but legible: signage uses solid dark plaques because the
- *      struggle half of every screen is dimmed by the zone read in Game.ts.
+ *      behind gameplay but legible: signage uses solid dark plaques so it holds
+ *      up against a busy backdrop at any brightness.
  *
  * Every label here is deliberate. Reception names its three easy hops (business
  * case, board approval, budget) so the tutorial is also the first story beat; the
@@ -182,10 +182,9 @@ function drawBoard(
 }
 
 /**
- * A background "floor directory" sign that names the stage's problem, read as
- * an office building sign. Sits behind gameplay but stays readable: the struggle
- * side of each screen is dimmed by the zone read, so the plaque needs a solid
- * dark fill rather than a faint wash.
+ * A background "floor directory" sign that names the stage's problem, read as an
+ * office building sign. Sits behind gameplay but stays readable, which is why the
+ * plaque is a solid dark fill rather than a faint wash.
  */
 function drawFloorSign(ctx: CanvasRenderingContext2D, cx: number, midY: number, text: string): void {
   drawLabelPlaque(ctx, text, cx, midY, {

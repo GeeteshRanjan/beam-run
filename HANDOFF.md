@@ -22,7 +22,7 @@ mobile adaptivity, an 8-bit visual conversion of every remaining web-native
 surface, the finale rebuild, and a custom 404 page.
 
 - **Tests:** 284 passing (36 files)
-- **Bundle:** ESM 44.54 KB / IIFE 44.80 KB gzip · budget gate **87.2 KB of 90 KB**
+- **Bundle:** ESM 44.49 KB / IIFE 44.75 KB gzip · budget gate **87.1 KB of 90 KB**
 - **Validator:** green on all 6 screens (structural + physics-aware + meaning layers)
 - **Next:** no queued task — see §7 for what is open. The owner is specifying the
   powerup *effects* one screen at a time; screen 1 is done (§4.5), so expect one of
@@ -118,14 +118,12 @@ both revisions and still describe a no-lives model; `analytics-events.json` matc
    validator fails the build if any obstacle sits at or before the badge, or if none sit beyond
    it. Never label or offer a "do it yourself" route — self-build is the actual competitor.
 5. **Four distinct verbs, not one reskinned shield.** `PLACE_TILE` slows the DENIED stamps to a
-   walk-through pace *and* shields the player, so a stamp cannot press them at all (1Wrk —
-   owner-specified, the first of the four effects to be nailed down) · `EXTINGUISH` puts hiring
-   lanes out for good (Talent500) · `CLEAR_PATH` lifts approval barriers for good (GCC-BOT) ·
-   `FORESIGHT` shows landing spots and stops setbacks (500Leaders). `SAFE_PASSAGE` is the
-   non-capability badge on Reception and the Tech Park (the two screens with nothing to defend
-   against); its effect is deliberately unassigned. **Help never expires** — a 5-second shield
-   would say ANSR helps briefly then leaves. No badge places geometry any more: `PLACE_TILE`
-   used to lay a bridge over screen 1's pit, and that pit is gone.
+   walk-through pace *and* shields the player (1Wrk — owner-specified, the first effect nailed down)
+   · `EXTINGUISH` puts hiring lanes out for good (Talent500) · `CLEAR_PATH` lifts approval barriers
+   for good (GCC-BOT) · `FORESIGHT` shows landing spots and stops setbacks (500Leaders).
+   `SAFE_PASSAGE` is the non-capability badge on Reception and the Tech Park; its effect is
+   deliberately unassigned. **Help never expires** — a 5-second shield would say ANSR helps briefly
+   then leaves. No badge places geometry any more (`PLACE_TILE`'s bridge went with screen 1's pit).
 6. **No score collectibles.** The Growth Points are gone (owner call): a second score competed
    with the only figure the game argues about, and picking one up said nothing about ANSR.
 7. **The receipt is the conversion surface.** The win screen shows the run's months, two
@@ -274,6 +272,11 @@ it, capabilities unique, months sum to the benchmark) · `check-budget.mjs` + `b
   the next delay.
 - Orange stays off the delay log (a ledger of avoidable months is the opposite of value); only the
   running total is warmed.
+- **"Help is active" is signalled on the player, not on the world.** The ANSR bubble and the HUD chip
+  say it; a cue painted along the level's surface does not. `drawZoneRead` used to cap every solid
+  with a cyan edge on pickup and it read as a defect in the floor, because a full-stage stripe is
+  indistinguishable from a rendering bug. (The badge's float rail is cyan too, but it is drawn only
+  *before* pickup, and it shows the line the pickup travels — do not confuse the two.)
 - **Every hazard telegraphs, and the tell has to be where the player is looking.** Screen 1's
   stamps slam in 0.14s; with no wind-up a probe of 20 reactive policies could not clear the stage
   at all — unfair, not hard. `HAZARDS.STAMPS.WARN_TIME` fixed it, and where a hazard *rests* decides
@@ -326,9 +329,8 @@ it, capabilities unique, months sum to the benchmark) · `check-budget.mjs` + `b
    crop. A bigger portrait frame means either a rotate-to-landscape hint or a portrait-specific
    camera — both product decisions.
 8. Brand typography: the lockup's "ANSRcade" and the 404 body copy are still web type by choice.
-9. The prose specs (`01_Game_Design_Document.md` §2/§6/§7, `07_Analytics_and_Lead_Handoff.md`)
-   still describe the pre-lives model and now disagree with the build. §4 above and
-   `analytics-events.json` are current; the prose docs have not been rewritten.
+9. The prose specs (doc 01 §2/§6/§7, doc 07) still describe the pre-lives model and the quicksand
+   screen, so they now disagree with the build. §4 and `analytics-events.json` are current.
 
 ---
 
@@ -356,7 +358,9 @@ must already be in §6.
   as a real desk stamp, parked just above mid-frame with **no rail**, so the wind-up cock-back is
   visible on the object and the floor impressions carry the column read. The player's bubble was
   rebuilt from 4px cells (haze band, dashed lit rim, sparks) — a gradient and an `arc()` stroke were
-  the only non-8-bit things on screen. 284 tests; gate **87.2 KB of 90**.
+  the only non-8-bit things on screen. Then dropped the cyan floor cap that `drawZoneRead` painted
+  on pickup (a blue stripe along the whole stage); the bubble and the HUD chip carry that read now.
+  284 tests; gate **87.1 KB of 90**.
 - **Setup Delays rebuilt: DENIED stamps replace the red-tape sludge (owner call, and the first
   per-stage badge *effect* to be specified).** Four stamps slam down in two half-cycle-offset pairs
   either side of a small wall; 1Wrk drops the mechanism to 26% speed and shields the player, so a

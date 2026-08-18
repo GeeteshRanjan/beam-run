@@ -627,7 +627,7 @@ export class Game {
       for (const s of screen.solids) drawTileRect(ctx, screen.id, s.x, s.y, s.w, s.h);
     }
 
-    this.drawZoneRead(ctx);
+    this.drawEngagedLabel(ctx);
     this.drawHazards(ctx);
     this.drawBadge(ctx);
 
@@ -640,20 +640,24 @@ export class Game {
   }
 
   /**
-   * The "ANSR is with you" read: once the badge is taken, the ground from the
-   * badge column onwards is capped with a bright walkable edge and labelled.
+   * The in-world "ANSR is with you" read once the badge is taken: one label, in
+   * the value orange, anchored at the badge column.
    *
-   * This replaced a gateway-and-dimming treatment built for the old layout, where
-   * the badge sat mid-screen and split it into a dimmed struggle half and a lit
-   * relief half. The badge is now taken *before* the obstacles, so there is no
-   * "before" half left to dim — the whole screen is the after. Keeping the
-   * gateway would have drawn a triumphal arch three tiles from the spawn and
-   * dimmed almost nothing.
+   * It used to also cap the top edge of every solid from that column onwards with
+   * a bright cyan walkable edge. That has gone (owner call): it painted a blue
+   * line along the floor the moment the badge was picked up, which read as a
+   * surface defect rather than as value. Everything it was trying to say is now
+   * said by things attached to the player instead — the ANSR bubble around him
+   * and the engaged-capability chip in the HUD.
    *
-   * The cue is still a plain value step at the floor line rather than a colour
-   * swap, and it is skipped on the finale, which paints its own plaza.
+   * Before that it was a gateway-and-dimming treatment, built for the old layout
+   * where the badge sat mid-screen and split it into a dimmed struggle half and a
+   * lit relief half. The badge is taken *before* the obstacles now, so there is no
+   * "before" half left to dim.
+   *
+   * Skipped on the finale, which paints its own plaza.
    */
-  private drawZoneRead(ctx: CanvasRenderingContext2D): void {
+  private drawEngagedLabel(ctx: CanvasRenderingContext2D): void {
     const screen = this.sim.screen;
     const badge = screen.data.badge;
     if (!badge || screen.id === 5) return;
@@ -662,16 +666,6 @@ export class Game {
     const groundY = 15 * T;
     const fromX = badge.gx * T + T / 2;
 
-    // Cap each solid's own top edge, not one band across the screen: a single
-    // full-width rect drew a bright line hanging in mid-air wherever the ground
-    // was broken. Per-solid also means platforms and walls get the edge, which is
-    // right — everything you can stand on from here is ANSR-backed.
-    ctx.fillStyle = 'rgba(92, 226, 244, 0.85)';
-    for (const s of screen.solids) {
-      const x = Math.max(fromX, s.x);
-      if (s.x + s.w <= x) continue;
-      ctx.fillRect(x, s.y - 3, s.x + s.w - x, 3);
-    }
     drawText(ctx, 'ANSR ENGAGED', fromX + 40, groundY - 124, {
       scale: 2,
       color: BRAND.ORANGE,
