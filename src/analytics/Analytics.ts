@@ -114,9 +114,30 @@ export class Analytics {
   badgeCollected(screenId: number, badgeType: string): void {
     this.track('badge_collected', { screen_id: screenId, badge_type: badgeType });
   }
-  /** A hazard cost the player time. Diagnostic (difficulty balancing), not an intent signal. */
-  setbackIncurred(screenId: number, cause: string, totalMonths: number): void {
-    this.track('setback_incurred', { screen_id: screenId, cause, months: totalMonths });
+  /**
+   * An obstacle stopped the player: months booked, one life spent. Diagnostic
+   * (difficulty balancing), not an intent signal — `lives_left` is what tells us
+   * whether a stage is ending attempts rather than merely costing time.
+   */
+  setbackIncurred(
+    screenId: number,
+    cause: string,
+    totalMonths: number,
+    livesLeft: number,
+  ): void {
+    this.track('setback_incurred', {
+      screen_id: screenId,
+      cause,
+      months: totalMonths,
+      lives_left: livesLeft,
+    });
+  }
+  /**
+   * The attempt ran out of lives. Diagnostic, and the counterpart to
+   * `game_completed`: the two together give the completion rate per stage.
+   */
+  gameOver(screenId: number, months: number, delays: number): void {
+    this.track('game_over', { screen_id: screenId, months, total_delays: delays });
   }
   /** Mid-run exit: the summary receipt was shown instead of a game-over wall. */
   runSummary(reachedScreen: number, months: number, durationS: number): void {
@@ -130,14 +151,12 @@ export class Analytics {
     months: number,
     durationS: number,
     setbacks: number,
-    quickWins: number,
     capabilities: number,
   ): void {
     this.track('game_completed', {
       months,
       duration_s: round2(durationS),
       total_setbacks: setbacks,
-      quick_wins: quickWins,
       capabilities_engaged: capabilities,
     });
   }

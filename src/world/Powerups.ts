@@ -1,10 +1,12 @@
 /**
  * Powerups — the ANSR "badge" system.
  *
- * One badge per hazard screen, collected mid-screen, and it does NOT expire. A
- * five-second shield would say "ANSR helps you briefly and then leaves"; help
- * lasts for the rest of the screen. It is cleared only when the screen is
- * re-entered.
+ * One badge per screen, anchored early on the path and floating vertically (see
+ * `world/badgeFloat.ts`), and it does NOT expire. A five-second shield would say
+ * "ANSR helps you briefly and then leaves"; help lasts for the rest of the
+ * screen. It is cleared only when the screen is re-entered — including the
+ * re-entry that follows a lost life, so the badge is always there to be taken
+ * again on the retry.
  *
  * Each badge is a structurally different verb, mirroring a real service line
  * (see `CAPABILITIES` in data/copy.ts):
@@ -72,14 +74,20 @@ export class Powerups {
     return this.placedTile ? [this.placedTile] : [];
   }
 
-  /** HUD view — a persistent chip, no countdown bar (help does not expire). */
+  /**
+   * HUD view — a persistent chip, no countdown bar (help does not expire).
+   *
+   * `SAFE_PASSAGE` (the badge on the two screens with nothing to defend against)
+   * has no entry in `CAPABILITIES`, so it has no product name; the chip falls
+   * back to the brand rather than rendering an empty plaque.
+   */
   hudModel(): ActivePowerView | null {
     if (!this.activeType) return null;
     const cap = capabilityFor(this.activeType);
     return {
       type: this.activeType,
       name: COPY.powers[this.activeType] ?? this.activeType,
-      product: cap?.product ?? '',
+      product: cap?.product ?? COPY.meta.name,
     };
   }
 }

@@ -4,12 +4,11 @@
  * Builds the stage (canvas + DOM UI layer), owns the Renderer, Input, Loop and
  * (dev) DebugOverlay, and presents the Simulation each frame with decoupled
  * interpolation. HUD and overlays are real DOM for accessibility; the canvas
- * only draws the world and the death fade. Pause is a host-level concern (it
- * halts stepping); all gameplay truth stays in `Simulation`.
+ * only draws the world. Pause is a host-level concern (it halts stepping); all
+ * gameplay truth stays in `Simulation`.
  */
-import { RESOLUTION, BRAND, LOOP, ASSIST, PLAYER } from '../data/tuning.config';
+import { RESOLUTION, BRAND, LOOP, ASSIST, PLAYER, POWERUPS } from '../data/tuning.config';
 import { COPY, capabilityFor } from '../data/copy';
-import { TOTAL_QUICK_WINS } from '../data/levels';
 import { Loop } from './Loop';
 import { Renderer } from './Renderer';
 import { Input, makeInput, type InputState } from './Input';
@@ -26,7 +25,8 @@ import { Effects } from './Effects';
 import { finaleLayout } from './finaleScene';
 import { drawFinaleScene } from '../render/finale';
 import { AudioEngine } from '../audio/AudioEngine';
-import { drawHero, drawGrowthPoint, drawBadgeDisc, type HeroMotion } from '../render/sprites';
+import { drawHero, drawBadgeDisc, type HeroMotion } from '../render/sprites';
+import { badgeCenter } from '../world/badgeFloat';
 import { drawTileRect, drawSceneBackground } from '../render/scenery';
 import { drawTitleScene } from '../render/titleScene';
 import { pxRect, hash2 } from '../render/PixelArt';
@@ -38,9 +38,16 @@ import { Analytics, detectDevice } from '../analytics/Analytics';
 import { buildNavigatorPayload, buildNavigatorUrl, type CtaContext as NavCtaContext } from '../analytics/navigator';
 import { getSessionId, getMutePref, setMutePref } from '../analytics/Save';
 
-/** The short ANSR product tag shown on a badge (single source: CAPABILITIES). */
+/**
+ * The short ANSR product tag shown on a badge (single source: CAPABILITIES).
+ *
+ * `SAFE_PASSAGE` — the badge on the two screens with nothing to defend against —
+ * has no capability and so no product tag. It falls back to the brand rather
+ * than to the raw badge type, which would draw as "SAFE PASSAGE" (the 5×7 font
+ * has no underscore) and name a product that does not exist.
+ */
 function solutionTag(badge: string): string {
-  return capabilityFor(badge)?.tag ?? badge;
+  return capabilityFor(badge)?.tag ?? 'ANSR';
 }
 
 /** A short-lived floating label (value gained / capability unlocked). */
@@ -83,7 +90,12 @@ export class Game {
   readonly options: GameOptions;
 
   private readonly loop: Loop;
-  private readonly debug = new DebugOverlay();
+  /**
+   * Dev-only. Constructed lazily behind `__DEV__` so the class is genuinely
+   * dropped from production: every *use* of it was already gated, but the eager
+   * field initialiser kept it reachable, so it shipped to every host.
+   */
+  private readonly debug = __DEV__ ? new DebugOverlay() : null;
   private readonly effects: Effects;
   private readonly audio = new AudioEngine();
   private readonly assist: AssistController;
@@ -161,6 +173,7 @@ export class Game {
       onSkip: () => this.handleSkip(),
       onResume: () => this.closeSummaryAndResume(),
       onRestart: () => this.handleRestart(),
+      onContinue: () => this.sim.continueAfterLifeLost(),
       onCta: (ctx, topic) => this.handleCta(ctx, topic),
       onToggleMute: () => {
         this.audio.toggleMuteAll();
@@ -185,50 +198,46 @@ export class Game {
         this.audio.playSfx('screenClear');
         this.analytics.screenCleared(id, timeS, setbacks, this.sim.months);
       },
-      onSetback: (cause, monthsAdded, totalMonths) => {
-        // A delay, not a death: a short shake, one non-strobe flash, brief hit-stop.
+      onSetback: (cause, monthsAdded, totalMonths, livesLeft) => {
+        // A short shake, one non-strobe flash, brief hit-stop — then the sim has
+        // already moved to LIFE_LOST, which is what actually reports the cost.
+        // No in-world popups here any more: the overlay lands on the next frame
+        // and would immediately cover them.
         this.effects.addShake();
         this.effects.addFlash();
         this.effects.addHitStop();
         this.audio.playSfx('setback');
-        this.analytics.setbackIncurred(this.sim.screenId, cause, totalMonths);
+        this.analytics.setbackIncurred(this.sim.screenId, cause, totalMonths, livesLeft);
         const reason = COPY.setback.reason[cause] ?? cause;
-        this.hud.announce(COPY.a11y.setback(reason, monthsAdded));
-        // The popup blames the system, and it is NOT orange — orange means value.
-        const p = this.sim.player.box;
-        const cx = p.x + p.w / 2;
-        const cy = p.y;
-        this.spawnPopup(cx, cy - 30, COPY.setback.tagMonths(monthsAdded), BRAND.WHITE, 3);
-        this.spawnPopup(cx, cy - 8, COPY.setback.tag[cause] ?? '', BRAND.LIGHT_GREY, 2);
+        this.hud.announce(
+          `${COPY.a11y.setback(reason, monthsAdded)} ${COPY.a11y.livesLeft(livesLeft)}`,
+        );
       },
-      onQuickWin: (id) => {
-        const pt = this.sim.screen.points.find((p) => p.id === id);
-        if (pt) {
-          this.effects.emitBurst(pt.x, pt.y, BRAND.LIGHT_GREY, 10, 140);
-          this.spawnPopup(pt.x, pt.y - 16, 'QUICK WIN', '#9FE6C4', 2);
-        }
-        this.audio.playSfx('pickup');
+      onOutOfLives: (screenId, months, delays) => {
+        this.audio.playSfx('setback');
+        this.analytics.gameOver(screenId, months, delays);
+        this.analytics.ctaShown('summary');
+        this.hud.announce(COPY.a11y.outOfLives(months, delays));
       },
       onBadgeCollected: (id, type) => {
         const b = this.sim.screen.data.badge;
-        if (b) {
-          const T = RESOLUTION.TILE;
+        // The badge is mid-float, so the burst has to come from where it actually
+        // was — its anchor cell is only where it started.
+        const c = b ? badgeCenter(b, this.sim.clock) : null;
+        if (c) {
           // Orange = the "value" accent, reserved for the badge burst.
-          this.effects.emitBurst(b.gx * T + T / 2, b.gy * T + T / 2, BRAND.ORANGE, 16, 190);
+          this.effects.emitBurst(c.x, c.y, BRAND.ORANGE, 16, 190);
         }
         this.audio.playSfx('badge');
         this.analytics.badgeCollected(id, type);
         const cap = capabilityFor(type);
         this.hud.announce(
-          `${COPY.badgeToast.prefix}: ${cap?.product ?? type}. ${cap?.effect ?? ''}`,
+          `${COPY.badgeToast.prefix}: ${cap?.product ?? COPY.meta.name}. ${cap?.effect ?? ''}`,
         );
         // Floating "ANSR ENGAGED" + the product name, in the value orange.
-        if (b) {
-          const T = RESOLUTION.TILE;
-          const cx = b.gx * T + T / 2;
-          const cy = b.gy * T + T / 2;
-          this.spawnPopup(cx, cy - 24, 'ANSR ENGAGED', BRAND.ORANGE, 2);
-          this.spawnPopup(cx, cy - 8, solutionTag(type), '#CFE6EC', 2);
+        if (c) {
+          this.spawnPopup(c.x, c.y - 24, 'ANSR ENGAGED', BRAND.ORANGE, 2);
+          this.spawnPopup(c.x, c.y - 8, solutionTag(type), '#CFE6EC', 2);
         }
       },
     });
@@ -301,7 +310,7 @@ export class Game {
     else if (!this.destroyed) this.loop.start();
   };
   private readonly onDebugKey = (e: KeyboardEvent): void => {
-    if (e.code === 'Backquote') this.debug.toggle();
+    if (e.code === 'Backquote') this.debug?.toggle();
   };
 
   private bindWindowEvents(): void {
@@ -336,12 +345,14 @@ export class Game {
         r.months,
         this.now() - this.runStartS,
         r.setbacks,
-        r.quickWins,
         r.engaged.length,
       );
       this.analytics.ctaShown('win');
       this.hud.announce(COPY.a11y.won(r.months));
     }
+    // A fresh attempt after running out of lives is a new run for the funnel:
+    // without this, only the first attempt of a session was ever counted.
+    if (to === 'TITLE_CARD' && from === 'LIFE_LOST') this.runStartS = this.now();
     if (to === 'PLAYING') this.setPaused(false);
     this.syncUI();
   }
@@ -414,11 +425,16 @@ export class Game {
       return;
     }
     const url = buildNavigatorUrl(target, payload);
-    if (!__DEV__ && typeof window !== 'undefined') {
-      window.location.href = url;
-    } else if (__DEV__) {
+    if (__DEV__) {
       // eslint-disable-next-line no-console
       console.info('[BeamRun] CTA →', url);
+    }
+    // Always navigate. This used to be gated on production, which meant the two
+    // Navigator routes (title-screen skip, receipt capability rows) pressed but
+    // went nowhere on the dev server — indistinguishable from a broken button,
+    // and it made the custom 404 screen unreachable while developing.
+    if (typeof window !== 'undefined') {
+      window.location.href = url;
     }
   }
 
@@ -478,11 +494,11 @@ export class Game {
     if (__DEV__) {
       const dpr = this.renderer.toDeviceSpace();
       const p = this.sim.player;
-      this.debug.render(ctx, dpr, [
+      this.debug?.render(ctx, dpr, [
         `state: ${state}${this.paused ? ' (paused)' : ''}`,
         `fps: ${this.loop.fps}  steps: ${this.loop.lastSteps}`,
         `screen: ${this.sim.screenId} ${this.sim.screen.name}`,
-        `months: ${this.sim.months}  setbacks: ${this.sim.setbacks}  wins: ${this.sim.quickWins}`,
+        `months: ${this.sim.months}  delays: ${this.sim.setbacks}  lives: ${this.sim.lives}/${this.sim.livesTotal}`,
         `assisted: ${this.sim.powerups.isAssisted}  autorun: ${this.input.isAutoRun}`,
         `pos: ${p.box.x.toFixed(0)},${p.box.y.toFixed(0)} ground:${p.onGround}`,
         '` toggles this overlay',
@@ -521,6 +537,10 @@ export class Game {
     else if (this.paused) overlay = 'pause';
     else if (state === 'START' || state === 'BOOT') overlay = 'start';
     else if (state === 'TITLE_CARD') overlay = 'titlecard';
+    // The life-lost screen outranks nothing and is outranked by pause and the
+    // mid-run receipt: both are things the player asked for, and neither loses
+    // the delay — the sim stays in LIFE_LOST until it is acknowledged.
+    else if (state === 'LIFE_LOST') overlay = 'lifelost';
     else if (state === 'WIN') overlay = 'win';
 
     // The assist dialog sits above everything; hide the base overlay behind it.
@@ -529,6 +549,7 @@ export class Game {
     this.overlays.show(overlay, {
       levelLabel: this.sim.screenLabel,
       receipt: this.sim.receipt,
+      lifeLost: this.sim.lifeLost ?? undefined,
     });
 
     // On-screen touch controls: only while actively playing on a touch device.
@@ -545,7 +566,9 @@ export class Game {
       !this.summaryOpen &&
       (state === 'PLAYING' || state === 'TITLE_CARD');
     this.hud.setVisible(hudVisible);
-    if (hudVisible) {
+    // The model is fed even while hidden, so the plaques are already correct
+    // (lives spent, log grown) the instant the next title card puts them back.
+    {
       const power = this.sim.activePower;
       this.hud.update({
         // The plaque gets the place name, not the title card's framing line
@@ -554,8 +577,9 @@ export class Game {
         // shows the full line on entry.
         levelLabel: this.sim.screen.name,
         months: this.sim.months,
-        quickWins: this.sim.quickWins,
-        totalQuickWins: TOTAL_QUICK_WINS,
+        lives: this.sim.lives,
+        livesTotal: this.sim.livesTotal,
+        log: this.sim.logPanel,
         power: power ? { name: power.name, product: power.product } : null,
       });
     }
@@ -606,23 +630,6 @@ export class Game {
     this.drawPlacedTile(ctx);
     this.drawBadge(ctx);
 
-    for (const pt of screen.points) {
-      if (pt.collected) continue;
-      const bob = this.reducedMotion ? 0 : Math.sin(this.now() * 3 + pt.x) * 3;
-      // A faint mint glow lifts the pickup off whatever material is behind it —
-      // light, not a plate (the sprite carries its own dark outline). Kept low
-      // and tight: at 0.30 over 46px it read as a light source rather than a
-      // collectible. Static — the glow never pulses, it just sits there.
-      const halo = ctx.createRadialGradient(pt.x, pt.y + bob, 0, pt.x, pt.y + bob, 34);
-      halo.addColorStop(0, 'rgba(127, 217, 174, 0.16)');
-      halo.addColorStop(1, 'rgba(127, 217, 174, 0)');
-      ctx.fillStyle = halo;
-      ctx.beginPath();
-      ctx.arc(pt.x, pt.y + bob, 34, 0, Math.PI * 2);
-      ctx.fill();
-      drawGrowthPoint(ctx, pt.x, pt.y + bob, 3);
-    }
-
     const p = this.sim.player;
     const cx = lerp(p.prevX, p.box.x, alpha) + p.box.w / 2;
     const feetY = lerp(p.prevY, p.box.y, alpha) + p.box.h;
@@ -632,45 +639,51 @@ export class Game {
   }
 
   /**
-   * The struggle/relief read: a gateway at the badge column marks where ANSR
-   * comes in, and once engaged the ground beyond it brightens. This is what lets
-   * a player *see* the before/after rather than just feel it — a plain value
-   * step at the floor line, no colour-only cue.
+   * The "ANSR is with you" read: once the badge is taken, the ground from the
+   * badge column onwards is capped with a bright walkable edge and labelled.
+   *
+   * This replaced a gateway-and-dimming treatment built for the old layout, where
+   * the badge sat mid-screen and split it into a dimmed struggle half and a lit
+   * relief half. The badge is now taken *before* the obstacles, so there is no
+   * "before" half left to dim — the whole screen is the after. Keeping the
+   * gateway would have drawn a triumphal arch three tiles from the spawn and
+   * dimmed almost nothing.
+   *
+   * The cue is still a plain value step at the floor line rather than a colour
+   * swap, and it is skipped on the finale, which paints its own plaza.
    */
   private drawZoneRead(ctx: CanvasRenderingContext2D): void {
     const screen = this.sim.screen;
     const badge = screen.data.badge;
-    if (!badge) return;
+    if (!badge || screen.id === 5) return;
+    if (!this.sim.powerups.isAssisted) return;
     const T = RESOLUTION.TILE;
     const groundY = 15 * T;
-    const gateX = badge.gx * T + T / 2;
-    const engaged = this.sim.powerups.isAssisted;
+    const fromX = badge.gx * T + T / 2;
 
-    // Dim the struggle side very slightly so the relief side reads as brighter.
-    ctx.fillStyle = 'rgba(0, 14, 20, 0.22)';
-    ctx.fillRect(0, 0, gateX, groundY);
-
-    // Gateway posts flanking the badge column.
-    const postColor = engaged ? BRAND.ORANGE : 'rgba(159, 216, 228, 0.55)';
-    for (const side of [-1, 1]) {
-      const x = gateX + side * (T * 0.75);
-      pxRect(ctx, postColor, x - 3, groundY - 96, 6, 96, 3);
+    // Cap each solid's own top edge, not one band across the screen: a single
+    // full-width rect drew a bright line hanging in mid-air across screen 1's
+    // pit. Per-solid also means the platforms get the edge, which is right —
+    // everything you can stand on from here is ANSR-backed.
+    ctx.fillStyle = 'rgba(92, 226, 244, 0.85)';
+    for (const s of screen.solids) {
+      const x = Math.max(fromX, s.x);
+      if (s.x + s.w <= x) continue;
+      ctx.fillRect(x, s.y - 3, s.x + s.w - x, 3);
     }
-    // Lintel across the top of the gateway.
-    pxRect(ctx, postColor, gateX - T * 0.75 - 3, groundY - 102, T * 1.5 + 6, 6, 3);
-
-    // Once engaged, cap the relief-side ground with a bright walkable edge.
-    if (engaged) {
-      ctx.fillStyle = 'rgba(92, 226, 244, 0.85)';
-      ctx.fillRect(gateX, groundY - 3, RESOLUTION.WIDTH - gateX, 3);
-      drawText(ctx, 'ANSR ENGAGED', gateX, groundY - 124, {
-        scale: 2,
-        color: BRAND.ORANGE,
-        align: 'center',
-        outline: 'rgba(0,20,26,0.9)',
-        alpha: 0.9,
-      });
+    // Also cap the bridge ANSR just laid, so the relief reads as continuous.
+    for (const s of this.sim.powerups.extraSolids()) {
+      const x = Math.max(fromX, s.x);
+      if (s.x + s.w <= x) continue;
+      ctx.fillRect(x, s.y - 3, s.x + s.w - x, 3);
     }
+    drawText(ctx, 'ANSR ENGAGED', fromX + 40, groundY - 124, {
+      scale: 2,
+      color: BRAND.ORANGE,
+      align: 'left',
+      outline: 'rgba(0,20,26,0.9)',
+      alpha: 0.9,
+    });
   }
 
   /** Draw the human hero, choosing a pose from the sim's motion state. */
@@ -1018,14 +1031,33 @@ export class Game {
     }
   }
 
+  /**
+   * The badge, drawn wherever the simulation currently says it is.
+   *
+   * The position comes from `badgeCenter` with the *simulation* clock, not from
+   * the wall clock and not from a render-only bob: the hitbox travels with the
+   * sprite, so any second opinion about where the badge is would be a pickup you
+   * can see but not collect. For the same reason the float is not frozen under
+   * `prefers-reduced-motion` — that would move the collision box. The glow and
+   * the label are still juice and still honour the preference.
+   *
+   * A faint trail marks the vertical line it travels, so the motion reads as a
+   * path to intercept rather than as a wobble.
+   */
   private drawBadge(ctx: CanvasRenderingContext2D): void {
     const badge = this.sim.screen.data.badge;
     if (!badge || this.sim.powerups.collected) return;
-    const T = RESOLUTION.TILE;
-    const bob = this.reducedMotion ? 0 : Math.sin(this.now() * 3) * 4;
-    const cx = badge.gx * T + T / 2;
-    const cy = badge.gy * T + T / 2 + bob;
+    const c = badgeCenter(badge, this.sim.clock);
+    const cx = c.x;
+    const cy = c.y;
     const r = 20;
+
+    // The rail: the straight line the badge floats along, so it is obvious the
+    // pickup will come back down to meet you.
+    const lane = POWERUPS.FLOAT_AMPLITUDE;
+    const anchorY = badge.gy * RESOLUTION.TILE + RESOLUTION.TILE / 2;
+    pxRect(ctx, 'rgba(92, 226, 244, 0.16)', cx - 1.5, anchorY - lane, 3, lane * 2, 3);
+
     // Gentle teal glow (orange is reserved for the active power, not the pickup).
     const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, r * 1.8);
     glow.addColorStop(0, 'rgba(0,84,101,0.9)');

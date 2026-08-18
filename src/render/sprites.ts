@@ -153,69 +153,14 @@ export function drawHero(
   });
 }
 
-// --- Growth Point: a rising bar-chart with an up-arrow (company growth) ------
-
-const POINT_GRID: readonly string[] = [
-  '........A.......',
-  '.......AAA......',
-  '......A.A.A.....',
-  '........A....GG.',
-  '........A..GGGG.',
-  '.....G..A.GGGGG.',
-  '...GGG.GGGGGGGG.',
-  '.GGGGG.GGGGGGGG.',
-  'aaaaaaaaaaaaaaaa',
-];
-
 /*
- * Muted a step from the first "make it pop" pass, which came out shouting: the
- * separation is doing its work through the dark outline below, so the fill can
- * sit a shade under pure white and the mint can drop out of neon without the
- * pickup sinking back into the ground materials it has to read against.
+ * The Growth Point sprite used to live here — a rising bar chart with an
+ * up-arrow, drawn for the collectibles scattered across every screen. Those
+ * collectibles are gone (owner call): they were a second score competing with
+ * the only figure the game is arguing about, and picking one up said nothing
+ * about ANSR. The badge below is now the one thing on a screen worth reaching
+ * for, and it moves, so reaching for it is a decision.
  */
-const POINT_PALETTE: Palette = {
-  G: '#E8F2F4', // bars (near-white, a touch cool — still the brightest thing nearby)
-  A: '#7FD9AE', // up-arrow (mint, off the neon)
-  a: '#49A8BC', // baseline axis (mid teal)
-};
-
-/** Same grid, all-dark: painted at four offsets as a 1px contrast outline. */
-const POINT_OUTLINE: Palette = { G: '#04141A', A: '#04141A', a: '#04141A' };
-
-export const POINT_GRID_W = maxWidth(POINT_GRID);
-
-/**
- * Draw a Growth Point centred at (cx,cy).
- *
- * No plate, no frame: the pickup is just the sprite, made to pop on its own.
- * Contrast comes from (a) the palette — pure white bars and a hot mint arrow,
- * both far brighter than any ground material we use — and (b) a one-pixel dark
- * outline traced around the silhouette, which is how pixel art has always kept
- * a sprite legible over both light and dark backgrounds. That's a border on the
- * *shape*, not a card behind it.
- */
-export function drawGrowthPoint(
-  ctx: CanvasRenderingContext2D,
-  cx: number,
-  cy: number,
-  scale = 2,
-): void {
-  const w = POINT_GRID_W * scale;
-  const h = POINT_GRID.length * scale;
-  const x = Math.round(cx - w / 2);
-  const y = Math.round(cy - h / 2);
-
-  // Outline: the same grid painted dark at four one-pixel offsets.
-  for (const [dx, dy] of [
-    [-scale, 0],
-    [scale, 0],
-    [0, -scale],
-    [0, scale],
-  ] as const) {
-    drawPixels(ctx, POINT_GRID, POINT_OUTLINE, x + dx, y + dy, { scale });
-  }
-  drawPixels(ctx, POINT_GRID, POINT_PALETTE, x, y, { scale });
-}
 
 // --- ANSR badge: a teal disc carrying a white "A" mark ----------------------
 

@@ -8,6 +8,7 @@ import {
   driveToScreen,
   engageBadge,
   expireGrace,
+  recoverFromLifeLost,
   stepN,
 } from '../test/helpers';
 
@@ -36,14 +37,16 @@ describe('Screen 1 — Setup Delays (struggle sludge → 1Wrk bridge → relief)
     expect(sim.activeHazard).toBeInstanceOf(Quicksand);
   });
 
-  it('the struggle sludge sits before the badge and the deep pit after it', () => {
+  it('puts the badge ahead of both the wade and the pit', () => {
+    // The badge is taken before the problem is met — that is the instruction the
+    // game gives, and it would be a lie if the sludge came first.
     const sim = driveToScreen(1);
     const badgeGx = sim.screen.data.badge!.gx;
     const rects = sim.screen.data.quicksand!;
     const shallow = rects.find((r) => r.deep === false)!;
     const deep = rects.find((r) => r.deep !== false)!;
-    expect(shallow.gx).toBeLessThan(badgeGx);
-    expect(deep.gx).toBeGreaterThan(badgeGx);
+    expect(badgeGx).toBeLessThan(shallow.gx);
+    expect(badgeGx).toBeLessThan(deep.gx);
   });
 
   it('wading the struggle sludge drags you but never costs months', () => {
@@ -203,15 +206,18 @@ describe('Screen 1 — Setup Delays (struggle sludge → 1Wrk bridge → relief)
     expireGrace(sim);
     const before = sim.months;
     for (let i = 0; i < 400; i += 1) {
-      if (!sim.inSetback) standInDeepPit(sim);
+      if (sim.state === 'PLAYING') standInDeepPit(sim);
       sim.step(DT, makeInput());
       if (sim.months > before) break;
     }
     expect(sim.months).toBe(before + JOURNEY.SETBACK_MONTHS);
     expect(sim.setbacks).toBe(1);
-    // No death, no lives, no state change — the run continues.
-    expect(sim.state).toBe('PLAYING');
-    // Relocated back to known-good ground, not left in the pit.
+    // It costs a life and reports it, then restarts this stage on the far side of
+    // the pit-free ground rather than leaving the player in the sludge.
+    expect(sim.state).toBe('LIFE_LOST');
+    expect(sim.lives).toBe(sim.livesTotal - 1);
+    recoverFromLifeLost(sim);
+    expect(sim.screenId).toBe(1);
     stepN(sim, 30);
     expect(sim.player.box.x).toBeLessThan(17 * T);
     expect(sim.player.box.y).toBeLessThan(RESOLUTION.HEIGHT);
@@ -227,7 +233,7 @@ describe('Screen 1 — Setup Delays (struggle sludge → 1Wrk bridge → relief)
       sim.player.box.y = 16 * T - sim.player.box.h;
     };
     for (let i = 0; i < 400 && sim.setbacks === 0; i += 1) {
-      if (!sim.inSetback) intoTheGap();
+      if (sim.state === 'PLAYING') intoTheGap();
       sim.step(DT, makeInput());
     }
     expect(sim.setbacks).toBe(1);

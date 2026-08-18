@@ -2,9 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { Simulation } from './Simulation';
 import { Game } from './Game';
 import { makeInput } from './Input';
-import { JOURNEY, RESOLUTION } from '../data/tuning.config';
-import { TOTAL_QUICK_WINS } from '../data/levels';
-import { DT, stepN } from '../test/helpers';
+import { JOURNEY, RESOLUTION, LIVES } from '../data/tuning.config';
+import { DT, stepN, recoverFromLifeLost } from '../test/helpers';
 
 /** Drive a fresh sim to PLAYING on Reception. */
 function toPlaying(): Simulation {
@@ -25,7 +24,8 @@ describe('Simulation lifecycle', () => {
     expect(sim.screenId).toBe(0);
     expect(sim.months).toBe(0);
     expect(sim.setbacks).toBe(0);
-    expect(sim.quickWins).toBe(0);
+    expect(sim.lives).toBe(LIVES.TOTAL);
+    expect(sim.log).toHaveLength(0);
   });
 
   it('auto-advances from the title card to PLAYING', () => {
@@ -64,22 +64,51 @@ describe('Simulation progression & the journey clock', () => {
     expect(sim.months).toBe(base);
   });
 
-  it('collects a quick win on overlap and counts it (never scores it)', () => {
+  it('collects the floating badge where it actually is, not at its anchor', () => {
     const sim = toPlaying();
-    const pt = sim.screen.points[0]!;
-    sim.player.box.x = pt.x - sim.player.box.w / 2;
-    sim.player.box.y = pt.y - sim.player.box.h / 2;
+    const badge = sim.screen.data.badge!;
+    const anchorY = badge.gy * RESOLUTION.TILE + RESOLUTION.TILE / 2;
+
+    // Wait for a phase where the badge is far enough from its anchor that a
+    // player parked ON the anchor cannot touch it — then park there. The old
+    // static hitbox would have collected it; the floating one must not.
+    const clear = (sim.player.box.h + RESOLUTION.TILE) / 2;
+    for (let i = 0; i < 400; i += 1) {
+      const box = sim.badgeBox!;
+      if (Math.abs(box.y + box.h / 2 - anchorY) > clear + 1) break;
+      sim.player.box.x = sim.screen.spawnX; // stay clear of the badge column
+      sim.step(DT, makeInput());
+    }
+    const box = sim.badgeBox!;
+    expect(Math.abs(box.y + box.h / 2 - anchorY)).toBeGreaterThan(clear);
+    sim.player.box.x = box.x;
+    sim.player.box.y = anchorY - sim.player.box.h / 2;
     sim.step(DT, makeInput());
-    expect(sim.quickWins).toBe(1);
-    expect(sim.screen.points[0]!.collected).toBe(true);
-    // Quick wins do not touch the clock.
+    expect(sim.powerups.collected).toBe(false);
+
+    // Now meet it where it is.
+    const live = sim.badgeBox!;
+    sim.player.box.x = live.x;
+    sim.player.box.y = live.y;
+    sim.step(DT, makeInput());
+    expect(sim.powerups.collected).toBe(true);
+    expect(sim.badgeBox).toBeNull();
+    // The badge costs nothing on the clock.
     expect(sim.months).toBe(0);
-    expect(sim.receipt.totalQuickWins).toBe(TOTAL_QUICK_WINS);
+  });
+
+  it('the badge float is a pure function of the sim clock (replayable)', () => {
+    const a = toPlaying();
+    const b = toPlaying();
+    stepN(a, 37);
+    stepN(b, 37);
+    expect(a.clock).toBeCloseTo(b.clock, 10);
+    expect(a.badgeBox!.y).toBeCloseTo(b.badgeBox!.y, 10);
   });
 });
 
-describe('Simulation setbacks (there is no death)', () => {
-  it('falling out of the world books months and keeps playing', () => {
+describe('Simulation setbacks: months, a life and a log line', () => {
+  it('falling out of the world books months, spends a life and reports it', () => {
     const sim = toPlaying();
     stepN(sim, 55); // let spawn grace expire
     expect(sim.player.isInvulnerable).toBe(false);
@@ -87,36 +116,95 @@ describe('Simulation setbacks (there is no death)', () => {
     sim.player.box.y = RESOLUTION.HEIGHT + 200;
     sim.step(DT, makeInput());
 
-    expect(sim.state).toBe('PLAYING'); // no DEATH state exists
+    expect(sim.state).toBe('LIFE_LOST');
     expect(sim.setbacks).toBe(1);
+    expect(sim.lives).toBe(LIVES.TOTAL - 1);
     expect(sim.months).toBe(JOURNEY.SETBACK_MONTHS);
-    // Relocated onto known-good ground rather than left falling.
-    stepN(sim, 40);
-    expect(sim.player.box.y).toBeLessThan(RESOLUTION.HEIGHT);
+    expect(sim.log).toHaveLength(1);
+    expect(sim.log[0]).toMatchObject({ index: 1, screenId: 0, cause: 'fall' });
+    expect(sim.delayMonths).toBe(JOURNEY.SETBACK_MONTHS);
+
+    const view = sim.lifeLost!;
+    expect(view.cause).toBe('fall');
+    expect(view.livesLeft).toBe(LIVES.TOTAL - 1);
+    expect(view.outOfLives).toBe(false);
+    expect(view.ledger).toEqual([
+      { cause: 'fall', label: 'GROUND GAVE WAY', count: 1, months: JOURNEY.SETBACK_MONTHS },
+    ]);
   });
 
-  it('the grace period stops one mistake chaining into several', () => {
+  it('the life-lost screen restarts the SAME stage, at its spawn', () => {
+    const sim = toPlaying();
+    stepN(sim, 55);
+    for (let i = 0; i < 90; i += 1) sim.step(DT, makeInput({ right: true }));
+    const advanced = sim.player.box.x;
+    expect(advanced).toBeGreaterThan(sim.screen.spawnX + 40);
+
+    sim.player.box.y = RESOLUTION.HEIGHT + 200;
+    sim.step(DT, makeInput());
+    recoverFromLifeLost(sim);
+
+    expect(sim.state).toBe('PLAYING');
+    expect(sim.screenId).toBe(0); // same stage, never the next one
+    expect(sim.player.box.x).toBeLessThan(advanced);
+    // The badge is available again on the retry.
+    expect(sim.powerups.collected).toBe(false);
+    expect(sim.badgeBox).not.toBeNull();
+    // ...but the months and the log line are not refunded.
+    expect(sim.months).toBe(JOURNEY.SETBACK_MONTHS);
+    expect(sim.log).toHaveLength(1);
+  });
+
+  it('it auto-advances after the hold, without any input', () => {
     const sim = toPlaying();
     stepN(sim, 55);
     sim.player.box.y = RESOLUTION.HEIGHT + 200;
     sim.step(DT, makeInput());
-    expect(sim.setbacks).toBe(1);
-    // Immediately fall again while still in grace → relocated, not charged.
-    sim.player.box.y = RESOLUTION.HEIGHT + 200;
-    sim.step(DT, makeInput());
-    expect(sim.setbacks).toBe(1);
+    expect(sim.state).toBe('LIFE_LOST');
+    stepN(sim, Math.ceil(LIVES.LOST_HOLD / DT) + 2);
+    expect(sim.state).not.toBe('LIFE_LOST');
   });
 
-  it('caps the clock so a run always beats going it alone', () => {
+  it('spending the last life ends the attempt back at the title screen', () => {
     const sim = toPlaying();
-    for (let i = 0; i < 40; i += 1) {
+    for (let life = LIVES.TOTAL; life > 0; life -= 1) {
       stepN(sim, 80); // outlast the grace window
       sim.player.box.y = RESOLUTION.HEIGHT + 200;
       sim.step(DT, makeInput());
+      expect(sim.state).toBe('LIFE_LOST');
+      expect(sim.lives).toBe(life - 1);
+      if (life > 1) recoverFromLifeLost(sim);
     }
-    expect(sim.setbacks).toBeGreaterThan(5);
-    expect(sim.months).toBe(JOURNEY.MAX_MONTHS);
-    expect(sim.months).toBeLessThan(JOURNEY.BASELINE_MONTHS);
+
+    // Out of lives: the screen becomes the ledger and waits for a decision.
+    expect(sim.lives).toBe(0);
+    expect(sim.lifeLost!.outOfLives).toBe(true);
+    expect(sim.lifeLost!.delays).toBe(LIVES.TOTAL);
+    expect(sim.lifeLost!.delayMonths).toBe(LIVES.TOTAL * JOURNEY.SETBACK_MONTHS);
+    stepN(sim, Math.ceil(LIVES.LOST_HOLD / DT) + 60);
+    expect(sim.state).toBe('LIFE_LOST'); // never times out from under the player
+
+    sim.continueAfterLifeLost();
+    expect(sim.state).toBe('START');
+    // A fresh attempt: full lives, clean clock, empty log.
+    expect(sim.lives).toBe(LIVES.TOTAL);
+    expect(sim.months).toBe(0);
+    expect(sim.log).toHaveLength(0);
+    expect(sim.screenId).toBe(0);
+  });
+
+  it('groups repeated obstacles in the ledger rather than listing them', () => {
+    const sim = toPlaying();
+    for (let i = 0; i < 2; i += 1) {
+      stepN(sim, 80);
+      sim.player.box.y = RESOLUTION.HEIGHT + 200;
+      sim.step(DT, makeInput());
+      recoverFromLifeLost(sim);
+    }
+    expect(sim.receipt.ledger).toEqual([
+      { cause: 'fall', label: 'GROUND GAVE WAY', count: 2, months: 2 * JOURNEY.SETBACK_MONTHS },
+    ]);
+    expect(sim.receipt.delayMonths).toBe(2 * JOURNEY.SETBACK_MONTHS);
   });
 
   it('the "no setbacks" assist explores freely without booking months', () => {
@@ -128,6 +216,8 @@ describe('Simulation setbacks (there is no death)', () => {
     sim.step(DT, makeInput());
     expect(sim.setbacks).toBe(0);
     expect(sim.months).toBe(0);
+    expect(sim.lives).toBe(LIVES.TOTAL); // and no life is spent either
+    expect(sim.state).toBe('PLAYING');
     // Still rescued from the void so play can continue.
     stepN(sim, 40);
     expect(sim.player.box.y).toBeLessThan(RESOLUTION.HEIGHT);

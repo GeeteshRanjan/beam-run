@@ -7,8 +7,10 @@ inclusion: always
 This workspace builds **Beam Run: Market Entry** (an ANSR HTML5 Canvas platformer).
 
 ## Do this at the start of every session
-1. Read `HANDOFF.md` (project root) — it is the source of truth for build
-   progress, environment setup, architecture, and the next task. Follow it.
+1. Read `HANDOFF.md` (project root) — it is the source of truth for *current
+   state*: environment, status, architecture, invariants, open questions, next
+   task. Follow it. Full history of past passes lives in `docs/JOURNAL.md`; read
+   it only when you need the background on a specific past decision.
 2. The full spec docs live in the parent `ANSR Game/` folder
    (`01_Game_Design_Document.md` … `10_Project_Plan_and_Roadmap.md`,
    `tuning.config.ts`, `levels.json`, `analytics-events.json`) and are
@@ -32,8 +34,16 @@ This workspace builds **Beam Run: Market Entry** (an ANSR HTML5 Canvas platforme
 - Keep the bundle within budget (JS ≤ 90 KB, total ≤ 250 KB gzipped).
 
 ## After completing each task (do not skip)
-1. Ensure green: `npm run typecheck && npm run lint && npm run test && npm run build && npm run validate:levels`.
-2. **Update `HANDOFF.md`**: tick the task in the checklist, move the "(NEXT)"
-   marker to the following task, and add one line to the Change log with the test
-   count, gzip size, and files added/changed.
-3. Only then start the next task.
+1. Ensure green: `npm run typecheck && npm run lint && npm run test && npm run build && npm run build:site && npm run validate:levels`.
+2. **Append the full entry to `docs/JOURNAL.md`** (append-only; never delete or
+   rewrite older entries — the findings are the valuable part).
+3. **Update `HANDOFF.md`**, keeping it lean:
+   - add a one-line summary at the top of "Recent passes" and drop the oldest so
+     the list stays at 3;
+   - refresh the status numbers (tests, gzip, budget gate) and the architecture
+     map / open questions if they changed;
+   - promote any permanent rule or trap the pass uncovered into the
+     "Invariants & traps" section — that is the only section meant to grow.
+   Do **not** paste the full narrative here. If HANDOFF.md passes ~400 lines or
+   ~25 KB, something belongs in the journal instead.
+4. Only then start the next task.

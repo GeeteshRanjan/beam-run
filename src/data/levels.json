@@ -2,14 +2,14 @@
   "meta": {
     "grid": { "cols": 32, "rows": 18, "tile": 40 },
     "notes": "All coordinates are in TILE units unless a field name ends in _px. Rows count from top (0) down. Ground band is rows 15-17. 'gx' = grid x, 'gy' = grid y, 'w'/'h' in tiles. Player hitbox is 28x44px; spawn places feet on the given tile top. The typed shape of this file is src/data/levels.ts.",
-    "structure": "Every hazard screen is a BEFORE/AFTER of the same problem. Hazard instances sit on BOTH sides of a mid-screen ANSR badge: the struggle zone (left) is the buyer's current reality, the relief zone (right) is the same hazard once ANSR is engaged. The badge sits on the walking path - never signposted as optional, never labelled 'do it yourself'.",
-    "clock": "monthsBase is booked on clearing a screen. The six bases sum to JOURNEY.ANSR_BENCHMARK_MONTHS, so a clean assisted run lands exactly on ANSR's published benchmark. Setbacks add JOURNEY.SETBACK_MONTHS each, capped at JOURNEY.MAX_MONTHS.",
+    "structure": "Every screen carries an ANSR badge, placed early on the walking path so it can be taken BEFORE the obstacles it answers. The badge is not a static tile: it floats along a straight vertical line through a band around its anchor (POWERUPS.FLOAT_AMPLITUDE / FLOAT_PERIOD), dipping low enough to be walked into and rising high enough that a badly timed pass needs a hop. Taking it is what makes the rest of the screen safe; missing it is what the delay log is for.",
+    "clock": "monthsBase is booked on clearing a screen. The six bases sum to JOURNEY.ANSR_BENCHMARK_MONTHS, so a clean assisted run lands exactly on ANSR's published benchmark. Every obstacle costs one life and adds JOURNEY.SETBACK_MONTHS to the clock, capped at JOURNEY.MAX_MONTHS.",
     "conventions": {
       "solid": "static collidable platform/wall (non-lethal). Walking into a wall stops you.",
       "spawn": "player entry point (feet), always near far-left",
       "exit": "reaching this x (right edge trigger) advances to next screen",
-      "badge": "ANSR capability pickup; sits mid-screen between the struggle and relief zones",
-      "points": "Quick-win pickups - counted, never scored, never placed on a hazard"
+      "badge": "ANSR capability pickup; anchored early in the screen and floating vertically around gy",
+      "zone": "kept as authoring metadata only - it records which obstacles were written as the felt problem and which as the relief. It no longer describes a position, because the badge now sits ahead of both."
     }
   },
 
@@ -28,11 +28,12 @@
         { "gx": 16, "gy": 13, "w": 1, "h": 2, "role": "step-board-approval" },
         { "gx": 23, "gy": 12, "w": 2, "h": 3, "role": "step-budget" }
       ],
-      "points": [
-        { "gx": 10, "gy": 12 },
-        { "gx": 17, "gy": 11 },
-        { "gx": 24, "gy": 10 }
-      ],
+      "badge": {
+        "type": "SAFE_PASSAGE",
+        "gx": 4,
+        "gy": 12,
+        "note": "The tutorial badge. No obstacle here to answer, so it teaches the one habit the rest of the run depends on: the floating ANSR mark is always worth taking. Its effect is deliberately unassigned for now."
+      },
       "copy": {
         "titleCard": "Reception",
         "hint": "Move: \u2190 \u2192  \u00b7  Jump: Space / \u2191",
@@ -59,17 +60,11 @@
       ],
       "badge": {
         "type": "PLACE_TILE",
-        "gx": 14,
-        "gy": 14,
+        "gx": 4,
+        "gy": 12,
         "placesTileAt": { "gx": 18, "gy": 15, "w": 5, "h": 1 },
-        "note": "1Wrk lays a flush bridge over the deep pit: setup solved once, done right. The shallow sludge before the badge is the felt friction (drag only, never a setback) and is 8 tiles wide - more than twice max jump distance - so it cannot be leapt; sludge also damps jump strength, so it cannot be hopped across either. The 7-tile pit after it exceeds max jump distance, so ANSR is what makes the crossing possible."
+        "note": "1Wrk lays a flush bridge over the deep pit: setup solved once, done right. Taken at the top of the screen, so the shallow sludge (drag only, never a setback, 8 tiles wide - more than twice max jump distance, and sludge damps jump strength so it cannot be hopped) is walked with the bridge already waiting. The 7-tile pit beyond exceeds max jump distance, so ANSR is what makes the crossing possible."
       },
-      "points": [
-        { "gx": 3, "gy": 13 },
-        { "gx": 15, "gy": 13 },
-        { "gx": 26, "gy": 13 },
-        { "gx": 30, "gy": 12 }
-      ],
       "copy": { "titleCard": "Setup Delays", "onClear": "Setup accelerated." }
     },
 
@@ -92,17 +87,10 @@
       ],
       "badge": {
         "type": "EXTINGUISH",
-        "gx": 14,
-        "gy": 14,
-        "note": "Talent500 staffs the roles: lanes ahead go out for good as you approach, so you keep moving instead of stopping to wait."
+        "gx": 4,
+        "gy": 12,
+        "note": "Talent500 staffs the roles: lanes ahead go out for good as you approach, so you keep moving instead of stopping to wait. Skip it and all five lanes have to be timed by hand."
       },
-      "points": [
-        { "gx": 3, "gy": 13 },
-        { "gx": 8, "gy": 13 },
-        { "gx": 16, "gy": 13 },
-        { "gx": 20, "gy": 12 },
-        { "gx": 30, "gy": 13 }
-      ],
       "copy": { "titleCard": "Hire Under Fire", "onClear": "Talent secured." }
     },
 
@@ -131,16 +119,10 @@
       ],
       "badge": {
         "type": "CLEAR_PATH",
-        "gx": 15,
-        "gy": 14,
-        "note": "GCC-BOT clears the filings: approval barriers ahead lift for good as you approach."
+        "gx": 4,
+        "gy": 12,
+        "note": "GCC-BOT clears the filings: approval barriers ahead lift for good as you approach. Seven barriers stand between the badge and the exit, so the difference it makes is the whole screen."
       },
-      "points": [
-        { "gx": 3, "gy": 13 },
-        { "gx": 8, "gy": 11 },
-        { "gx": 20, "gy": 11 },
-        { "gx": 30, "gy": 13 }
-      ],
       "copy": { "titleCard": "Compliance", "onClear": "Compliance cleared." }
     },
 
@@ -166,16 +148,10 @@
       ],
       "badge": {
         "type": "FORESIGHT",
-        "gx": 15,
-        "gy": 14,
-        "note": "500Leaders give you local context: long advance warning and a marked safe line. Knowledge, not magic - the market keeps moving, you can just read it."
+        "gx": 4,
+        "gy": 12,
+        "note": "500Leaders give you local context: long advance warning and a marked safe line. Knowledge, not magic - the market keeps moving, you can just read it. Walk past the badge and every drop has to be guessed."
       },
-      "points": [
-        { "gx": 3, "gy": 13 },
-        { "gx": 12, "gy": 11 },
-        { "gx": 16, "gy": 13 },
-        { "gx": 30, "gy": 13 }
-      ],
       "copy": { "titleCard": "Local Expertise", "onClear": "Local expertise onboarded." }
     },
 
@@ -191,11 +167,12 @@
         { "gx": 0, "gy": 15, "w": 32, "h": 3, "role": "ground" },
         { "gx": 22, "gy": 4, "w": 8, "h": 11, "role": "tower-facade-noncollide" }
       ],
-      "points": [
-        { "gx": 8, "gy": 13 },
-        { "gx": 14, "gy": 13 },
-        { "gx": 19, "gy": 13 }
-      ],
+      "badge": {
+        "type": "SAFE_PASSAGE",
+        "gx": 4,
+        "gy": 12,
+        "note": "The closing badge. Nothing to defend against on the plaza - it is here because the mark is on every screen, and the last thing the player does before the Tech Park is reach for it."
+      },
       "copy": {
         "titleCard": "Arrival \u2014 ANSR Tech Park",
         "win": "Market Entry Complete.",

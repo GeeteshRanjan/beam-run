@@ -3,9 +3,10 @@
  * geometry and hazard placement). The engine hardcodes no layouts — everything
  * is read from here. Coordinates are in TILE units unless a field ends in `_px`.
  *
- * Structural contract (enforced by `scripts/validate-levels.ts`): every hazard
- * screen places hazard instances on BOTH sides of its badge, so each level plays
- * as a before/after of the same problem.
+ * Structural contract (enforced by `scripts/validate-levels.ts`): every screen
+ * carries a badge, it is anchored ahead of the obstacles it answers, and every
+ * hazard screen keeps obstacles beyond it — otherwise taking the badge proves
+ * nothing.
  */
 import raw from './levels.json';
 
@@ -19,12 +20,26 @@ export type HazardKind = 'none' | 'quicksand' | 'fire' | 'gates' | 'spikes';
  *  - `EXTINGUISH`  STAFF   Talent500 puts out the hiring lanes ahead of you
  *  - `CLEAR_PATH`  CLEAR   GCC-BOT lifts the approval barriers ahead
  *  - `FORESIGHT`   KNOW    500Leaders give long warning + a marked safe line
+ *
+ * `SAFE_PASSAGE` is the non-capability badge carried by the two screens with no
+ * obstacle to answer (Reception and the Tech Park). It exists so the ANSR mark
+ * appears on every screen; its effect is deliberately unassigned, and it is
+ * excluded from the capability receipt.
  */
-export type BadgeType = 'PLACE_TILE' | 'EXTINGUISH' | 'CLEAR_PATH' | 'FORESIGHT';
+export type BadgeType =
+  | 'PLACE_TILE'
+  | 'EXTINGUISH'
+  | 'CLEAR_PATH'
+  | 'FORESIGHT'
+  | 'SAFE_PASSAGE';
 
 export type ScreenType = 'intro' | 'hazard' | 'finale';
 
-/** Which side of the badge a hazard instance sits on. */
+/**
+ * Authoring metadata: whether an obstacle was written as the felt problem or as
+ * the same problem once ANSR is engaged. It no longer describes a *position* —
+ * the badge sits ahead of both — so nothing validates it against geometry.
+ */
 export type Zone = 'struggle' | 'relief';
 
 export interface GridPos {
@@ -81,6 +96,7 @@ export interface PlacedTileSpec {
 export interface BadgeSpec {
   type: BadgeType;
   gx: number;
+  /** Anchor row. The badge floats vertically around this — see `badgeCenter`. */
   gy: number;
   placesTileAt?: PlacedTileSpec;
   note?: string;
@@ -110,7 +126,6 @@ export interface ScreenData {
   spikeColumns?: SpikeColumn[];
   gates?: Gate[];
   badge?: BadgeSpec;
-  points?: GridPos[];
   copy?: ScreenCopy;
 }
 
@@ -142,6 +157,3 @@ export const SCREEN_COUNT = SCREENS.length;
 
 /** Months a flawless run books (sum of every screen's base). */
 export const TOTAL_MONTHS_BASE = SCREENS.reduce((sum, s) => sum + (s.monthsBase ?? 0), 0);
-
-/** Total quick-win pickups placed across the run (for the closing receipt). */
-export const TOTAL_QUICK_WINS = SCREENS.reduce((sum, s) => sum + (s.points?.length ?? 0), 0);

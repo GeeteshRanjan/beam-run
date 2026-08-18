@@ -174,8 +174,28 @@ export const CSS = `
   display: none; pointer-events: none;
 }
 .beam-run__hud--visible { display: block; }
-.beam-run__hud-row {
+/*
+ * The two corner stacks. Plaques used to be positioned individually against the
+ * four corners; the delay log has no fixed height, so anything sharing a corner
+ * with it had to be offset by a hand-tuned pixel figure that was wrong again as
+ * soon as another delay was logged. Columns solve it once, and they put every
+ * readout in the top band, which is also what portrait wants (the bottom band
+ * belongs to the thumb controls).
+ */
+.beam-run__hud-stack {
   position: absolute; top: calc(clamp(8px, 2.2%, 22px) + env(safe-area-inset-top, 0px));
+  display: flex; flex-direction: column; gap: 8px;
+  max-height: calc(100% - clamp(16px, 4.4%, 44px));
+}
+.beam-run__hud-stack--left {
+  left: calc(clamp(8px, 2.2%, 22px) + env(safe-area-inset-left, 0px));
+  align-items: flex-start;
+}
+.beam-run__hud-stack--right {
+  right: calc(clamp(8px, 2.2%, 22px) + env(safe-area-inset-right, 0px));
+  align-items: flex-end;
+}
+.beam-run__hud-row {
   display: flex; align-items: center; gap: 8px;
   ${PANEL}
 }
@@ -188,13 +208,15 @@ export const CSS = `
 .beam-run__hud-clock-label { display: flex; }
 /* Stage: caption stacked over the stage name, arcade level-readout style. */
 .beam-run__hud-level {
-  left: calc(clamp(8px, 2.2%, 22px) + env(safe-area-inset-left, 0px));
   flex-direction: column; align-items: flex-start; gap: 5px;
 }
 
+/* Lives: caption then the pips, on one line. */
+.beam-run__hud-lives { gap: 9px; }
+.beam-run__hud-lives .beam-run__hud-caption { display: flex; }
+
 /* The journey clock: the loudest readout on screen. */
 .beam-run__hud-clock {
-  right: calc(clamp(8px, 2.2%, 22px) + env(safe-area-inset-right, 0px));
   flex-direction: column; align-items: flex-end; gap: 5px;
   /* Orange rail: this readout is the stake. Bevel warmed to match. */
   box-shadow:
@@ -226,18 +248,34 @@ export const CSS = `
   }
 }
 
-.beam-run__hud-wins {
-  left: calc(clamp(8px, 2.2%, 22px) + env(safe-area-inset-left, 0px));
-  top: auto; bottom: calc(clamp(8px, 2.2%, 22px) + env(safe-area-inset-bottom, 0px));
-  color: ${BRAND.LIGHT_GREY}; gap: 7px;
+/*
+ * The delay log, hanging under the clock. Hidden until the first delay, so a
+ * clean run never sees it. It is deliberately NOT orange: orange is the value
+ * accent, and a ledger of avoidable months is the opposite of value. Only the
+ * running total is warmed, because that figure is what the closing argument is
+ * made of. Rows scroll internally rather than growing past the frame, and the
+ * scrollbar is left to the platform.
+ */
+.beam-run__hud-log {
+  display: none; flex-direction: column; align-items: flex-end; gap: 4px;
+  background: #14181A;
+  box-shadow:
+    inset 3px 3px 0 rgba(150, 205, 218, 0.16),
+    inset -3px -3px 0 rgba(0, 0, 0, 0.45),
+    0 0 0 3px rgba(120, 152, 163, 0.55);
 }
-.beam-run__hud-wins-icon { color: #7FD9AE; }
+.beam-run__hud-log--visible { display: flex; }
+.beam-run__hud-log-label { display: flex; }
+.beam-run__hud-log-rows {
+  display: flex; flex-direction: column; align-items: flex-end; gap: 3px;
+  max-height: 28vh; overflow: hidden;
+}
+.beam-run__hud-log-row { display: flex; }
+.beam-run__hud-log-total { margin-top: 2px; }
 
 /* Engaged ANSR capability — persistent chip, no countdown (help doesn't lapse). */
 .beam-run__hud-power {
-  right: calc(clamp(8px, 2.2%, 22px) + env(safe-area-inset-right, 0px));
-  top: auto; bottom: calc(clamp(8px, 2.2%, 22px) + env(safe-area-inset-bottom, 0px));
-  display: none; flex-direction: column; align-items: flex-end; gap: 5px;
+  display: none; flex-direction: column; align-items: flex-start; gap: 5px;
   background: #2A1000;
   box-shadow:
     inset 3px 3px 0 rgba(255, 158, 116, 0.22),
@@ -591,7 +629,32 @@ export const CSS = `
   background: rgba(60, 20, 0, 0.6); border-color: rgba(255, 84, 0, 0.55);
   box-shadow: inset 4px 0 0 ${BRAND.ORANGE};
 }
-.beam-run__receipt-wins { margin-top: 2px; display: flex; justify-content: center; }
+.beam-run__receipt-delays {
+  margin-top: 2px; display: flex; flex-direction: column; align-items: center; gap: 4px;
+}
+
+/* Delay ledger - the itemised cost, shared by the out-of-lives screen and the
+   two end screens. Rows are a two-column grid so the figures line up where the
+   eye can total them, and the total row is the same row with the value accent.
+   The lives readout repeats on the life-lost screen at display size, so the one
+   thing that screen is about is the first thing seen. */
+.beam-run__ledger, .beam-run__lives, .beam-run__advice {
+  display: flex; flex-direction: column; gap: 5px; width: 100%; margin: 0;
+}
+.beam-run__lives, .beam-run__advice { align-items: center; }
+.beam-run__ledger-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center; gap: 10px; padding: 6px 12px;
+  background: rgba(0, 22, 29, 0.66);
+  border: 2px solid rgba(150, 205, 218, 0.18);
+}
+.beam-run__ledger-row--total {
+  margin-top: 2px;
+  background: rgba(60, 20, 0, 0.55); border-color: rgba(255, 84, 0, 0.5);
+}
+.beam-run__ledger-label { display: flex; }
+.beam-run__ledger-months { display: flex; justify-content: flex-end; }
+.beam-run__lives-pips { width: clamp(70px, calc(var(--beam-run-u) * 13), 190px); }
 
 .beam-run__actions {
   display: flex; flex-wrap: wrap; justify-content: center; align-items: center;
@@ -741,18 +804,11 @@ export const CSS = `
  * frame is the full container width, so vw and frame-relative agree — stack the
  * buttons full-width for thumbs, and give the receipt two lines per row.
  */
-@media (orientation: portrait) {
-  /* All four readouts move into the band ABOVE the frame: the band below belongs
-     to the thumb controls, and a bottom-anchored HUD would sit under them. */
-  /* 76px clears the taller top plaques: at the portrait type floors the clock
-     stands 7 + 14.4 + 5 + 25.6 + 7 ≈ 59px plus its 3px rail. */
-  .beam-run__hud-wins,
-  .beam-run__hud-power {
-    top: calc(clamp(8px, 2.2%, 22px) + env(safe-area-inset-top, 0px) + 76px);
-    bottom: auto;
-  }
-}
 @media (orientation: portrait), (max-width: 560px) {
+  /* Both stacks already live in the band above the frame, so portrait needs no
+     re-anchoring any more - only a tighter log so it cannot eat the play area. */
+  .beam-run__hud-log-rows { max-height: 18vh; }
+
   .beam-run__subtitle { font-size: clamp(15px, 4.2vw, 22px); }
 
   /* Phones: the column takes the full width and the bar labels give up width to

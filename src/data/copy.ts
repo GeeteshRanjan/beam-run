@@ -123,8 +123,33 @@ export const COPY = {
     stageLabel: 'Stage',
     monthsLabel: 'Time to market',
     monthsUnit: 'months',
-    quickWinsLabel: 'Quick wins',
     powerLabel: 'ANSR engaged',
+    livesLabel: 'Lives',
+    /** Full sentence, for the life-lost screen and the plaque's label. */
+    lives: (left: number, total: number) => `${left} of ${total} lives left`,
+    /**
+     * The plaque's own reading. Deliberately not the sentence above: the plaque
+     * already carries the caption "Lives", so the long form said "Lives: 1 of 3
+     * lives left".
+     */
+    livesValue: (left: number, total: number) => `${left} of ${total}`,
+    /**
+     * The delay log hanging from the top of the frame. "Delay log" rather than
+     * anything with the word "death" in it: the register throughout is that the
+     * system cost you time, not that you failed.
+     */
+    logLabel: 'Delay log',
+    logTotal: 'Total',
+    logRow: (label: string, months: number) => `${label} +${months}`,
+    logEarlier: (count: number) => `+${count} earlier`,
+    logMonths: (months: number) => `+${months} months`,
+    /**
+     * The one sentence the panel says out loud. A screen reader walking a growing
+     * table of "+2" cells learns nothing; the running total is the finding. The
+     * label is not repeated here — the plaque already carries it.
+     */
+    logSummary: (count: number, months: number) =>
+      `${count === 1 ? '1 delay' : `${count} delays`}, +${months} months`,
   },
 
   pause: {
@@ -147,6 +172,8 @@ export const COPY = {
     EXTINGUISH: 'Roles filled',
     CLEAR_PATH: 'Filings cleared',
     FORESIGHT: 'Local context',
+    /* The two screens with nothing to defend against still carry the mark. */
+    SAFE_PASSAGE: 'Badge taken',
   } as Record<string, string>,
 
   /** Per-screen "on clear" lines (mirrored in levels.json, centralised here). */
@@ -160,8 +187,10 @@ export const COPY = {
   } as Record<number, string>,
 
   /**
-   * Setbacks cost months, never lives. Every line names the *system* as the
-   * cause — the player is never told they failed.
+   * Setbacks cost months *and* a life. Every line still names the **system** as
+   * the cause — the player is never told they failed, only what the obstacle
+   * took. That distinction is the whole reason this game can be shown to a buyer:
+   * the hazards are their reality, not their mistakes.
    */
   setback: {
     /** Short uppercase tag for the in-world popup (pixel font: A-Z 0-9 + - . , : ! ? / >). */
@@ -181,7 +210,57 @@ export const COPY = {
       fall: 'The ground gave way. Rebuilt from the last solid step.',
     } as Record<string, string>,
     months: (months: number) => `+${months} months`,
-    tagMonths: (months: number) => `+${months} MONTHS`,
+  },
+
+  /**
+   * The life-lost screen. Two jobs, one surface.
+   *
+   * With lives left it is coaching, and it has exactly one instruction: take the
+   * ANSR badge. That line is the reason the screen exists — a player who loses a
+   * life and is told only "try again" learns nothing about why the badge is
+   * there. It names the obstacle, shows what the obstacle cost, and sends them
+   * back into the same stage.
+   *
+   * Note the headline: the stage stalled, not the player. Same rule as the
+   * setback lines.
+   */
+  lifeLost: {
+    title: 'The stage stalled.',
+    /** Interpolated with the obstacle tag, e.g. "Red tape stopped the build." */
+    cause: (obstacle: string) => `${obstacle} stopped the build.`,
+    cost: (months: number) => `That is ${months} more months on the clock`,
+    livesLeft: (left: number) => (left === 1 ? '1 life left' : `${left} lives left`),
+    /**
+      * The instruction. This is the point of the screen. It is wrapped into
+      * bitmap lines at render time rather than authored twice — two copies of the
+      * same sentence is two places for it to drift.
+      */
+    advice: 'Take the floating ANSR badge and you clear the hurdles safely.',
+    cont: 'Keep going',
+  },
+
+  /**
+   * Out of lives. Not a wall and not a scolding — the closing ledger.
+   *
+   * Everything the run lost is itemised by obstacle, totalled, and followed by
+   * the one sentence the ledger is evidence for. Then the same two routes every
+   * other end screen offers: play again, or talk to us. An attempt that ends
+   * here still ends on a conversion surface.
+   */
+  gameOver: {
+    title: 'Out of runway.',
+    reached: (name: string) => `The build stalled at ${name}.`,
+    ledgerTitle: 'Where the time went',
+    /**
+     * The headline cost. It names the delays rather than repeating the ledger's
+     * own total label, which is the same figure two inches lower.
+     */
+    cost: (delays: number, months: number) =>
+      `${delays === 1 ? '1 delay' : `${delays} delays`} cost ${months} months`,
+    totalLabel: 'Months added by delays',
+    /** The argument the ledger is evidence for. */
+    advice: 'Take the ANSR badge at every stage and these months never happen.',
+    restart: 'Back to the start',
   },
 
   win: {
@@ -204,7 +283,16 @@ export const COPY = {
     receiptTitle: 'What got you here',
     /* Short enough to set on one bitmap line beside the list it introduces. */
     receiptHint: 'Pick one to talk about.',
-    quickWins: (found: number, total: number) => `Quick wins found: ${found} of ${total}`,
+    /**
+     * The delay line on the closing receipt, in place of the old quick-win
+     * count. A clean run gets the credit; anything else gets the itemised cost,
+     * because that is the number the Navigator conversation starts from.
+     */
+    delaysNone: 'No delays. Nothing avoidable left on the clock.',
+    delays: (count: number, months: number) =>
+      `${count === 1 ? '1 delay' : `${count} delays`} added ${months} months`,
+    delayRow: (label: string, count: number, months: number) =>
+      count > 1 ? `${label} x${count}  +${months}` : `${label}  +${months}`,
     savesMonths: (months: number) => `saves ${months} months`,
     notReached: 'not reached',
     cta: 'Plan your real journey \u2192 GCC Opportunity Navigator',
@@ -242,26 +330,6 @@ export const COPY = {
     jump: 'Jump',
   },
 
-  /**
-   * The custom not-found page for the standalone deployment.
-   *
-   * This exists because the two Navigator routes (the title screen's "Skip to
-   * the Navigator" and the closing receipt) deep-link a path the static host
-   * does not serve, so the last thing a prospect saw was the host's raw 404.
-   * A dead end is a dead end whoever renders it, so the page is ours: same
-   * cabinet, same bitmap type, one route back.
-   */
-  notFound: {
-    pageTitle: 'Page not found \u2014 ANSRcade: The GCC Game',
-    /** Big arcade figure. */
-    code: '404',
-    /** Accessible sentence behind the figure. */
-    codeLabel: 'Error 404. Page not found.',
-    title: 'Off the map.',
-    body: 'This route is not part of the journey. The game is one press away.',
-    play: 'Back to the game',
-  },
-
   fallback: {
     title: 'ANSRcade: The GCC Game',
     body: 'Play the journey before you plan it.',
@@ -272,10 +340,14 @@ export const COPY = {
 
   a11y: {
     canvasLabel:
-      'ANSRcade: The GCC Game — a short platformer about building an India GCC. Use arrow keys to move and Space to jump. Setbacks cost time, never lives.',
+      'ANSRcade: The GCC Game — a short platformer about building an India GCC. Use arrow keys to move and Space to jump. You have three lives; each obstacle costs one and adds months to the clock.',
     screenEntered: (name: string) => `Entering ${name}.`,
     setback: (reason: string, months: number) => `${reason} That is ${months} more months.`,
-    monthsBooked: (total: number) => `Time to market now ${total} months.`,
+    livesLeft: (left: number) =>
+      left === 1 ? 'One life left.' : `${left} lives left.`,
+    outOfLives: (months: number, delays: number) =>
+      `Out of lives. ${delays} delays added months, for a total of ${months} months. ` +
+      'Take the ANSR badge at every stage and those months never happen.',
     won: (months: number) =>
       `Market entry complete. You went live in ${months} months and reached the ANSR Tech Park.`,
     summary: 'Your journey so far, with the ANSR capabilities you engaged.',

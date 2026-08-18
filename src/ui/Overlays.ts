@@ -1,11 +1,16 @@
 /**
  * Overlays — the real-DOM screens layered over the canvas: Start, title card,
- * Pause, the mid-run Summary and the Win receipt. Built as accessible dialogs
- * (roles, labels, logical focus).
+ * Pause, the life-lost screen, the mid-run Summary and the Win receipt. Built as
+ * accessible dialogs (roles, labels, logical focus).
  *
- * There is no Game Over overlay — the run can't end in failure. What replaces it
- * is `summary`: if someone leaves mid-run, they still get the receipt, so nobody
- * exits empty-handed and every overlay routes to the Navigator.
+ * `lifelost` is one surface doing two jobs, told apart by the lives remaining.
+ * With lives left it is a coaching beat with a single instruction — take the
+ * floating ANSR badge — and it hands straight back into the same stage. On the
+ * last life it becomes the closing ledger: every delay itemised, the total, the
+ * sentence that total is evidence for, and the two routes every other end screen
+ * offers. So there is still no dead end and still nothing that tells the player
+ * they failed; an attempt that runs out of lives ends on a conversion surface,
+ * the same as one that reaches the Tech Park.
  *
  * The receipt is the conversion surface. Each of the four capability rows is a
  * *button* that deep-links the Navigator with its own topic, so expressing
@@ -13,7 +18,9 @@
  */
 import { COPY, CAPABILITIES } from '../data/copy';
 import { JOURNEY } from '../data/tuning.config';
+import type { LedgerRow } from '../core/setbackLog';
 import { createBrandLockup } from './BrandMark';
+import { createLivesPips, paintLivesPips } from './LivesPips';
 import {
   createPixelHeading,
   createPixelSvg,
@@ -75,6 +82,17 @@ const PX_TYPE = {
   barValue: { unit: 0.19, minPx: 2, maxPx: 2.9, maxShare: 10 },
 } as const;
 
+/*
+ * The delay ledger and the life-lost instruction reuse the specs above rather
+ * than authoring near-identical ones: an obstacle name is a row label like a
+ * receipt product (`rowStrong`), its months are a figure in a fixed column like a
+ * bar value (`barValue`), and the instruction is the one sentence on its screen
+ * that has to carry, exactly like the title screen's stake (`stakeText`).
+ */
+const LEDGER_LABEL = { ...PX_TYPE.rowStrong, maxChars: 24 } as const;
+const LEDGER_MONTHS = { ...PX_TYPE.barValue, maxShare: 14 } as const;
+const ADVICE = PX_TYPE.stakeText;
+
 /** Muted ink for supporting bitmap lines (the stake lead-in / tail). */
 const MUTED_INK = { color: '#CFE6EC', shadow: 'rgba(0,16,22,0.85)' } as const;
 
@@ -83,7 +101,7 @@ const VALUE_INK = { color: '#FF5400', shadow: 'rgba(0,16,22,0.9)' } as const;
 /** Captions and other secondary lines — cool grey, one step down from body. */
 const DIM_INK = { color: '#9FC8D2', shadow: 'rgba(0,16,22,0.85)' } as const;
 
-export type OverlayName = 'start' | 'titlecard' | 'pause' | 'summary' | 'win';
+export type OverlayName = 'start' | 'titlecard' | 'pause' | 'lifelost' | 'summary' | 'win';
 export type CtaContext = 'win' | 'summary' | 'skip';
 
 export interface OverlayCallbacks {
@@ -91,6 +109,8 @@ export interface OverlayCallbacks {
   onSkip: () => void;
   onResume: () => void;
   onRestart: () => void;
+  /** Leave the life-lost screen: back into the stage, or back to the title. */
+  onContinue: () => void;
   /** `topic` is set when the click came from a capability row. */
   onCta: (context: CtaContext, topic?: string) => void;
   onToggleMute: () => void;
@@ -103,15 +123,33 @@ export interface ReceiptModel {
   benchmarkMonths: number;
   baselineMonths: number;
   matchedBenchmark: boolean;
-  quickWins: number;
-  totalQuickWins: number;
+  /** How many delays the run booked. */
+  setbacks: number;
+  /** Months booked by delays alone — the avoidable part of the total. */
+  delayMonths: number;
+  /** Delays grouped by obstacle, in first-encountered order. */
+  ledger: readonly LedgerRow[];
   engaged: readonly string[];
   reachedScreenName: string;
+}
+
+/** What the life-lost screen shows — mirrors `LifeLostView` from the Simulation. */
+export interface LifeLostModel {
+  cause: string;
+  monthsAdded: number;
+  livesLeft: number;
+  livesTotal: number;
+  screenName: string;
+  outOfLives: boolean;
+  ledger: readonly LedgerRow[];
+  delayMonths: number;
+  delays: number;
 }
 
 export interface OverlayData {
   levelLabel?: string;
   receipt?: ReceiptModel;
+  lifeLost?: LifeLostModel;
 }
 
 export interface OverlayOptions {
@@ -130,7 +168,15 @@ interface ReceiptView {
     string,
     { btn: HTMLButtonElement; detail: HTMLSpanElement; mark: HTMLElement }
   >;
-  quickWins: HTMLElement;
+  /** The delay summary under the capability rows (replaced the quick-win count). */
+  delays: HTMLElement;
+}
+
+/** The itemised delay ledger, rebuilt from data each time it is shown. */
+interface LedgerView {
+  root: HTMLDivElement;
+  rows: HTMLDivElement;
+  totalValue: HTMLElement;
 }
 
 /** The three closing comparison bars (your run, ANSR average, going alone). */
@@ -176,6 +222,17 @@ export class Overlays {
   private summaryReached!: HTMLElement;
   private summaryMonths!: HTMLElement;
   private summaryReceipt!: ReceiptView;
+  // Life lost / out of lives.
+  private lostTitle!: HTMLElement;
+  private lostCause!: HTMLElement;
+  private lostCost!: HTMLElement;
+  private lostLives!: HTMLElement;
+  private lostLivesSr!: HTMLElement;
+  private lostLivesArt!: SVGSVGElement;
+  private lostAdvice!: HTMLElement;
+  private lostLedger!: LedgerView;
+  private lostContinue!: HTMLButtonElement;
+  private lostCta!: HTMLButtonElement;
 
   private readonly reducedMotion: boolean;
   // Months count-up state (driven each frame by the Game).
@@ -192,6 +249,7 @@ export class Overlays {
     this.entries.set('start', this.buildStart());
     this.entries.set('titlecard', this.buildTitleCard());
     this.entries.set('pause', this.buildPause());
+    this.entries.set('lifelost', this.buildLifeLost());
     this.entries.set('summary', this.buildSummary());
     this.entries.set('win', this.buildWin());
     for (const { el } of this.entries.values()) parent.appendChild(el);
@@ -210,6 +268,9 @@ export class Overlays {
         ...TITLE_INK,
       });
     }
+    // Painted before the no-change bail-out, like the title card: the same
+    // overlay is shown again for the *next* delay, with different numbers.
+    if (name === 'lifelost' && data.lifeLost) this.renderLifeLost(data.lifeLost);
     if (this._current === name) return;
     this.hideAll();
     this._current = name;
@@ -353,10 +414,115 @@ export class Overlays {
         { ...PX_TYPE.rowText, ...(engaged ? VALUE_INK : DIM_INK), maxChars: 16 },
       );
     }
-    setPixelText(view.quickWins, COPY.win.quickWins(r.quickWins, r.totalQuickWins), {
-      ...PX_TYPE.body,
-      ...DIM_INK,
+    this.fillDelays(view.delays, r);
+  }
+
+  /**
+   * The delay line under the capability rows. A clean run gets the credit; any
+   * other gets the itemised cost, because that is the number the Navigator
+   * conversation actually starts from. Rows are capped at three: the receipt
+   * shares a column with the closing figure, and a fourth obstacle kind is
+   * information the out-of-lives ledger already carries in full.
+   */
+  private fillDelays(host: HTMLElement, r: ReceiptModel): void {
+    host.replaceChildren();
+    if (r.ledger.length === 0) {
+      host.appendChild(
+        this.pixel('div', 'beam-run__hint', COPY.win.delaysNone, {
+          ...PX_TYPE.body,
+          ...DIM_INK,
+        }),
+      );
+      return;
+    }
+    host.appendChild(
+      this.pixel('div', 'beam-run__hint', COPY.win.delays(r.setbacks, r.delayMonths), {
+        ...PX_TYPE.body,
+        ...VALUE_INK,
+      }),
+    );
+    for (const row of r.ledger.slice(0, 3)) {
+      host.appendChild(
+        this.pixel(
+          'div',
+          'beam-run__hint',
+          COPY.win.delayRow(row.label, row.count, row.months),
+          { ...PX_TYPE.rowText, ...MUTED_INK, maxChars: 24 },
+        ),
+      );
+    }
+  }
+
+  /** Paint an itemised ledger (obstacle, count, months) plus its total. */
+  private fillLedger(view: LedgerView, ledger: readonly LedgerRow[], total: number): void {
+    const rows = ledger.map((row) => {
+      const line = this.h('div', 'beam-run__ledger-row') as HTMLDivElement;
+      const label = this.pixel(
+        'span',
+        'beam-run__ledger-label',
+        row.count > 1 ? `${row.label} x${row.count}` : row.label,
+        { ...LEDGER_LABEL, ...TITLE_INK },
+      );
+      const months = this.pixel('span', 'beam-run__ledger-months', `+${row.months}`, {
+        ...LEDGER_MONTHS,
+        ...MUTED_INK,
+      });
+      line.append(label, months);
+      return line;
     });
+    view.rows.replaceChildren(...rows);
+    setPixelText(view.totalValue, `+${total}`, { ...LEDGER_MONTHS, ...VALUE_INK });
+  }
+
+  private renderLifeLost(m: LifeLostModel): void {
+    const obstacle = COPY.setback.tag[m.cause] ?? m.cause;
+    const reason = COPY.setback.reason[m.cause] ?? obstacle;
+
+    // Two very different screens, one surface. Out of lives the headline stops
+    // being about this obstacle and starts being about the attempt.
+    setPixelText(this.lostTitle, m.outOfLives ? COPY.gameOver.title : COPY.lifeLost.title, {
+      ...PX_TYPE.title,
+      ...TITLE_INK,
+      maxChars: 18,
+    });
+    setPixelText(
+      this.lostCause,
+      m.outOfLives ? COPY.gameOver.reached(m.screenName) : COPY.lifeLost.cause(obstacle),
+      { ...PX_TYPE.body, ...MUTED_INK },
+    );
+    setPixelText(
+      this.lostCost,
+      m.outOfLives
+        ? COPY.gameOver.cost(m.delays, m.delayMonths)
+        : COPY.lifeLost.cost(m.monthsAdded),
+      { ...PX_TYPE.clockStrong, ...VALUE_INK, maxChars: 24 },
+    );
+
+    paintLivesPips(this.lostLivesArt, m.livesLeft, m.livesTotal);
+    this.lostLivesSr.textContent = COPY.hud.lives(m.livesLeft, m.livesTotal);
+    this.lostLives.setAttribute('aria-label', COPY.hud.lives(m.livesLeft, m.livesTotal));
+
+    // The instruction is the reason this screen exists, and it is the same
+    // sentence in both variants — the only difference is the tense.
+    const advice = m.outOfLives ? COPY.gameOver.advice : COPY.lifeLost.advice;
+    setPixelText(this.lostAdvice, advice, { ...ADVICE, ...VALUE_INK });
+
+    // The itemised ledger is the out-of-lives payload. Mid-attempt it would
+    // bury the one instruction under a table.
+    this.lostLedger.root.hidden = !m.outOfLives || m.ledger.length === 0;
+    if (!this.lostLedger.root.hidden) {
+      this.fillLedger(this.lostLedger, m.ledger, m.delayMonths);
+    }
+
+    setPixelButtonLabel(
+      this.lostContinue,
+      m.outOfLives ? COPY.gameOver.restart : COPY.lifeLost.cont,
+      'primary',
+    );
+    this.lostCta.hidden = !m.outOfLives;
+
+    const el = this.entries.get('lifelost')?.el;
+    el?.setAttribute('aria-label', m.outOfLives ? COPY.gameOver.title : reason);
   }
 
   // --- builders -------------------------------------------------------------
@@ -511,9 +677,79 @@ export class Overlays {
       rows.set(cap.badge, { btn, detail, mark });
     }
 
-    const quickWins = this.h('div', 'beam-run__hint beam-run__receipt-wins');
-    root.append(title, hint, list, quickWins);
-    return { root, rows, quickWins };
+    const delays = this.h('div', 'beam-run__receipt-delays');
+    root.append(title, hint, list, delays);
+    return { root, rows, delays };
+  }
+
+  /** The itemised ledger shell (rows filled per-run by `fillLedger`). */
+  private buildLedger(title: string, totalLabel: string): LedgerView {
+    const root = this.h('div', 'beam-run__ledger') as HTMLDivElement;
+    root.append(
+      this.pixel('div', 'beam-run__receipt-title', title, {
+        ...PX_TYPE.caption,
+        ...DIM_INK,
+      }),
+    );
+    const rows = this.h('div', 'beam-run__ledger-rows') as HTMLDivElement;
+    const total = this.h(
+      'div',
+      'beam-run__ledger-row beam-run__ledger-row--total',
+    ) as HTMLDivElement;
+    const label = this.pixel('span', 'beam-run__ledger-label', totalLabel, {
+      ...LEDGER_LABEL,
+      ...TITLE_INK,
+    });
+    const totalValue = this.h('span', 'beam-run__ledger-months');
+    total.append(label, totalValue);
+    root.append(rows, total);
+    return { root, rows, totalValue };
+  }
+
+  /**
+   * The life-lost screen. Every element is built once and repainted per delay
+   * (see `renderLifeLost`), including the headline — one surface, two jobs.
+   *
+   * `role="alertdialog"`: something happened *to* the player and they have to
+   * acknowledge it, which is exactly what that role is for. The primary button
+   * is always present and only its label changes, so focus always lands
+   * somewhere real whichever variant is showing.
+   */
+  private buildLifeLost(): OverlayEntry {
+    const el = this.overlayShell(['scene', 'lifelost'], COPY.lifeLost.title);
+    el.setAttribute('role', 'alertdialog');
+    const brand = createBrandLockup(this.doc, { compact: true });
+    const stack = this.stack('receipt');
+
+    this.lostTitle = this.h('h2', 'beam-run__title');
+    this.lostCause = this.h('p', 'beam-run__subtitle');
+    this.lostCost = this.h('div', 'beam-run__clock-strong');
+
+    this.lostLives = this.h('div', 'beam-run__lives');
+    this.lostLivesSr = this.h('span', 'beam-run__sr', '');
+    this.lostLivesArt = createLivesPips(this.doc, 0, 0, 'beam-run__lives-pips');
+    this.lostLives.append(this.lostLivesSr, this.lostLivesArt);
+
+    this.lostAdvice = this.h('p', 'beam-run__advice');
+    this.lostLedger = this.buildLedger(COPY.gameOver.ledgerTitle, COPY.gameOver.totalLabel);
+    this.lostLedger.root.hidden = true;
+
+    const actions = this.h('div', 'beam-run__actions');
+    this.lostContinue = this.btn(COPY.lifeLost.cont, 'primary', () => this.cb.onContinue());
+    this.lostCta = this.btn(COPY.summary.cta, 'ghost', () => this.cb.onCta('summary'));
+    this.lostCta.hidden = true;
+    actions.append(this.lostContinue, this.lostCta);
+
+    stack.append(
+      this.lostTitle,
+      this.columns(
+        [this.lostCause, this.lostCost, this.lostLives],
+        [this.lostAdvice, this.lostLedger.root],
+      ),
+      actions,
+    );
+    el.append(brand, stack);
+    return { el, focusTarget: this.lostContinue };
   }
 
   /**

@@ -24,6 +24,7 @@
  *     the game's, and they cannot drift from it.
  */
 import { COPY } from '../data/copy';
+import { NOT_FOUND_COPY as COPY_404 } from '../data/notFoundCopy';
 import { BRAND } from '../data/tuning.config';
 import { TYPOGRAPHY } from '../data/tokens';
 import { CSS } from './styles';
@@ -377,27 +378,27 @@ export function createNotFoundBody(doc: Document, homeHref = '/'): HTMLElement {
   code.className = 'beam-run__stake';
   const codeSr = doc.createElement('span');
   codeSr.className = 'beam-run__sr';
-  codeSr.textContent = COPY.notFound.codeLabel;
+  codeSr.textContent = COPY_404.codeLabel;
   const codeFigure = doc.createElement('span');
   codeFigure.className = 'beam-run__stake-figure';
-  codeFigure.appendChild(createPixelSvg(doc, [COPY.notFound.code], { ...PX_TYPE.code, ...TITLE_INK }));
+  codeFigure.appendChild(createPixelSvg(doc, [COPY_404.code], { ...PX_TYPE.code, ...TITLE_INK }));
   code.append(codeSr, codeFigure);
 
-  const title = createPixelHeading(doc, 'h1', 'beam-run__title', COPY.notFound.title, ['OFF THE MAP'], {
+  const title = createPixelHeading(doc, 'h1', 'beam-run__title', COPY_404.title, ['OFF THE MAP'], {
     ...PX_TYPE.title,
     ...TITLE_INK,
   });
 
   const body = doc.createElement('p');
   body.className = 'beam-run__subtitle';
-  body.textContent = COPY.notFound.body;
+  body.textContent = COPY_404.body;
 
   const actions = doc.createElement('div');
   actions.className = 'beam-run__actions';
   const home = doc.createElement('a');
   home.className = 'beam-run__btn beam-run__btn--primary';
   home.setAttribute('href', homeHref);
-  setPixelButtonLabel(home, COPY.notFound.play, 'primary');
+  setPixelButtonLabel(home, COPY_404.play, 'primary');
   actions.appendChild(home);
 
   stack.append(code, title, body, actions);
@@ -414,7 +415,7 @@ export function createNotFoundBody(doc: Document, homeHref = '/'): HTMLElement {
  * document, so this never touches the calling document.
  */
 export function buildNotFoundHtml(host: Document, opts: NotFoundOptions = {}): string {
-  const doc = host.implementation.createHTMLDocument(COPY.notFound.pageTitle);
+  const doc = host.implementation.createHTMLDocument(COPY_404.pageTitle);
   doc.documentElement.setAttribute('lang', 'en');
 
   const meta = (attrs: Record<string, string>): void => {

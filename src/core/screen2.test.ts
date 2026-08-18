@@ -18,23 +18,24 @@ const STRUGGLE_LANE = 6;
 const RELIEF_LANE = 18;
 
 describe('Screen 2 — Hire Under Fire (wait in line → Talent500 → keep moving)', () => {
-  it('is the Talent500 capability screen with lanes on both sides of the badge', () => {
+  it('is the Talent500 capability screen, with every lane beyond the badge', () => {
     const sim = driveToScreen(2);
     expect(sim.screen.data.badge!.type).toBe('EXTINGUISH');
     expect(sim.activeHazard).toBeInstanceOf(Fire);
     const badgeGx = sim.screen.data.badge!.gx;
     const lanes = sim.screen.data.fireLanes!;
-    expect(lanes.some((l) => l.gx < badgeGx)).toBe(true);
-    expect(lanes.some((l) => l.gx > badgeGx)).toBe(true);
+    expect(lanes.every((l) => l.gx > badgeGx)).toBe(true);
+    expect(lanes.length).toBeGreaterThan(1);
   });
 
-  it('standing in a struggle lane costs months, not a life', () => {
+  it('standing in a lane costs months and a life', () => {
     const sim = driveToScreen(2);
     expireGrace(sim);
     const added = forceSetbackAt(sim, STRUGGLE_LANE);
     expect(added).toBe(JOURNEY.SETBACK_MONTHS);
-    expect(sim.state).toBe('PLAYING');
+    expect(sim.state).toBe('LIFE_LOST');
     expect(sim.setbacks).toBe(1);
+    expect(sim.lives).toBe(sim.livesTotal - 1);
   });
 
   it('engaging Talent500 puts nearby lanes out for good', () => {

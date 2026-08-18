@@ -43,13 +43,15 @@ export const PLAYER = {
 } as const;
 
 /**
- * The journey clock — the ONE currency of the run.
+ * The journey clock — the currency the run is *scored* in.
  *
- * There are no lives and no game over. Market-entry problems do not kill the
- * player, they cost **time**, which is the currency every GCC buyer actually
- * feels. A clean assisted run lands exactly on ANSR's published benchmark; the
- * total is capped below the going-alone baseline, so leaning on ANSR always
- * beats doing it alone (the story can never invert).
+ * Market-entry problems cost **time**, which is the currency every GCC buyer
+ * actually feels: each one books SETBACK_MONTHS on the clock and is written into
+ * the delay log. A clean assisted run lands exactly on ANSR's published
+ * benchmark; the total is capped below the going-alone baseline, so leaning on
+ * ANSR always beats doing it alone (the story can never invert).
+ *
+ * Time is not the only stake any more — see `LIVES` below.
  */
 export const JOURNEY = {
   /** Industry average months to stand up an India GCC alone (stated reference). */
@@ -62,20 +64,28 @@ export const JOURNEY = {
   MAX_MONTHS: 23,
   /** How far a setback pushes you back along the path (px). */
   SETBACK_KNOCKBACK_PX: 120,
-  /** Grace period after a setback so you cannot chain-lose months (s). */
-  SETBACK_INVULN: 1.1,
   /** Count-up duration for the closing months readout (s). */
   MONTHS_COUNT_UP_S: 1.2,
 } as const;
 
-/** Run-wide progression state. */
-export const RUN = {
-  /**
-   * Quick wins (the collectibles) are flavour only: they are counted, never
-   * scored, and never gate progress — so the closing figure stays a single,
-   * credible number (months) instead of an arcade score.
-   */
-  KEEP_COLLECTED_ON_SETBACK: true,
+/**
+ * Lives — the arcade stake on top of the clock (owner call).
+ *
+ * An obstacle does not just cost months, it costs a life. Losing one drops the
+ * player onto the life-lost screen and restarts the *same* stage, so the ground
+ * already covered is never taken away. Losing the last one ends the attempt and
+ * returns to the title screen with the full delay log, which is the argument:
+ * every one of those months was avoidable with the ANSR badge.
+ */
+export const LIVES = {
+  /** Lives per attempt. */
+  TOTAL: 3,
+  /** How long the life-lost screen holds before it advances itself (s). */
+  LOST_HOLD: 2.6,
+  /** Input is ignored for this long so the screen cannot be skipped blind (s). */
+  LOST_SKIP_AFTER: 0.45,
+  /** Delay-log rows shown on the HUD panel at once (older ones roll up). */
+  LOG_VISIBLE_ROWS: 4,
 } as const;
 
 /** Screen transitions. */
@@ -83,8 +93,6 @@ export const TRANSITION = {
   TITLE_CARD_HOLD: 1.2,     // s auto-advance
   TITLE_CARD_SKIP_AFTER: 0.4, // s before input may skip (prevents accidental skip)
   FADE: 0.18,               // s cut-to-black on transition
-  /** Brief hold while a setback registers (feel only, no state change). */
-  SETBACK_HOLD: 0.3,
 } as const;
 
 /**
@@ -96,8 +104,19 @@ export const TRANSITION = {
  * and then leaves"; help lasts for the rest of the screen.
  */
 export const POWERUPS = {
-  PICKUP_BOB_AMPLITUDE: 6,          // px idle bob
-  PICKUP_BOB_PERIOD: 1.6,           // s
+  /**
+   * The badge floats along a straight vertical line: it rises and falls through
+   * a band of ±FLOAT_AMPLITUDE px around its authored anchor, one full cycle
+   * every FLOAT_PERIOD seconds (~60 px/s average — a drift you can read and
+   * time, not a bob and not a target you have to chase).
+   *
+   * This motion is GAMEPLAY, not juice: the hitbox moves with it, so the sim and
+   * the renderer must derive the position from the same function of sim time
+   * (`badgeCenter` in world/badgeFloat.ts). It is therefore not disabled under
+   * `prefers-reduced-motion` — doing so would change the hitbox.
+   */
+  FLOAT_AMPLITUDE: 48,              // px above/below the anchor
+  FLOAT_PERIOD: 3.2,                // s for one full up-and-down cycle
 } as const;
 
 /** Hazard behaviour, per family. */

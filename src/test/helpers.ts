@@ -39,12 +39,29 @@ export function expireGrace(sim: Simulation): void {
   for (let i = 0; i < 200 && sim.player.isInvulnerable; i += 1) sim.step(DT, makeInput());
 }
 
-/** Walk onto the current screen's badge so its ANSR capability engages. */
+/**
+ * Walk onto the current screen's badge so its ANSR capability engages.
+ *
+ * The badge floats, so its box has to be read from the sim rather than computed
+ * from the anchor cell — that is the same trap the renderer has.
+ */
 export function engageBadge(sim: Simulation): void {
-  const b = sim.screen.data.badge!;
-  sim.player.box.x = b.gx * T + 2;
-  sim.player.box.y = b.gy * T + 2;
+  const box = sim.badgeBox;
+  if (!box) return;
+  sim.player.box.x = box.x + (box.w - sim.player.box.w) / 2;
+  sim.player.box.y = box.y + (box.h - sim.player.box.h) / 2;
   sim.step(DT, makeInput());
+}
+
+/**
+ * Acknowledge the life-lost screen and get back to PLAYING.
+ *
+ * Almost every hazard test needs this now: a delay leaves the sim in LIFE_LOST,
+ * and the stage restarts from its title card. No-op in any other state.
+ */
+export function recoverFromLifeLost(sim: Simulation): void {
+  sim.continueAfterLifeLost(); // no-op in any other state
+  for (let i = 0; i < 200 && sim.state !== 'PLAYING'; i += 1) sim.step(DT, makeInput());
 }
 
 /** Park the player standing on the ground at a grid column. */
@@ -55,12 +72,14 @@ export function standAtColumn(sim: Simulation, gx: number, offset = 4): void {
 
 /**
  * Hold the player at `gx` until a setback is booked (or `maxSteps` elapses).
- * Returns how many months the clock moved.
+ * Returns how many months the clock moved. Leaves the sim on the life-lost
+ * screen — call `recoverFromLifeLost` to carry on playing.
  */
 export function forceSetbackAt(sim: Simulation, gx: number, maxSteps = 600): number {
   const before = sim.months;
   for (let i = 0; i < maxSteps; i += 1) {
-    if (!sim.inSetback) standAtColumn(sim, gx);
+    if (sim.state !== 'PLAYING') break;
+    standAtColumn(sim, gx);
     sim.step(DT, makeInput());
     if (sim.months > before) break;
   }

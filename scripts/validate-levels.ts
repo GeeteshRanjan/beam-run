@@ -9,32 +9,44 @@
  *
  *  2. NARRATIVE — the things that make this a playable explainer rather than a
  *     platformer with logos on it, now machine-enforced:
- *       · every hazard screen puts hazard instances on BOTH sides of its badge,
- *         so each level plays as a before/after of the same problem;
- *       · declared `zone` labels agree with the geometry;
- *       · each of the four ANSR capabilities appears exactly once;
+ *       · EVERY screen carries a badge (the ANSR mark is on all six);
+ *       · the badge is anchored AHEAD of the obstacles it answers, so it can be
+ *         taken before the problem is met — that is the whole instruction the
+ *         game gives;
+ *       · every hazard screen still keeps obstacles beyond the badge, otherwise
+ *         taking it proves nothing;
+ *       · each of the four ANSR capabilities appears exactly once (SAFE_PASSAGE,
+ *         the non-capability badge, is exempt and may repeat);
  *       · the month model adds up — screen bases sum to the ANSR benchmark, the
  *         capability savings sum to the full gap, and the cap keeps every run
  *         strictly better than going it alone.
+ *
+ *     Note what is NOT checked any more: `zone` labels used to have to agree
+ *     with the geometry, back when the badge sat mid-screen and split it into a
+ *     struggle half and a relief half. The badge now precedes both, so `zone` is
+ *     authoring metadata about intent, not a position, and validating it against
+ *     x-coordinates would fail every screen for being correct.
  *
  *  3. PHYSICS-AWARE — using the SAME headless Player + collision code the game
  *     runs (`src/world/Player`, `moveAndCollide`) and the real tuning numbers,
  *     we breadth-first search the reachable state space from the spawn:
  *       · the exit / win trigger must be reachable (screen is completable);
- *       · the badge must be reachable;
+ *       · the badge must be reachable — proved against the BOTTOM of its float,
+ *         which is the easiest phase to intercept and therefore the honest test
+ *         of "can this be taken at all";
  *       · for a PLACE_TILE screen the exit must be reachable ONLY once the
- *         placed bridge is added (proving ANSR is the real solve);
- *       · no quick-win pickup may sit inside a hazard's lethal region.
+ *         placed bridge is added (proving ANSR is the real solve).
  *
  *     The search ignores hazards, which is exactly the "no setbacks" assist;
  *     slow mode only rescales time and cannot change geometry, so a reachable
  *     route here is also reachable with the assists on.
  */
-import { RESOLUTION, PLAYER, LOOP, HAZARDS, JOURNEY } from '../src/data/tuning.config';
+import { RESOLUTION, PLAYER, LOOP, JOURNEY, POWERUPS } from '../src/data/tuning.config';
 import { SCREENS, TOTAL_MONTHS_BASE, type ScreenData, GRID } from '../src/data/levels';
 import { CAPABILITIES } from '../src/data/copy';
 import { Player } from '../src/world/Player';
 import { aabbOverlap, type AABB } from '../src/world/Physics';
+import { badgeLowestBox } from '../src/world/badgeFloat';
 import { makeInput } from '../src/core/Input';
 
 type Problem = { screen: number | 'model'; message: string };
@@ -76,15 +88,23 @@ function validateStructure(s: ScreenData): Problem[] {
   if (s.hazard !== 'none' && present.length === 0) {
     push(`declares hazard "${s.hazard}" but has no hazard data`);
   }
-  if (s.hazard !== 'none' && !s.badge) push(`hazard screen "${s.name}" has no badge`);
+  // Every screen, not just the hazard ones: the ANSR mark is on all six.
+  if (!s.badge) push(`screen "${s.name}" has no badge`);
 
   const inBounds = (gx: number, gy: number) =>
     gx >= 0 && gx <= GRID.cols && gy >= 0 && gy <= GRID.rows;
-  for (const p of s.points ?? []) {
-    if (!inBounds(p.gx, p.gy)) push(`quick win out of bounds at (${p.gx},${p.gy})`);
-  }
   if (s.badge && !inBounds(s.badge.gx, s.badge.gy)) {
     push(`badge out of bounds at (${s.badge.gx},${s.badge.gy})`);
+  }
+  // The badge floats, so its band must stay inside the frame too — an anchor that
+  // is technically in bounds can still swing the pickup off the top of the screen.
+  if (s.badge) {
+    const box = badgeLowestBox(s.badge);
+    const topY = box.y - 2 * POWERUPS.FLOAT_AMPLITUDE;
+    if (topY < 0) push(`badge float rises above the frame (top y=${Math.round(topY)})`);
+    if (box.y + box.h > HEIGHT) {
+      push(`badge float sinks below the frame (bottom y=${Math.round(box.y + box.h)})`);
+    }
   }
   return problems;
 }
@@ -101,9 +121,16 @@ function hazardInstances(s: ScreenData): { gx: number; zone?: string }[] {
 }
 
 /**
- * The structure that makes each level an argument: the same problem before and
- * after ANSR. Without hazards on both sides of the badge there is no contrast to
- * feel, and the screen goes back to being decoration.
+ * The structure that makes each level an argument.
+ *
+ * The badge has to be *takeable before the problem*: that is the one instruction
+ * the game gives ("take the ANSR badge and you clear the hurdles safely"), and it
+ * is a lie if the first obstacle stands between the spawn and the badge. And
+ * every obstacle must sit beyond the badge, otherwise taking it demonstrates
+ * nothing and the screen is back to being decoration.
+ *
+ * This replaced a rule requiring obstacles on BOTH sides of a mid-screen badge.
+ * That layout has gone: the badge is now the first thing on the path.
  */
 function validateNarrative(s: ScreenData): Problem[] {
   const problems: Problem[] = [];
@@ -112,22 +139,17 @@ function validateNarrative(s: ScreenData): Problem[] {
 
   const badgeGx = s.badge.gx;
   const instances = hazardInstances(s);
-  const before = instances.filter((i) => i.gx < badgeGx);
+  const before = instances.filter((i) => i.gx <= badgeGx);
   const after = instances.filter((i) => i.gx > badgeGx);
 
-  if (before.length === 0) {
-    push('no hazard before the badge — the player never feels the problem first');
+  for (const i of before) {
+    push(
+      `hazard at gx=${i.gx} sits at or before the badge (gx=${badgeGx}) — the badge ` +
+        'must be reachable before the first obstacle is met',
+    );
   }
   if (after.length === 0) {
-    push('no hazard after the badge — the ANSR relief is never demonstrated');
-  }
-  for (const i of instances) {
-    if (i.zone === 'struggle' && i.gx > badgeGx) {
-      push(`hazard at gx=${i.gx} is labelled "struggle" but sits after the badge`);
-    }
-    if (i.zone === 'relief' && i.gx < badgeGx) {
-      push(`hazard at gx=${i.gx} is labelled "relief" but sits before the badge`);
-    }
+    push('no hazard after the badge — taking the badge demonstrates nothing');
   }
   return problems;
 }
@@ -155,7 +177,11 @@ function validateModel(): Problem[] {
     push(`capability monthsSaved sums to ${saved} but the baseline gap is ${gap}`);
   }
 
-  // Each capability must be earned exactly once across the run.
+  // Each capability must be earned exactly once across the run. `SAFE_PASSAGE`
+  // is the deliberate exception: it carries no capability, so it may repeat (it
+  // is on Reception and the Tech Park, the two screens with nothing to defend
+  // against) and it must never appear on a hazard screen, where the player would
+  // take a badge that does nothing.
   const badges = SCREENS.filter((s) => s.badge).map((s) => s.badge!.type);
   for (const cap of CAPABILITIES) {
     const count = badges.filter((b) => b === cap.badge).length;
@@ -163,9 +189,15 @@ function validateModel(): Problem[] {
       push(`capability ${cap.product} (${cap.badge}) appears on ${count} screens, expected 1`);
     }
   }
+  const known = new Set<string>([...CAPABILITIES.map((c) => c.badge), 'SAFE_PASSAGE']);
   for (const b of badges) {
-    if (!CAPABILITIES.some((c) => c.badge === b)) {
+    if (!known.has(b)) {
       push(`badge type ${b} has no entry in CAPABILITIES (no product name to show)`);
+    }
+  }
+  for (const s of SCREENS) {
+    if (s.hazard !== 'none' && s.badge?.type === 'SAFE_PASSAGE') {
+      push(`screen ${s.id} has obstacles but carries the no-effect SAFE_PASSAGE badge`);
     }
   }
   return problems;
@@ -191,42 +223,16 @@ function bridgeTile(s: ScreenData): AABB | null {
   return { x: t.gx * T, y: t.gy * T, w: t.w * T, h: t.h * T };
 }
 
+/**
+ * The badge hitbox at the bottom of its float — the easiest phase to intercept.
+ *
+ * Reachability has to be proved against *some* phase, and the lowest one is the
+ * honest choice: if the player cannot touch the badge there, they cannot touch it
+ * at all. (The old static box was simply the anchor cell.)
+ */
 function badgeBox(s: ScreenData): AABB | null {
   if (!s.badge) return null;
-  return { x: s.badge.gx * T, y: s.badge.gy * T, w: T, h: T };
-}
-
-function pointBox(gx: number, gy: number): AABB {
-  const cx = gx * T + T / 2;
-  const cy = gy * T + T / 2;
-  return { x: cx - 12, y: cy - 12, w: 24, h: 24 };
-}
-
-/** Maximal (over-time) lethal regions per hazard family, for the pickup check. */
-function lethalRegions(s: ScreenData): AABB[] {
-  const out: AABB[] = [];
-  if (s.hazard === 'quicksand') {
-    // Shallow struggle sludge only drags — it never books a delay, so a pickup
-    // sitting above it is fine. Deep pits are the lethal ones.
-    for (const q of s.quicksand ?? []) {
-      if (q.deep === false) continue;
-      out.push({ x: q.gx * T, y: q.gy * T, w: q.w * T, h: q.h * T });
-    }
-  } else if (s.hazard === 'fire') {
-    // Flame fills the whole lane column while active.
-    for (const l of s.fireLanes ?? []) out.push({ x: l.gx * T, y: 0, w: T, h: HEIGHT });
-  } else if (s.hazard === 'spikes') {
-    // Spike sweeps the column from the top down to the ground while falling.
-    for (const c of s.spikeColumns ?? []) out.push({ x: c.gx * T, y: 0, w: T, h: 15 * T });
-  } else if (s.hazard === 'gates') {
-    // Swept lateral range of the barrier arm (± amplitude, gate is 26×56).
-    const sweep = HAZARDS.GATES.SWAY_AMPLITUDE;
-    for (const g of s.gates ?? []) {
-      const cx = g.gx * T + T / 2;
-      out.push({ x: cx - sweep - 13, y: g.gy * T - 16, w: 2 * (sweep + 13), h: 56 });
-    }
-  }
-  return out;
+  return badgeLowestBox(s.badge);
 }
 
 // --- physics-aware reachability search -------------------------------------
@@ -316,11 +322,17 @@ function validatePhysics(s: ScreenData): Problem[] {
   const reachesTarget = (solids: AABB[]) =>
     flood(solids, spawn, (box) => box.x + box.w >= targetX);
 
-  // Badge reachability (searched over the pre-bridge geometry).
+  // Badge reachability (searched over the pre-bridge geometry, at the bottom of
+  // the badge's float).
   const badge = badgeBox(s);
   if (badge) {
     const found = flood(base, spawn, (box) => aabbOverlap(box, badge));
-    if (!found) push(`badge at (${s.badge!.gx},${s.badge!.gy}) is not reachable from spawn`);
+    if (!found) {
+      push(
+        `badge anchored at (${s.badge!.gx},${s.badge!.gy}) is not reachable from spawn ` +
+          'even at the bottom of its float',
+      );
+    }
   }
 
   const bridge = bridgeTile(s);
@@ -335,15 +347,6 @@ function validatePhysics(s: ScreenData): Problem[] {
     }
   } else if (!reachesTarget(base)) {
     push('exit / win trigger is not reachable from spawn (screen not completable)');
-  }
-
-  // No quick win may sit in a lethal region.
-  const lethal = lethalRegions(s);
-  for (const pt of s.points ?? []) {
-    const pb = pointBox(pt.gx, pt.gy);
-    if (lethal.some((r) => aabbOverlap(pb, r))) {
-      push(`quick win at (${pt.gx},${pt.gy}) sits in a lethal ${s.hazard} region`);
-    }
   }
 
   return problems;
@@ -374,7 +377,7 @@ function main(): void {
 
   console.log(
     `✓ Level validation passed for ${SCREENS.length} screens ` +
-      `(structural + before/after narrative + month model + physics-aware completability).`,
+      `(structural + badge-first narrative + month model + physics-aware completability).`,
   );
 }
 

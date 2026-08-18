@@ -11,29 +11,31 @@ function standAtGate(sim: ReturnType<typeof driveToScreen>, gx: number): void {
 }
 
 describe('Screen 3 — Compliance (thread the approvals → GCC-BOT → cleared)', () => {
-  it('is the GCC-BOT capability screen with barriers on both sides of the badge', () => {
+  it('is the GCC-BOT capability screen, with every barrier beyond the badge', () => {
     const sim = driveToScreen(3);
     expect(sim.screen.data.badge!.type).toBe('CLEAR_PATH');
     expect(sim.screen.data.hazard).toBe('gates');
     expect(sim.activeHazard).toBeInstanceOf(Gates);
     const badgeGx = sim.screen.data.badge!.gx;
     const gates = sim.screen.data.gates!;
-    expect(gates.some((g) => g.gx < badgeGx)).toBe(true);
-    expect(gates.some((g) => g.gx > badgeGx)).toBe(true);
+    expect(gates.every((g) => g.gx > badgeGx)).toBe(true);
+    expect(gates.length).toBeGreaterThan(1);
   });
 
-  it('a struggle barrier costs months, not a life', () => {
+  it('a barrier costs months and a life', () => {
     const sim = driveToScreen(3);
     expireGrace(sim);
     const before = sim.months;
     const struggleGx = sim.screen.data.gates![0]!.gx;
     for (let i = 0; i < 600; i += 1) {
-      if (!sim.inSetback) standAtGate(sim, struggleGx);
+      if (sim.state !== 'PLAYING') break;
+      standAtGate(sim, struggleGx);
       sim.step(DT, makeInput());
       if (sim.months > before) break;
     }
     expect(sim.months).toBe(before + JOURNEY.SETBACK_MONTHS);
-    expect(sim.state).toBe('PLAYING');
+    expect(sim.state).toBe('LIFE_LOST');
+    expect(sim.lives).toBe(sim.livesTotal - 1);
   });
 
   it('engaging GCC-BOT lifts nearby barriers for good', () => {

@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite';
 // @ts-expect-error — plain-JS build helper, no types needed.
 import { cssMinifyPlugin } from './scripts/css-minify.mjs';
+import { notFoundPagePlugin } from './scripts/not-found-plugin';
 
 /**
  * Standalone SITE build (for Vercel / static hosting).
@@ -13,7 +14,9 @@ import { cssMinifyPlugin } from './scripts/css-minify.mjs';
  * script). The library build (vite.config.ts) is left unchanged.
  */
 export default defineConfig(() => ({
-  plugins: [cssMinifyPlugin()],
+  // `vite preview --config vite.config.site.ts` serves dist-site; without this
+  // the history fallback would answer /gcc-opportunity-navigator with the game.
+  plugins: [notFoundPagePlugin(), cssMinifyPlugin()],
   base: './',
   build: {
     outDir: 'dist-site',

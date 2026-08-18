@@ -30,8 +30,9 @@ describe('Analytics (consent-gated)', () => {
     const { a, r } = make(false);
     a.gameLoaded();
     a.gameStarted();
-    a.setbackIncurred(2, 'fire', 8);
-    a.gameCompleted(14, 92, 3, 12, 4);
+    a.setbackIncurred(2, 'fire', 8, 2);
+    a.gameOver(2, 19, 3);
+    a.gameCompleted(14, 92, 3, 4);
     expect(r.events.length).toBe(0);
   });
 
@@ -42,9 +43,10 @@ describe('Analytics (consent-gated)', () => {
     a.screenEntered(1, 'Setup Delays');
     a.screenCleared(1, 12.345, 2, 8);
     a.badgeCollected(1, 'PLACE_TILE');
-    a.setbackIncurred(2, 'fire', 8);
+    a.setbackIncurred(2, 'fire', 8, 2);
+    a.gameOver(4, 19, 3);
     a.runSummary(3, 10, 60.5);
-    a.gameCompleted(14, 92.5, 3, 12, 4);
+    a.gameCompleted(14, 92.5, 3, 4);
     a.ctaShown('win');
     a.ctaClicked('win', '/gcc-opportunity-navigator', 'compliance');
     a.gameSkipped(0);
@@ -57,6 +59,7 @@ describe('Analytics (consent-gated)', () => {
       'screen_cleared',
       'badge_collected',
       'setback_incurred',
+      'game_over',
       'run_summary_shown',
       'game_completed',
       'cta_shown',
@@ -82,7 +85,14 @@ describe('Analytics (consent-gated)', () => {
       months: 8,
     });
     const setback = r.events.find((e) => e.name === 'setback_incurred')!;
-    expect(setback.params).toMatchObject({ screen_id: 2, cause: 'fire', months: 8 });
+    expect(setback.params).toMatchObject({
+      screen_id: 2,
+      cause: 'fire',
+      months: 8,
+      lives_left: 2,
+    });
+    const over = r.events.find((e) => e.name === 'game_over')!;
+    expect(over.params).toMatchObject({ screen_id: 4, months: 19, total_delays: 3 });
     const summary = r.events.find((e) => e.name === 'run_summary_shown')!;
     expect(summary.params).toMatchObject({ reached_screen: 3, months: 10, duration_s: 60.5 });
     const done = r.events.find((e) => e.name === 'game_completed')!;
@@ -90,7 +100,6 @@ describe('Analytics (consent-gated)', () => {
       months: 14,
       duration_s: 92.5,
       total_setbacks: 3,
-      quick_wins: 12,
       capabilities_engaged: 4,
     });
     const clicked = r.events.find((e) => e.name === 'cta_clicked')!;

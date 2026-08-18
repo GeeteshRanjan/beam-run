@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { buildNotFoundHtml, createNotFoundBody } from './NotFoundPage';
 import { COPY } from '../data/copy';
+import { NOT_FOUND_COPY } from '../data/notFoundCopy';
 import { LOGO_ORANGE } from './ansrMark';
 
 const html = (): string => buildNotFoundHtml(document);
@@ -27,7 +28,7 @@ describe('custom 404 page', () => {
     const links = body.querySelectorAll('a');
     expect(links).toHaveLength(1);
     expect(links[0]!.getAttribute('href')).toBe('/');
-    expect(links[0]!.textContent).toBe(COPY.notFound.play);
+    expect(links[0]!.textContent).toBe(NOT_FOUND_COPY.play);
     expect(links[0]!.className).toContain('beam-run__btn');
 
     const custom = createNotFoundBody(document, 'https://example.com/play');
@@ -37,9 +38,9 @@ describe('custom 404 page', () => {
   it('reads as prose for assistive tech, with the bitmap art decorative', () => {
     const body = createNotFoundBody(document);
     const heading = body.querySelector('h1')!;
-    expect(heading.textContent).toBe(COPY.notFound.title);
-    expect(body.textContent).toContain(COPY.notFound.codeLabel);
-    expect(body.textContent).toContain(COPY.notFound.body);
+    expect(heading.textContent).toBe(NOT_FOUND_COPY.title);
+    expect(body.textContent).toContain(NOT_FOUND_COPY.codeLabel);
+    expect(body.textContent).toContain(NOT_FOUND_COPY.body);
     // Every SVG on the page is decorative — the lockup carries its own label.
     for (const svg of body.querySelectorAll('svg')) {
       expect(svg.getAttribute('aria-hidden')).toBe('true');

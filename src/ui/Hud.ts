@@ -2,12 +2,18 @@
  * Hud — the in-play heads-up display, built from real DOM (not canvas) so it is
  * screen-reader accessible.
  *
- * Four readouts, each on its own 8-bit plaque:
+ * Two stacks of 8-bit plaques, hanging from the top corners of the frame:
  *
- *   top-left      current stage
- *   top-right     TIME TO MARKET — the one number that matters, dominant
- *   bottom-left   quick wins found (a count, never a score)
- *   bottom-right  the ANSR capability engaged on this screen (persistent chip)
+ *   top-left    current stage · lives remaining · the ANSR capability engaged
+ *   top-right   TIME TO MARKET (the one number that matters, dominant)
+ *               · the DELAY LOG, which grows downwards as the run goes wrong
+ *
+ * Both stacks are ordinary flex columns inside one absolutely-positioned wrapper
+ * per corner, rather than four independently anchored plaques. That is a
+ * deliberate change: the log has no fixed height, so anything below it anchored
+ * by a hand-tuned pixel offset would collide with it the moment a fourth delay
+ * was logged. Stacking also means portrait needs no special-casing — everything
+ * lives in the top band, and the bottom of the frame stays clear for thumbs.
  *
  * Every label and number is set in the *same* 5×7 bitmap font the canvas draws
  * with (via `PixelType`), not in Moderat/system-sans: a proportional web font on
@@ -20,9 +26,12 @@
  * span carrying the real prose, so `textContent` and assistive tech still read
  * ordinary sentences (with the casing and punctuation the bitmap font lacks).
  *
- * There is no lives counter: setbacks cost months, not lives.
+ * The lives readout uses shape, not colour: a life still held is a solid block,
+ * a spent one a hollow outline, so it reads without relying on the dimming.
  */
 import { COPY } from '../data/copy';
+import type { LogPanelView } from '../core/setbackLog';
+import { paintLivesPips } from './LivesPips';
 import {
   createPixelSvg,
   normalizeForPixels,
@@ -54,7 +63,7 @@ interface PixelSpec {
 }
 
 export const HUD_PX: Record<
-  'caption' | 'stage' | 'months' | 'unit' | 'chip' | 'chipSub',
+  'caption' | 'stage' | 'months' | 'unit' | 'chip' | 'chipSub' | 'lives' | 'logRow' | 'logTotal',
   PixelSpec
 > = {
   /**
@@ -72,10 +81,20 @@ export const HUD_PX: Record<
   months: { unit: 0.38, minPx: 3.2, maxPx: 6, maxShare: 16 },
   /** "MONTHS" after the figure. */
   unit: { unit: 0.15, minPx: 1.7, maxPx: 2.4, maxShare: 16 },
-  /** Quick-win count and the engaged product name. */
+  /** The engaged product name. */
   chip: { unit: 0.19, minPx: 2, maxPx: 3, maxShare: 30 },
   /** The capability's outcome line under the product ("Filings cleared"). */
   chipSub: { unit: 0.15, minPx: 1.7, maxPx: 2.4, maxShare: 45 },
+  /** The lives pips (hand-built art, sized by the same formula as text). */
+  lives: { unit: 0.26, minPx: 2.4, maxPx: 4, maxShare: 22 },
+  /**
+   * One delay-log row ("OFFER DECLINED +2"). The longest tag in
+   * `COPY.setback.tag` is 17 characters including the figure, so the cap is set
+   * where that still clears a phone frame beside the stage plaque opposite.
+   */
+  logRow: { unit: 0.14, minPx: 1.5, maxPx: 2.2, maxShare: 30 },
+  /** The log total, one step up so the running cost is the readable part. */
+  logTotal: { unit: 0.17, minPx: 1.8, maxPx: 2.6, maxShare: 30 },
 };
 
 const PX = HUD_PX;
@@ -106,8 +125,11 @@ export interface PowerHud {
 export interface HudModel {
   levelLabel: string;
   months: number;
-  quickWins: number;
-  totalQuickWins: number;
+  /** Lives still held this attempt. */
+  lives: number;
+  livesTotal: number;
+  /** The delay log panel view. Empty log → the panel stays hidden. */
+  log: LogPanelView;
   power: PowerHud | null;
 }
 
@@ -142,24 +164,10 @@ function paint(svg: SVGSVGElement, text: string, spec: PixelSpec, ink: PixelText
   paintPixelSvg(svg, [text], { ...ink, ...spec });
 }
 
-/** A rising bar chart in pixels — same motif as the Growth Point sprite. */
-function createChartIcon(doc: Document, spec: PixelSpec): SVGSVGElement {
-  const svg = doc.createElementNS(SVG_NS, 'svg');
-  svg.setAttribute('viewBox', '0 0 8 7');
-  svg.setAttribute('aria-hidden', 'true');
-  svg.setAttribute('focusable', 'false');
-  svg.setAttribute('class', 'beam-run__pixels beam-run__hud-wins-icon');
-  const path = doc.createElementNS(SVG_NS, 'path');
-  path.setAttribute(
-    'd',
-    // baseline, then three bars stepping up
-    'M0 6h8v1H0z' + 'M0 4h2v2H0z' + 'M3 2h2v4H3z' + 'M6 0h2v6H6z',
-  );
-  path.setAttribute('fill', 'currentColor');
-  path.setAttribute('shape-rendering', 'crispEdges');
-  svg.appendChild(path);
-  sizePixels(svg, spec);
-  return svg;
+/** The pips, sized by the same frame-unit formula the bitmap type uses. */
+function paintLives(svg: SVGSVGElement, left: number, total: number): void {
+  paintLivesPips(svg, left, total);
+  sizePixels(svg, PX.lives);
 }
 
 export class Hud {
@@ -172,9 +180,13 @@ export class Hud {
   private readonly clockValue: HTMLSpanElement;
   private readonly clockValueSr: HTMLSpanElement;
   private readonly clockValueArt: SVGSVGElement;
-  private readonly quickWins: HTMLDivElement;
-  private readonly quickWinsSr: HTMLSpanElement;
-  private readonly quickWinsArt: SVGSVGElement;
+  private readonly lives: HTMLDivElement;
+  private readonly livesSr: HTMLSpanElement;
+  private readonly livesArt: SVGSVGElement;
+  private readonly log: HTMLDivElement;
+  private readonly logSr: HTMLSpanElement;
+  private readonly logRows: HTMLDivElement;
+  private readonly logTotalArt: SVGSVGElement;
   private readonly power: HTMLDivElement;
   private readonly powerName: HTMLSpanElement;
   private readonly powerNameSr: HTMLSpanElement;
@@ -185,13 +197,20 @@ export class Hud {
   private readonly live: HTMLDivElement;
   private lastMonths = -1;
   /** Painted strings, so the bitmap art is only rebuilt when it changes. */
-  private drawn = { level: '', months: '', wins: '', product: '', name: '' };
+  private drawn = { level: '', months: '', lives: '', log: '', product: '', name: '' };
 
   constructor(parent: HTMLElement) {
     const doc = parent.ownerDocument;
     this.doc = doc;
     this.root = doc.createElement('div');
     this.root.className = 'beam-run__hud';
+
+    // Two corner stacks. Plaques are ordinary flow children inside them, so the
+    // delay log can grow without pushing anything out of the frame.
+    const leftStack = doc.createElement('div');
+    leftStack.className = 'beam-run__hud-stack beam-run__hud-stack--left';
+    const rightStack = doc.createElement('div');
+    rightStack.className = 'beam-run__hud-stack beam-run__hud-stack--right';
 
     // Stage: caption + name, stacked like an arcade level readout.
     this.level = doc.createElement('div');
@@ -226,11 +245,33 @@ export class Hud {
     figure.append(this.clockValue, clockUnit);
     this.clock.append(figure);
 
-    this.quickWins = doc.createElement('div');
-    this.quickWins.className = 'beam-run__hud-row beam-run__hud-wins';
-    this.quickWinsSr = this.srSpan(`${COPY.hud.quickWinsLabel}: `);
-    this.quickWinsArt = this.art();
-    this.quickWins.append(this.quickWinsSr, createChartIcon(doc, PX.chip), this.quickWinsArt);
+    // Lives: caption + pips. Under the stage, because it belongs with "where am
+    // I" rather than with "what has it cost" on the right.
+    this.lives = doc.createElement('div');
+    this.lives.className = 'beam-run__hud-row beam-run__hud-lives';
+    this.lives.append(
+      this.caption(`${COPY.hud.livesLabel}: `, COPY.hud.livesLabel, 'beam-run__hud-caption'),
+    );
+    this.livesSr = this.srSpan('');
+    this.livesArt = doc.createElementNS(SVG_NS, 'svg');
+    this.livesArt.setAttribute('aria-hidden', 'true');
+    this.livesArt.setAttribute('focusable', 'false');
+    this.livesArt.setAttribute('class', 'beam-run__pixels beam-run__hud-lives-pips');
+    this.lives.append(this.livesSr, this.livesArt);
+
+    // The delay log: hangs off the clock and grows downwards, one row per
+    // obstacle. Hidden entirely until the first delay, so a clean run never sees
+    // it and the frame stays quiet.
+    this.log = doc.createElement('div');
+    this.log.className = 'beam-run__hud-row beam-run__hud-log';
+    this.log.append(
+      this.caption(`${COPY.hud.logLabel}: `, COPY.hud.logLabel, 'beam-run__hud-log-label'),
+    );
+    this.logSr = this.srSpan('');
+    this.logRows = doc.createElement('div');
+    this.logRows.className = 'beam-run__hud-log-rows';
+    this.logTotalArt = this.art('beam-run__hud-log-total');
+    this.log.append(this.logSr, this.logRows, this.logTotalArt);
 
     this.power = doc.createElement('div');
     this.power.className = 'beam-run__hud-row beam-run__hud-power';
@@ -252,7 +293,9 @@ export class Hud {
     this.live.setAttribute('role', 'status');
     this.live.setAttribute('aria-live', 'polite');
 
-    this.root.append(this.level, this.clock, this.quickWins, this.power, this.live);
+    leftStack.append(this.level, this.lives, this.power);
+    rightStack.append(this.clock, this.log);
+    this.root.append(leftStack, rightStack, this.live);
     parent.appendChild(this.root);
   }
 
@@ -315,16 +358,16 @@ export class Hud {
     }
     this.lastMonths = model.months;
 
-    const wins = `${model.quickWins}/${model.totalQuickWins}`;
-    if (wins !== this.drawn.wins) {
-      this.drawn.wins = wins;
-      this.quickWinsSr.textContent = `${COPY.hud.quickWinsLabel}: ${wins}`;
-      paint(this.quickWinsArt, wins, PX.chip, MUTED_INK);
+    const livesKey = `${model.lives}/${model.livesTotal}`;
+    if (livesKey !== this.drawn.lives) {
+      this.drawn.lives = livesKey;
+      const value = COPY.hud.livesValue(model.lives, model.livesTotal);
+      this.livesSr.textContent = value;
+      paintLives(this.livesArt, model.lives, model.livesTotal);
+      this.lives.setAttribute('aria-label', `${COPY.hud.livesLabel}: ${value}`);
     }
-    this.quickWins.setAttribute(
-      'aria-label',
-      `${COPY.hud.quickWinsLabel}: ${model.quickWins} of ${model.totalQuickWins}`,
-    );
+
+    this.updateLog(model.log);
 
     if (model.power) {
       this.power.classList.add('beam-run__hud-power--visible');
@@ -345,6 +388,59 @@ export class Hud {
     } else {
       this.power.classList.remove('beam-run__hud-power--visible');
     }
+  }
+
+  /**
+   * Repaint the delay log. Rows are rebuilt wholesale rather than diffed: the
+   * list is capped by `LIVES.LOG_VISIBLE_ROWS` in tuning and only changes when a delay
+   * is booked, so a key comparison is enough to keep this off the hot path.
+   */
+  private updateLog(view: LogPanelView): void {
+    const key = `${view.count}|${view.earlier}|${view.total}|${view.rows
+      .map((r) => `${r.label}+${r.months}`)
+      .join(',')}`;
+    if (key === this.drawn.log) return;
+    this.drawn.log = key;
+
+    this.log.classList.toggle('beam-run__hud-log--visible', view.count > 0);
+    if (view.count === 0) {
+      this.logRows.replaceChildren();
+      paint(this.logTotalArt, '', PX.logTotal, MUTED_INK);
+      this.logSr.textContent = '';
+      this.log.removeAttribute('aria-label');
+      return;
+    }
+
+    const rows: HTMLElement[] = [];
+    if (view.earlier > 0) {
+      rows.push(this.logRow(COPY.hud.logEarlier(view.earlier), CAPTION_INK, 'earlier'));
+    }
+    for (const row of view.rows) {
+      rows.push(this.logRow(COPY.hud.logRow(row.label, row.months), INK));
+    }
+    this.logRows.replaceChildren(...rows);
+
+    paint(
+      this.logTotalArt,
+      `${COPY.hud.logTotal} ${COPY.hud.logMonths(view.total)}`,
+      PX.logTotal,
+      VALUE_INK,
+    );
+    // One sentence, not a list of fragments (see COPY.hud.logSummary). The rows
+    // themselves stay decorative artwork.
+    const summary = COPY.hud.logSummary(view.count, view.total);
+    this.logSr.textContent = summary;
+    this.log.setAttribute('aria-label', `${COPY.hud.logLabel}: ${summary}`);
+  }
+
+  private logRow(text: string, ink: PixelTextOptions, modifier?: string): HTMLElement {
+    const el = this.doc.createElement('div');
+    el.className =
+      'beam-run__hud-log-row' + (modifier ? ` beam-run__hud-log-row--${modifier}` : '');
+    const art = this.art();
+    paint(art, text, PX.logRow, ink);
+    el.appendChild(art);
+    return el;
   }
 
   /** Announce a message to assistive tech. Toggling text forces re-read. */

@@ -1,23 +1,22 @@
 /**
  * Screen — one fixed-camera screen, built fresh from `levels.json`.
  *
- * Task 3 scope: static solids, spawn, and the exit / win-trigger thresholds,
- * all converted from tile units to internal pixels. Hazards, badge and Growth
- * Points layer in during Tasks 4–9. A Screen is reconstructed on entry and on
- * respawn, so any mutation (e.g. the quicksand placed tile) is naturally reset.
+ * Static solids, spawn, and the exit / win-trigger thresholds, all converted
+ * from tile units to internal pixels. A Screen is reconstructed on entry and
+ * whenever a life is lost, so any mutation (e.g. the quicksand placed tile) is
+ * naturally reset.
+ *
+ * There are no collectible pickups here. The Growth Points that used to be
+ * scattered across every screen are gone (owner call): they were a second score
+ * competing with the only figure that matters, and picking them up said nothing
+ * about ANSR. The badge is now the one thing on a screen worth reaching for, and
+ * it lives in level data, not here.
  */
 import { RESOLUTION, PLAYER } from '../data/tuning.config';
 import { type ScreenData, getScreen } from '../data/levels';
 import type { AABB } from './Physics';
 
 const T = RESOLUTION.TILE;
-
-export interface PointPickup {
-  id: string;
-  x: number;
-  y: number;
-  collected: boolean;
-}
 
 export class Screen {
   readonly data: ScreenData;
@@ -27,7 +26,6 @@ export class Screen {
   readonly spawnY: number;
   readonly exitX?: number;
   readonly winTriggerX?: number;
-  points: PointPickup[] = [];
 
   constructor(idOrData: number | ScreenData) {
     this.data = typeof idOrData === 'number' ? getScreen(idOrData) : idOrData;
@@ -44,13 +42,6 @@ export class Screen {
 
     this.exitX = this.data.exit ? this.data.exit.gx * T : undefined;
     this.winTriggerX = this.data.winTrigger ? this.data.winTrigger.gx * T : undefined;
-
-    this.points = (this.data.points ?? []).map((p, i) => ({
-      id: `s${this.data.id}-p${i}`,
-      x: p.gx * T + T / 2,
-      y: p.gy * T + T / 2,
-      collected: false,
-    }));
   }
 
   get id(): number {

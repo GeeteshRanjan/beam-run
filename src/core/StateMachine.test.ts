@@ -28,20 +28,27 @@ describe('StateMachine (game transitions)', () => {
     }
   });
 
-  it('has no failure branch — PLAYING only leads onward or to WIN', () => {
+  it('routes a lost life onward, never into a dead end', () => {
     const sm = new StateMachine<GameState>('PLAYING', GAME_TRANSITIONS);
     expect(sm.can('TITLE_CARD')).toBe(true); // next screen
+    expect(sm.can('LIFE_LOST')).toBe(true); // an obstacle stopped the player
     expect(sm.can('WIN')).toBe(true); // finale
-    // Setbacks are handled inside PLAYING; there is no death or game-over state
-    // to fall into, so a run can never be walled off from the closing CTA.
     expect(Object.keys(GAME_TRANSITIONS)).toEqual([
       'BOOT',
       'START',
       'TITLE_CARD',
       'PLAYING',
+      'LIFE_LOST',
       'WIN',
     ]);
-    expect(GAME_TRANSITIONS.PLAYING).toEqual(['TITLE_CARD', 'WIN']);
+    expect(GAME_TRANSITIONS.PLAYING).toEqual(['TITLE_CARD', 'LIFE_LOST', 'WIN']);
+    // LIFE_LOST always leads somewhere playable: back into the same stage while
+    // lives remain, or to the title screen once they are gone. There is no state
+    // from which a run is walled off from the closing CTA.
+    const lost = new StateMachine<GameState>('LIFE_LOST', GAME_TRANSITIONS);
+    expect(lost.can('TITLE_CARD')).toBe(true);
+    expect(lost.can('START')).toBe(true);
+    expect(lost.can('PLAYING')).toBe(false); // always via the stage title card
   });
 
   it('fires onChange for accepted transitions only', () => {

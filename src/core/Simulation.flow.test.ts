@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { Simulation } from './Simulation';
 import { makeInput } from './Input';
-import { JOURNEY, RESOLUTION } from '../data/tuning.config';
+import { JOURNEY, RESOLUTION, LIVES } from '../data/tuning.config';
 import { TOTAL_MONTHS_BASE } from '../data/levels';
-import { DT, stepN } from '../test/helpers';
+import { DT, stepN, recoverFromLifeLost } from '../test/helpers';
 
 function toPlaying(sim: Simulation): void {
   sim.step(DT, makeInput({ anyPressed: true }));
@@ -39,7 +39,7 @@ describe('full state-machine flow', () => {
   });
 });
 
-describe('the run cannot fail', () => {
+describe('the attempt can end, but the message never does', () => {
   it('a clean run lands exactly on the ANSR benchmark', () => {
     const sim = new Simulation();
     driveToEnd(sim);
@@ -47,27 +47,53 @@ describe('the run cannot fail', () => {
     expect(sim.months).toBe(JOURNEY.ANSR_BENCHMARK_MONTHS);
     expect(sim.months).toBe(TOTAL_MONTHS_BASE);
     expect(sim.receipt.matchedBenchmark).toBe(true);
+    expect(sim.receipt.ledger).toHaveLength(0);
+    expect(sim.receipt.livesLeft).toBe(LIVES.TOTAL);
   });
 
-  it('no number of setbacks can end the run — there is no game over', () => {
+  it('delays inside the life budget still finish the run and reach the CTA', () => {
     const sim = new Simulation();
     toPlaying(sim);
-    for (let i = 0; i < 12; i += 1) {
+    // Spend every life but the last, recovering each time.
+    for (let i = 0; i < LIVES.TOTAL - 1; i += 1) {
       stepN(sim, 80); // outlast the grace window
       sim.player.box.y = RESOLUTION.HEIGHT + 200;
       sim.step(DT, makeInput());
-      expect(sim.state).toBe('PLAYING');
+      expect(sim.state).toBe('LIFE_LOST');
+      recoverFromLifeLost(sim);
     }
-    expect(sim.setbacks).toBe(12);
-    // The run is still finishable, and still reaches the CTA.
+    expect(sim.setbacks).toBe(LIVES.TOTAL - 1);
+    expect(sim.lives).toBe(1);
+
     driveToEnd(sim);
     expect(sim.state).toBe('WIN');
     expect(sim.receipt.matchedBenchmark).toBe(false);
+    expect(sim.receipt.delayMonths).toBe((LIVES.TOTAL - 1) * JOURNEY.SETBACK_MONTHS);
     expect(sim.months).toBeGreaterThan(JOURNEY.ANSR_BENCHMARK_MONTHS);
     expect(sim.months).toBeLessThan(JOURNEY.BASELINE_MONTHS);
   });
 
-  it('a full reset clears the clock and the receipt', () => {
+  it('running out of lives is not a dead end — it hands back to the title screen', () => {
+    const sim = new Simulation();
+    toPlaying(sim);
+    for (let i = 0; i < LIVES.TOTAL; i += 1) {
+      stepN(sim, 80);
+      sim.player.box.y = RESOLUTION.HEIGHT + 200;
+      sim.step(DT, makeInput());
+      if (sim.lives > 0) recoverFromLifeLost(sim);
+    }
+    expect(sim.state).toBe('LIFE_LOST');
+    expect(sim.lifeLost!.outOfLives).toBe(true);
+
+    sim.continueAfterLifeLost();
+    expect(sim.state).toBe('START');
+    // ...and the next attempt is fully playable.
+    driveToEnd(sim);
+    expect(sim.state).toBe('WIN');
+    expect(sim.months).toBe(JOURNEY.ANSR_BENCHMARK_MONTHS);
+  });
+
+  it('a full reset clears the clock, the lives and the log', () => {
     const sim = new Simulation();
     driveToEnd(sim);
     sim.reset();
@@ -75,42 +101,7 @@ describe('the run cannot fail', () => {
     expect(sim.months).toBe(0);
     expect(sim.screenId).toBe(0);
     expect(sim.engaged).toHaveLength(0);
-  });
-});
-
-describe('quick-win persistence rule', () => {
-  it('keeps collected quick wins across a setback (they do not reappear)', () => {
-    const sim = new Simulation();
-    toPlaying(sim);
-    stepN(sim, 60);
-
-    const pt = sim.screen.points[0]!;
-    sim.player.box.x = pt.x - sim.player.box.w / 2;
-    sim.player.box.y = pt.y - sim.player.box.h / 2;
-    sim.step(DT, makeInput());
-    expect(sim.quickWins).toBe(1);
-    const collectedId = pt.id;
-
-    sim.player.box.y = RESOLUTION.HEIGHT + 200;
-    sim.step(DT, makeInput());
-    stepN(sim, 30);
-
-    expect(sim.quickWins).toBe(1);
-    expect(sim.screen.points.find((p) => p.id === collectedId)!.collected).toBe(true);
-  });
-
-  it('banks quick wins from a completed screen', () => {
-    const sim = new Simulation();
-    toPlaying(sim);
-    const pt = sim.screen.points[0]!;
-    sim.player.box.x = pt.x - sim.player.box.w / 2;
-    sim.player.box.y = pt.y - sim.player.box.h / 2;
-    sim.step(DT, makeInput());
-    expect(sim.quickWins).toBe(1);
-
-    sim.player.box.x = sim.screen.exitX!;
-    sim.step(DT, makeInput());
-    expect(sim.screenId).toBe(1);
-    expect(sim.quickWins).toBe(1);
+    expect(sim.lives).toBe(LIVES.TOTAL);
+    expect(sim.log).toHaveLength(0);
   });
 });

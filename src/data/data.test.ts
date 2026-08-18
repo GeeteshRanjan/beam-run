@@ -51,14 +51,21 @@ describe('copy', () => {
     expect(COPY.start.stake(JOURNEY.BASELINE_MONTHS)).toContain('24');
   });
 
-  it('names a capability, a product and a topic for every badge type', () => {
+  it('names a capability, a product and a topic for every capability badge', () => {
     const badges = SCREENS.filter((s) => s.badge).map((s) => s.badge!.type);
-    for (const b of badges) {
+    // Every screen carries a badge, but SAFE_PASSAGE (Reception and the Tech
+    // Park, the two screens with nothing to defend against) deliberately carries
+    // no capability and so no product to sell.
+    expect(badges).toHaveLength(SCREENS.length);
+    for (const b of badges.filter((t) => t !== 'SAFE_PASSAGE')) {
       const cap = capabilityFor(b);
       expect(cap, `badge ${b} needs a capability entry`).toBeTruthy();
       expect(cap!.product).toBeTruthy();
       expect(cap!.topic).toBeTruthy();
     }
+    // ...and it still has a HUD label, so the chip is never blank.
+    expect(COPY.powers.SAFE_PASSAGE).toBeTruthy();
+    expect(capabilityFor('SAFE_PASSAGE')).toBeUndefined();
   });
 
   it('blames the environment for every setback cause, never the player', () => {

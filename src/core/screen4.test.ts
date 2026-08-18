@@ -16,24 +16,25 @@ const STRUGGLE_COLUMN = 6;
 const RELIEF_COLUMN = 18;
 
 describe('Screen 4 — Local Expertise (blind → 500Leaders → foreseen)', () => {
-  it('is the 500Leaders capability screen with columns on both sides of the badge', () => {
+  it('is the 500Leaders capability screen, with every column beyond the badge', () => {
     const sim = driveToScreen(4);
     expect(sim.screen.data.badge!.type).toBe('FORESIGHT');
     expect(sim.screen.data.hazard).toBe('spikes');
     expect(sim.activeHazard).toBeInstanceOf(Spikes);
     const badgeGx = sim.screen.data.badge!.gx;
     const cols = sim.screen.data.spikeColumns!;
-    expect(cols.some((c) => c.gx < badgeGx)).toBe(true);
-    expect(cols.some((c) => c.gx > badgeGx)).toBe(true);
+    expect(cols.every((c) => c.gx > badgeGx)).toBe(true);
+    expect(cols.length).toBeGreaterThan(1);
   });
 
-  it('a struggle column costs months, not a life', () => {
+  it('a column costs months and a life', () => {
     const sim = driveToScreen(4);
     expireGrace(sim);
     const added = forceSetbackAt(sim, STRUGGLE_COLUMN);
     expect(added).toBe(JOURNEY.SETBACK_MONTHS);
-    expect(sim.state).toBe('PLAYING');
+    expect(sim.state).toBe('LIFE_LOST');
     expect(sim.setbacks).toBe(1);
+    expect(sim.lives).toBe(sim.livesTotal - 1);
   });
 
   it('engaging 500Leaders makes every column foreseen and free of setbacks', () => {
