@@ -21,8 +21,9 @@ since then has been post-launch passes: a meaning-model rebuild (§4), layout an
 mobile adaptivity, an 8-bit visual conversion of every remaining web-native
 surface, the finale rebuild, and a custom 404 page.
 
-- **Tests:** 284 passing (36 files)
-- **Bundle:** ESM 44.49 KB / IIFE 44.75 KB gzip · budget gate **87.1 KB of 90 KB**
+- **Tests:** 314 passing (38 files)
+- **Bundle:** ESM 44.94 KB / IIFE 45.21 KB gzip · budget gate **88.0 KB of 90 KB** (2 KB of
+  headroom — check `npm run analyze` early in any pass that adds art)
 - **Validator:** green on all 6 screens (structural + physics-aware + meaning layers)
 - **Next:** no queued task — see §7 for what is open. The owner is specifying the
   powerup *effects* one screen at a time; screen 1 is done (§4.5), so expect one of
@@ -111,12 +112,14 @@ both revisions and still describe a no-lives model; `analytics-events.json` matc
    a conversion surface — the ledger, the argument, and both routes — exactly like reaching
    the Tech Park. Every setback line names the *system* as the cause, by obstacle name.
 4. **Every screen carries an ANSR badge, anchored ahead of the obstacles it answers, and it
-   floats.** It drifts along a straight vertical line through ±`POWERUPS.FLOAT_AMPLITUDE` px
-   around its authored `gy`, one cycle per `FLOAT_PERIOD`. The band dips into a standing
-   player's box, so a good pass walks into it and a mistimed one needs a hop — missable on
-   purpose, which is what gives the life-lost screen's instruction something to say. The
-   validator fails the build if any obstacle sits at or before the badge, or if none sit beyond
-   it. Never label or offer a "do it yourself" route — self-build is the actual competitor.
+   levitates.** It rides a straight vertical line through ±`POWERUPS.FLOAT_AMPLITUDE` px around
+   its authored `gy` (8 on every screen), one cycle per `FLOAT_PERIOD`. The band rides up to just
+   below the ceiling and back down to **41px above a standing player's head**: taking the badge is
+   a timed jump, never a walk-through (owner call — it was too easy). Missable on purpose, which
+   is what gives the life-lost screen's instruction something to say. `POWERUPS` in
+   `tuning.config.ts` carries the derivation of both ends; the validator fails the build if the
+   band dips into a standing player, if any obstacle sits at or before the badge, or if none sit
+   beyond it. Never label or offer a "do it yourself" route — self-build is the actual competitor.
 5. **Four distinct verbs, not one reskinned shield.** `PLACE_TILE` slows the DENIED stamps to a
    walk-through pace *and* shields the player (1Wrk — owner-specified, the first effect nailed down)
    · `EXTINGUISH` puts hiring lanes out for good (Talent500) · `CLEAR_PATH` lifts approval barriers
@@ -180,7 +183,9 @@ both revisions and still describe a no-lives model; `analytics-events.json` matc
   only `Stamps` sets `shieldsPlayer`, which is what licenses the bubble on the player.
 
 **Render (`src/render/`, canvas)** — `PixelArt.ts` (crisp fillRect core), `PixelText.ts` (5×7 font,
-`FONT` exported), `sprites.ts` (hero incl. the `squash` pose, badge, `drawAnsrBubble`),
+`FONT` exported), `sprites.ts` (hero incl. the `squash` pose, `drawAnsrBubble`),
+`badge.ts` (the floating pickup: authored 19×19 ANSR sunburst + levitation shaft + flare + ground
+chevron — pure, so it rasterises alone; `Game.drawBadge` only supplies the band and a phase),
 `stamps.ts` (screen 1's hazard — pure, no wall clock, so it can be rasterised alone),
 `scenery.ts` (per-level materials, skies, signage), `titleScene.ts` (attract screen),
 `finale.ts` (screen 5 painting), `ansrLogo.ts` (cached `Path2D` of the real brand mark;
@@ -261,6 +266,14 @@ it, capabilities unique, months sum to the benchmark) · `check-budget.mjs` + `b
   `prefers-reduced-motion`: that would move the hitbox, which is a rules change, not a comfort
   setting. Its clock is `Simulation.screenClock`, a sim-time accumulator — never the wall clock,
   or `step()` stops being replayable.
+- **The float band's ceiling is the HUD, not the frame.** The badge column is `gx 4` (x=180) and
+  the HUD's left stack hangs directly over it to y≈150 at a 1280 frame, so the top of the swing
+  stops at a box top of 165. The badge cannot be moved right to escape it either — screens 2–4 put
+  their first obstacle at `gx 6` and the validator requires the badge to precede every obstacle.
+- **Raising the band is a touch decision before it is a difficulty one.** One-tap auto-run hides the
+  move pad, so a phone player cannot wait under the badge: one pass, one tap, currently a **0.40s**
+  window (`src/core/badgeReach.test.ts` fails below 0.3s or if the working taps stop being
+  contiguous). Re-prove it there after any change to the band, the period or `JUMP_VELOCITY`.
 - A lost life reloads the screen, which resets `Powerups` — so the badge is always available again
   on the retry. Do not "optimise" that into an in-place respawn.
 - `zone` in `levels.json` is **authoring intent, not a position** (it predates the badge moving to
@@ -295,6 +308,12 @@ it, capabilities unique, months sum to the benchmark) · `check-budget.mjs` + `b
 - `Simulation.setback()` does **not** reset the hazard: `loadScreen` rebuilds it on every retry, and
   resetting wiped the pose the host paints the impact from (the stamp holding the player flat).
   `Stamps.struckAt` survives `reset()` for the same reason.
+- **A dithered glow works at bubble size and fails at badge size.** Warm cells at 0.15–0.4 alpha over
+  the deep teal sky desaturate to grey-brown: round a 46px figure that is a field, round a 38px icon
+  it is dirt. Few cells at full alpha say "light"; many at low alpha say "rendering fault".
+- **Pixel marks are authored, not quantised.** Sampling the logo path to 14–24 cells is asymmetric
+  and noisy at every threshold. Author on an **odd** grid (an even one puts the centre between cells
+  and forces cardinal rays to two cells wide) and mirror the template eight ways.
 - Only draw a shield on the player where contact is genuinely harmless (`Hazard.shieldsPlayer` →
   `Simulation.shielded`). On the screens where help means "the obstacles ahead are cleared", a
   bubble would promise protection the rules do not give.
@@ -354,6 +373,14 @@ must already be in §6.
 
 ## 10. Recent passes (newest first — full entries in `docs/JOURNAL.md`)
 
+- **The badge levitates properly and is now the ANSR mark (owner call: too easily accessible, and
+  it should be the logo).** Band ±48 → **±155** around a new anchor `gy 8`, period 4.8s: the swing
+  tops out just under the HUD and bottoms out 41px above a standing head, so taking it is a timed
+  jump. New pure `render/badge.ts` — authored 19×19 sunburst (38px inside the 40px hitbox), dashed
+  levitation shaft with end brackets and a wake, a four-cell flare, a ground chevron. The old teal
+  "A" disc and the last `createRadialGradient`/`arc()` in the world layer are gone. Probed the
+  one-tap auto-run case (0.40s tap window) and kept the probe as a test. 314 tests; gate
+  **88.0 KB of 90**.
 - **Setup Delays art pass (owner feedback).** Stamps are now an authored 24×32 sprite grid reading
   as a real desk stamp, parked just above mid-frame with **no rail**, so the wind-up cock-back is
   visible on the object and the floor impressions carry the column read. The player's bubble was
@@ -367,7 +394,3 @@ must already be in §6.
   press aborts and retracts. Unassisted, a stamp flattens you. Probes forced two changes: a wind-up
   (`WARN_TIME` — without it no reactive policy could clear the stage) and `CYCLE` 1.5 → 1.8. Deleted
   with the pit: `Quicksand`, the placed-tile mechanism, two unused `Hazard` hooks. 280 tests.
-- **Lives, the delay log, and the badge on every screen (owner model change — see §4).** 3 lives, a
-  `LIFE_LOST` state that restarts the *same* stage and becomes the closing ledger on the last life, a
-  bounded delay log, Growth Points deleted, and a floating ANSR badge on all six screens. Also found
-  `minifyEsOutput()` was a no-op (Vite's post-phase transpile re-printed the chunk). 264 tests.

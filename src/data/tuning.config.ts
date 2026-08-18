@@ -105,18 +105,35 @@ export const TRANSITION = {
  */
 export const POWERUPS = {
   /**
-   * The badge floats along a straight vertical line: it rises and falls through
-   * a band of ±FLOAT_AMPLITUDE px around its authored anchor, one full cycle
-   * every FLOAT_PERIOD seconds (~60 px/s average — a drift you can read and
-   * time, not a bob and not a target you have to chase).
+   * The badge levitates along a straight vertical line: it rises and falls
+   * through a band of ±FLOAT_AMPLITUDE px around its authored anchor, one full
+   * cycle every FLOAT_PERIOD seconds.
+   *
+   * The band is a measured figure, not a feel one (owner call: the badge was too
+   * easy to take, because the old ±48 band dipped into a standing player and a
+   * walk-through collected it). With the anchor authored at gy 8 (centre y=340):
+   *
+   *  - **Top of the swing** — centre 185, so the mark's box tops out at y=165.
+   *    That is as high as it can go: the HUD's left stack (stage plaque + lives)
+   *    reaches y≈150 at a 1280-wide frame and the badge column, gx 4, sits under
+   *    it, so a higher band would hide the pickup behind the DOM chrome. It reads
+   *    as just below the ceiling, which is the intent.
+   *  - **Bottom of the swing** — centre 495, box bottom 515. A player standing on
+   *    the ground band occupies y 556–600, so the badge is 41px clear of their
+   *    head and can never be walked into; a jump (140px of rise) reaches it with
+   *    room to spare. Roughly a third of the cycle is inside jumping range.
+   *
+   * FLOAT_PERIOD is set from the amplitude: 4.8s over a 310px band averages
+   * ~129 px/s, which is a drift you can read and time. Shortening it without
+   * shrinking the band turns the pickup into a target you have to chase.
    *
    * This motion is GAMEPLAY, not juice: the hitbox moves with it, so the sim and
    * the renderer must derive the position from the same function of sim time
    * (`badgeCenter` in world/badgeFloat.ts). It is therefore not disabled under
    * `prefers-reduced-motion` — doing so would change the hitbox.
    */
-  FLOAT_AMPLITUDE: 48,              // px above/below the anchor
-  FLOAT_PERIOD: 3.2,                // s for one full up-and-down cycle
+  FLOAT_AMPLITUDE: 155,             // px above/below the anchor
+  FLOAT_PERIOD: 4.8,                // s for one full up-and-down cycle
 } as const;
 
 /** Hazard behaviour, per family. */

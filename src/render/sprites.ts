@@ -184,30 +184,12 @@ export function drawHero(
  * for, and it moves, so reaching for it is a decision.
  */
 
-// --- ANSR badge: a teal disc carrying a white "A" mark ----------------------
-
-const BADGE_GRID: readonly string[] = [
-  '....eeee....',
-  '..eeCCCCee..',
-  '.eCCCCCCCCe.',
-  '.eCCCWWCCCe.',
-  'eCCCWWWWCCCe',
-  'eCCWWCCWWCCe',
-  'eCCWWWWWWCCe',
-  'eCCWWCCWWCCe',
-  '.eCWWCCWWCe.',
-  '.eCCCCCCCCe.',
-  '..eeCCCCee..',
-  '....eeee....',
-];
-
-const BADGE_PALETTE: Palette = {
-  e: '#013947', // rim (deep teal)
-  C: '#005465', // face (light teal)
-  W: '#FFFFFF', // mark
-};
-
-export const BADGE_GRID_W = maxWidth(BADGE_GRID);
+/*
+ * The badge sprite used to live here too — a teal disc with a white "A" on it.
+ * It has moved to `render/badge.ts` and become the ANSR sunburst itself, with the
+ * levitation shaft, halo and ground chevron that the raised float band needs
+ * (owner call: the pickup was too easy to take and was not the brand mark).
+ */
 
 /**
  * The ANSR bubble around an ANSR-backed player: a hazy 8-bit force field.
@@ -316,14 +298,4 @@ export function drawAnsrBubble(
   }
 }
 
-/** Draw the ANSR badge disc centred at (cx,cy) at the given pixel scale. */
-export function drawBadgeDisc(
-  ctx: CanvasRenderingContext2D,
-  cx: number,
-  cy: number,
-  scale: number,
-): void {
-  const w = BADGE_GRID_W * scale;
-  const h = BADGE_GRID.length * scale;
-  drawPixels(ctx, BADGE_GRID, BADGE_PALETTE, cx - w / 2, cy - h / 2, { scale });
-}
+

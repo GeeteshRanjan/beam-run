@@ -26,7 +26,8 @@ import { Effects } from './Effects';
 import { finaleLayout } from './finaleScene';
 import { drawFinaleScene } from '../render/finale';
 import { AudioEngine } from '../audio/AudioEngine';
-import { drawHero, drawBadgeDisc, drawAnsrBubble, type HeroMotion } from '../render/sprites';
+import { drawHero, drawAnsrBubble, type HeroMotion } from '../render/sprites';
+import { drawBadgePickup } from '../render/badge';
 import { drawInkPads, drawStamps as drawStampHeads } from '../render/stamps';
 import { badgeCenter } from '../world/badgeFloat';
 import { drawTileRect, drawSceneBackground } from '../render/scenery';
@@ -1023,40 +1024,43 @@ export class Game {
    * the wall clock and not from a render-only bob: the hitbox travels with the
    * sprite, so any second opinion about where the badge is would be a pickup you
    * can see but not collect. For the same reason the float is not frozen under
-   * `prefers-reduced-motion` — that would move the collision box. The glow and
-   * the label are still juice and still honour the preference.
+   * `prefers-reduced-motion` — that would move the collision box. The shimmer,
+   * the halo and the label are juice and do honour the preference.
    *
-   * A faint trail marks the vertical line it travels, so the motion reads as a
-   * path to intercept rather than as a wobble.
+   * The painting itself lives in `render/badge.ts` (pure, so it can be rasterised
+   * and looked at on its own). This method's only job is to hand it the band, the
+   * ground line and a phase.
    */
   private drawBadge(ctx: CanvasRenderingContext2D): void {
     const badge = this.sim.screen.data.badge;
     if (!badge || this.sim.powerups.collected) return;
+    const T = RESOLUTION.TILE;
     const c = badgeCenter(badge, this.sim.clock);
-    const cx = c.x;
-    const cy = c.y;
-    const r = 20;
-
-    // The rail: the straight line the badge floats along, so it is obvious the
-    // pickup will come back down to meet you.
+    const anchorY = badge.gy * T + T / 2;
     const lane = POWERUPS.FLOAT_AMPLITUDE;
-    const anchorY = badge.gy * RESOLUTION.TILE + RESOLUTION.TILE / 2;
-    pxRect(ctx, 'rgba(92, 226, 244, 0.16)', cx - 1.5, anchorY - lane, 3, lane * 2, 3);
 
-    // Gentle teal glow (orange is reserved for the active power, not the pickup).
-    const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, r * 1.8);
-    glow.addColorStop(0, 'rgba(0,84,101,0.9)');
-    glow.addColorStop(1, 'rgba(0,84,101,0)');
-    ctx.fillStyle = glow;
-    ctx.beginPath();
-    ctx.arc(cx, cy, r * 1.8, 0, Math.PI * 2);
-    ctx.fill();
-    // Pixel ANSR disc (12 cells wide → scale 3 gives a ~36px badge).
-    drawBadgeDisc(ctx, cx, cy, 3);
+    drawBadgePickup(ctx, {
+      cx: c.x,
+      cy: c.y,
+      bandTop: anchorY - lane,
+      bandBottom: anchorY + lane,
+      groundY: 15 * T,
+      // Held at a fixed frame under reduced motion: a steady mark, not no mark.
+      phase: this.reducedMotion ? 0.12 : (this.now() * 0.3) % 1,
+      // Read from the same clock the position comes from, so the wake never
+      // disagrees with the direction of travel.
+      rising: badgeCenter(badge, this.sim.clock + 0.05).y < c.y,
+    });
+
     // Name the ANSR capability this badge unlocks, so the "solution" is explicit.
+    // Always *below* the mark, never above it: above the badge is exactly where
+    // the player's body is on the frame they jump for it (rasterised — the plaque
+    // sat across his chest), and at the top of the swing it would collide with the
+    // HUD's left stack. Below, the worst case is the standing player covering it,
+    // and he is drawn after this.
     const tag = solutionTag(badge.type);
     if (tag) {
-      drawLabelPlaque(ctx, tag, cx, cy - 52, {
+      drawLabelPlaque(ctx, tag, c.x, c.y + 34, {
         scale: 2,
         fg: '#CFE6EC',
         bg: 'rgba(0,26,34,0.7)',

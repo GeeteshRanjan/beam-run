@@ -2,13 +2,13 @@
   "meta": {
     "grid": { "cols": 32, "rows": 18, "tile": 40 },
     "notes": "All coordinates are in TILE units unless a field name ends in _px. Rows count from top (0) down. Ground band is rows 15-17. 'gx' = grid x, 'gy' = grid y, 'w'/'h' in tiles. Player hitbox is 28x44px; spawn places feet on the given tile top. The typed shape of this file is src/data/levels.ts.",
-    "structure": "Every screen carries an ANSR badge, placed early on the walking path so it can be taken BEFORE the obstacles it answers. The badge is not a static tile: it floats along a straight vertical line through a band around its anchor (POWERUPS.FLOAT_AMPLITUDE / FLOAT_PERIOD), dipping low enough to be walked into and rising high enough that a badly timed pass needs a hop. Taking it is what makes the rest of the screen safe; missing it is what the delay log is for.",
+    "structure": "Every screen carries an ANSR badge, placed early on the walking path so it can be taken BEFORE the obstacles it answers. The badge is not a static tile: it levitates along a straight vertical line through a band around its anchor (POWERUPS.FLOAT_AMPLITUDE / FLOAT_PERIOD), riding up to just below the ceiling and back down to a height a jump can reach - never low enough to be walked into, which is what makes taking it a decision rather than a formality. Taking it is what makes the rest of the screen safe; missing it is what the delay log is for.",
     "clock": "monthsBase is booked on clearing a screen. The six bases sum to JOURNEY.ANSR_BENCHMARK_MONTHS, so a clean assisted run lands exactly on ANSR's published benchmark. Every obstacle costs one life and adds JOURNEY.SETBACK_MONTHS to the clock, capped at JOURNEY.MAX_MONTHS.",
     "conventions": {
       "solid": "static collidable platform/wall (non-lethal). Walking into a wall stops you.",
       "spawn": "player entry point (feet), always near far-left",
       "exit": "reaching this x (right edge trigger) advances to next screen",
-      "badge": "ANSR capability pickup; anchored early in the screen and floating vertically around gy",
+      "badge": "ANSR capability pickup; anchored early in the screen and levitating vertically around gy (see POWERUPS in tuning.config.ts for how the band is derived)",
       "zone": "kept as authoring metadata only - it records which obstacles were written as the felt problem and which as the relief. It no longer describes a position, because the badge now sits ahead of both."
     }
   },
@@ -31,8 +31,8 @@
       "badge": {
         "type": "SAFE_PASSAGE",
         "gx": 4,
-        "gy": 12,
-        "note": "The tutorial badge. No obstacle here to answer, so it teaches the one habit the rest of the run depends on: the floating ANSR mark is always worth taking. Its effect is deliberately unassigned for now."
+        "gy": 8,
+        "note": "The tutorial badge. No obstacle here to answer, so it teaches the two things the rest of the run depends on: the levitating ANSR mark is always worth taking, and taking it means timing a jump as it swings down. Its effect is deliberately unassigned for now."
       },
       "copy": {
         "titleCard": "Reception",
@@ -63,7 +63,7 @@
       "badge": {
         "type": "PLACE_TILE",
         "gx": 4,
-        "gy": 12,
+        "gy": 8,
         "note": "1Wrk stands the setup up properly, so the approvals stop coming back DENIED. Taken at the top of the screen, before the first pair of stamps. With it the whole mechanism runs at ASSIST_TIME_SCALE - wide windows you can walk through - and a stamp that touches an ANSR-backed player cannot press: it retracts from where it touched. Without it, being under a stamp when it lands flattens you."
       },
       "copy": { "titleCard": "Setup Delays", "onClear": "Setup accelerated." }
@@ -89,7 +89,7 @@
       "badge": {
         "type": "EXTINGUISH",
         "gx": 4,
-        "gy": 12,
+        "gy": 8,
         "note": "Talent500 staffs the roles: lanes ahead go out for good as you approach, so you keep moving instead of stopping to wait. Skip it and all five lanes have to be timed by hand."
       },
       "copy": { "titleCard": "Hire Under Fire", "onClear": "Talent secured." }
@@ -121,7 +121,7 @@
       "badge": {
         "type": "CLEAR_PATH",
         "gx": 4,
-        "gy": 12,
+        "gy": 8,
         "note": "GCC-BOT clears the filings: approval barriers ahead lift for good as you approach. Seven barriers stand between the badge and the exit, so the difference it makes is the whole screen."
       },
       "copy": { "titleCard": "Compliance", "onClear": "Compliance cleared." }
@@ -150,7 +150,7 @@
       "badge": {
         "type": "FORESIGHT",
         "gx": 4,
-        "gy": 12,
+        "gy": 8,
         "note": "500Leaders give you local context: long advance warning and a marked safe line. Knowledge, not magic - the market keeps moving, you can just read it. Walk past the badge and every drop has to be guessed."
       },
       "copy": { "titleCard": "Local Expertise", "onClear": "Local expertise onboarded." }
@@ -171,7 +171,7 @@
       "badge": {
         "type": "SAFE_PASSAGE",
         "gx": 4,
-        "gy": 12,
+        "gy": 8,
         "note": "The closing badge. Nothing to defend against on the plaza - it is here because the mark is on every screen, and the last thing the player does before the Tech Park is reach for it."
       },
       "copy": {

@@ -13,10 +13,13 @@
  *  - It is NOT disabled under `prefers-reduced-motion`. Freezing it would move
  *    the hitbox, which is a rules change, not a comfort setting. (The badge's
  *    glow and label still respect the preference — those are juice.)
- *  - The band is authored so its lowest point overlaps a player standing on the
- *    ground band: a walk-through catches the badge on a good pass, a mistimed
- *    one needs a hop. Level validation proves reachability against that lowest
- *    point, which is the easiest phase.
+ *  - The band is authored so the badge is NEVER reachable from a standing
+ *    position: its lowest point clears a standing player's head by ~40px, and
+ *    the top of the swing rides just below the ceiling. Taking it is a timed
+ *    jump — see `POWERUPS` in tuning.config.ts for the derivation, which is
+ *    where the two clearances are measured. Level validation proves reachability
+ *    against the lowest point, the easiest phase, using the real Player (so the
+ *    jump is part of the proof).
  */
 import { RESOLUTION, POWERUPS } from '../data/tuning.config';
 import type { BadgeSpec } from '../data/levels';

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { COPY } from '../data/copy';
-import { JOURNEY, LIVES, POWERUPS, RESOLUTION } from '../data/tuning.config';
+import { JOURNEY, LIVES, PLAYER, POWERUPS, RESOLUTION } from '../data/tuning.config';
+import { SCREENS } from '../data/levels';
 import {
   causeLabel,
   ledgerRows,
@@ -64,8 +65,17 @@ describe('delay log', () => {
   });
 });
 
+/**
+ * How far down the frame the HUD's top-left stack reaches (stage plaque + lives)
+ * at a 1280-wide frame, measured from `Hud.ts`'s own sizing formula: ~22px inset
+ * + a 69px stage plaque + an 8px gap + a 51px lives plaque. The badge column
+ * (gx 4) passes under it, so the top of the float band has to stop below this or
+ * the pickup hides behind DOM chrome.
+ */
+const HUD_LEFT_STACK_BOTTOM = 150;
+
 describe('badge float', () => {
-  const badge = { type: 'EXTINGUISH' as const, gx: 3, gy: 12 };
+  const badge = { type: 'EXTINGUISH' as const, gx: 3, gy: 8 };
   const T = RESOLUTION.TILE;
 
   it('travels a straight vertical line: x never moves', () => {
@@ -109,13 +119,31 @@ describe('badge float', () => {
     }
   });
 
-  it('dips low enough to be walked into from the ground band', () => {
-    // A badge that only ever floats above head height would have to be jumped for
-    // on every screen; one that never leaves the ground could not be missed. The
-    // band is authored so a good pass catches it and a mistimed one needs a hop.
-    const lowest = badgeLowestBox(badge);
-    const standingTop = 15 * T - 44; // feet on the ground band, 44px hitbox
-    expect(lowest.y).toBeLessThan(standingTop + 44);
-    expect(lowest.y + lowest.h).toBeGreaterThan(standingTop);
+  /**
+   * The band's two clearances are the whole design of the pickup (owner call: it
+   * was too easy to take when the bottom of the swing dipped into a standing
+   * player). Asserted against every authored anchor, not just a fixture, because
+   * the numbers only work as a set: tuning, level data and player physics.
+   */
+  describe('is out of reach standing and in reach jumping, on every screen', () => {
+    const standingTop = 15 * T - PLAYER.HEIGHT; // feet on the ground band
+    const jumpRise = (PLAYER.JUMP_VELOCITY * PLAYER.JUMP_VELOCITY) / (2 * PLAYER.GRAVITY);
+
+    for (const screen of SCREENS) {
+      const b = screen.badge!;
+      it(`screen ${screen.id} (${screen.name})`, () => {
+        const lowest = badgeLowestBox(b);
+        // Never walkable-into: the bottom of the swing clears a standing head…
+        expect(lowest.y + lowest.h).toBeLessThan(standingTop);
+        // …but a jump reaches it with margin (a full jump lifts ~140px).
+        const hopNeeded = standingTop - (lowest.y + lowest.h);
+        expect(hopNeeded).toBeLessThan(jumpRise * 0.6);
+        // And the top of the swing stays clear of the HUD's left stack, which
+        // hangs over this column (see POWERUPS in tuning.config.ts).
+        const highestTop = b.gy * T + T / 2 - POWERUPS.FLOAT_AMPLITUDE - T / 2;
+        expect(highestTop).toBeGreaterThan(HUD_LEFT_STACK_BOTTOM);
+        expect(highestTop).toBeLessThan(RESOLUTION.HEIGHT * 0.25);
+      });
+    }
   });
 });

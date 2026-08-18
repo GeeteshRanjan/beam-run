@@ -33,7 +33,9 @@
  *       · the exit / win trigger must be reachable (screen is completable);
  *       · the badge must be reachable — proved against the BOTTOM of its float,
  *         which is the easiest phase to intercept and therefore the honest test
- *         of "can this be taken at all".
+ *         of "can this be taken at all". The structural pass proves the opposite
+ *         bound (that same bottom clears a standing player), so together they say
+ *         the badge is jumpable and not walkable.
  *
  *     There used to be a fourth rule here: on a PLACE_TILE screen the exit had to
  *     be reachable ONLY with the bridge that badge laid. Setup Delays was the one
@@ -107,6 +109,18 @@ function validateStructure(s: ScreenData): Problem[] {
     if (topY < 0) push(`badge float rises above the frame (top y=${Math.round(topY)})`);
     if (box.y + box.h > HEIGHT) {
       push(`badge float sinks below the frame (bottom y=${Math.round(box.y + box.h)})`);
+    }
+    // …and the bottom of the swing must stay clear of a standing player. Taking
+    // the badge is a timed jump (owner call); an anchor that dips into the
+    // standing box turns it back into a walk-through, which is the thing the
+    // raised band exists to prevent. The physics-aware pass below still proves it
+    // is reachable, so the two rules together mean "jumpable, not walkable".
+    const standingHead = 15 * GRID.tile - PLAYER.HEIGHT;
+    if (box.y + box.h > standingHead) {
+      push(
+        `badge float dips into a standing player (bottom y=${Math.round(box.y + box.h)} vs head ` +
+          `y=${standingHead}) — it would be collected by walking past`,
+      );
     }
   }
   return problems;
