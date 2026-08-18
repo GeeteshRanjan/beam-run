@@ -723,8 +723,11 @@ export class Game {
    * steady ring rather than no ring (the bubble is information, not decoration).
    */
   private drawShield(ctx: CanvasRenderingContext2D, centerX: number, feetY: number): void {
-    const pulse = this.reducedMotion ? 0.5 : 0.5 + 0.5 * Math.sin(this.now() * 3.2);
-    drawAnsrBubble(ctx, centerX, feetY, pulse);
+    const t = this.reducedMotion ? 0 : this.now();
+    const pulse = this.reducedMotion ? 0.5 : 0.5 + 0.5 * Math.sin(t * 3.2);
+    // `phase` turns the rim dither and the sparks; frozen with the pulse under
+    // reduced motion, which leaves a steady field rather than none.
+    drawAnsrBubble(ctx, centerX, feetY, pulse, (t * 0.22) % 1);
   }
 
   // --- floating value popups ------------------------------------------------

@@ -1,39 +1,138 @@
 /**
- * The DENIED stamps of Screen 1, painted.
+ * The DENIED stamps of Screen 1, painted as real office rubber stamps.
+ *
+ * The silhouette is the thing everyone recognises from a desk: a turned wooden
+ * knob, a narrow stem, a flange, the body carrying its printed index label, and a
+ * black rubber die at the bottom. It is authored as a pixel grid (like the hero
+ * and the badge) rather than as a pile of rectangles, because that is the idiom
+ * the rest of the art uses and because the grid is what makes the shape read at
+ * 8-bit scale. `DENIED` itself is set in the 5×7 bitmap font on the label panel,
+ * so there is exactly one font in the game.
+ *
+ * Two rules the geometry has to obey, both guarded by tests:
+ *
+ *  - the **body** is authored to exactly `HAZARDS.STAMPS.HEAD_H` and exactly
+ *    `WIDTH`, so the picture is the hitbox. The knob and stem sit *above* the
+ *    box: being level with a stamp's handle is not being under its die.
+ *  - **nothing is drawn above the stamp.** There is no rail, rope or rod holding
+ *    it up — it is a stamp coming down, not a pile driver.
  *
  * Pure canvas: it takes the hazard's own snapshot and draws it, with no access to
- * the wall clock, the DOM or the Simulation. Everything here is derived from
- * `StampState`, which is derived from sim time — so the picture is identical
- * under `prefers-reduced-motion` (there is no decorative motion to switch off)
- * and the module can be rasterised on its own to check the pixels.
+ * the wall clock, the DOM or the Simulation. Everything is derived from
+ * `StampState`, so the picture is identical under `prefers-reduced-motion` (there
+ * is no decorative motion to switch off) and the module can be rasterised on its
+ * own to check the pixels.
  *
- * Three readability jobs beyond "draw a stamp":
+ * Readability, in the absence of a rail: every column carries a permanent inked
+ * impression on the floor, a floor shadow tightens as the die bears down, and the
+ * last `WARN_TIME` of the cycle is a visible cock-back plus a brightening print
+ * line — the slam itself is 0.14s, so the wind-up is what the player plays against.
  *
- *  1. every column carries a permanent **ink pad** on the floor, so a parked
- *     stamp is still a marked danger column rather than an ambush;
- *  2. a **rail** runs from the ceiling to the handle, so the thing reads as a
- *     mechanism pressing down and not as a random falling block;
- *  3. a floor **shadow** tightens and darkens as the head bears down — the one
- *     cue that survives a 0.14s slam.
- *
- * Slate and light grey only. Orange stays reserved for value, and the hazard is
- * told apart by shape and motion, not by colour.
+ * Slate, graphite and light grey only. Orange stays reserved for value, and the
+ * hazard is told apart by shape and motion, not by colour.
  */
 import { RESOLUTION, HAZARDS } from '../data/tuning.config';
 import type { StampState } from '../world/Hazards/Stamps';
-import { pxRect } from './PixelArt';
+import { drawPixels, pxRect, type Palette } from './PixelArt';
 import { drawText } from './PixelText';
 
 const S = HAZARDS.STAMPS;
 const GROUND_TOP = 15 * RESOLUTION.TILE;
 const PX = 4;
 
-/** The floor mark under every stamp column. Drawn whether the stamp is up or not. */
+/** One authored pixel = 4 screen px, so the 24-cell body is exactly `WIDTH`. */
+export const STAMP_SCALE = 4;
+
+const STAMP_PALETTE: Palette = {
+  K: '#0E1A1F', // outline / seams (near-black)
+  G: '#2A3F49', // handle body (dark turned wood, cool so it lifts off the ground)
+  g: '#3E6472', // handle lit face
+  H: '#6E8A96', // knob highlight
+  L: '#4E7280', // flange / lit top edge
+  B: '#33505C', // body
+  b: '#25404A', // body shade
+  W: '#E6E6E6', // printed index label
+  w: '#B9C2C4', // label shade
+  D: '#1E353E', // rubber die
+};
+
+/**
+ * Rows 0–9 are the turned knob and stem, which sit *above* the hitbox and give the
+ * object its recognisable desk-stamp profile. Rows 10–31 are the pressing body:
+ * 22 rows × scale 4 = 88px = `HEAD_H`, and 24 cols × 4 = 96px = `WIDTH`.
+ *
+ * The body stays full width rather than being waisted like a real stamp, because
+ * the label has to carry DENIED at bitmap scale 2 (71px) and every cell inset from
+ * the edge is 4px off the panel. The silhouette is therefore carried by the knob
+ * and stem, and the body is separated from the rubber die by shading and a lit
+ * seam instead of by width. The die is the full width of the hitbox on purpose: a
+ * die narrower than the box would clip you with pixels that are not there.
+ */
+const STAMP: readonly string[] = [
+  '.......KKKKKKKKKK.......',
+  '.....KGggggggggggGK.....',
+  '...KGgggHHHHgggggggGK...',
+  '...KGgggHHHHgggggggGK...',
+  '...KGggggggggggggggGK...',
+  '...KGGGGGGGGGGGGGGGGK...',
+  '.....KKGGGGGGGGGGKK.....',
+  '........KGggggGK........',
+  '........KGggggGK........',
+  '........KGggggGK........',
+  'KLLLLLLLLLLLLLLLLLLLLLLK',
+  'KLLLLLLLLLLLLLLLLLLLLLLK',
+  'KBBBBBBBBBBBBBBBBBBBBBBK',
+  'KBbbbbbbbbbbbbbbbbbbbbBK',
+  'KBwwwwwwwwwwwwwwwwwwwwBK',
+  'KBWWWWWWWWWWWWWWWWWWWWBK',
+  'KBWWWWWWWWWWWWWWWWWWWWBK',
+  'KBWWWWWWWWWWWWWWWWWWWWBK',
+  'KBWWWWWWWWWWWWWWWWWWWWBK',
+  'KBWWWWWWWWWWWWWWWWWWWWBK',
+  'KBwwwwwwwwwwwwwwwwwwwwBK',
+  'KBbbbbbbbbbbbbbbbbbbbbBK',
+  'KBBBBBBBBBBBBBBBBBBBBBBK',
+  'KbbBBBBBBBBBBBBBBBBBBbbK',
+  'KKKKKKKKKKKKKKKKKKKKKKKK',
+  'KLLLLLLLLLLLLLLLLLLLLLLK',
+  'KDDDDDDDDDDDDDDDDDDDDDDK',
+  'KDDDDDDDDDDDDDDDDDDDDDDK',
+  'KDDDDDDDDDDDDDDDDDDDDDDK',
+  'KDDDDDDDDDDDDDDDDDDDDDDK',
+  'KDDDDDDDDDDDDDDDDDDDDDDK',
+  'KKKKKKKKKKKKKKKKKKKKKKKK',
+];
+
+/** Rows of `STAMP` that are the pressing body, i.e. the hitbox. */
+export const STAMP_BODY_ROWS = 22;
+const STAMP_H = STAMP.length * STAMP_SCALE;
+/** Label panel: the `w`/`W`/`w` rows, where DENIED is set. */
+const LABEL_TOP_ROW = 14;
+const LABEL_ROWS = 7;
+
+/**
+ * The inked impression under every stamp column, printed on the floor. Drawn
+ * whether the stamp is up or down: with no rail overhead this is what tells the
+ * player a column is a stamp column before anything moves.
+ */
 export function drawInkPads(ctx: CanvasRenderingContext2D, columns: number[]): void {
-  const inset = S.WIDTH / 2 - PX;
+  const half = S.WIDTH / 2 - PX;
   for (const cx of columns) {
-    pxRect(ctx, 'rgba(6, 26, 33, 0.55)', cx - inset, GROUND_TOP, inset * 2, PX * 2, PX);
-    pxRect(ctx, 'rgba(207, 230, 236, 0.18)', cx - inset, GROUND_TOP, inset * 2, PX, PX);
+    // The impression the column has printed before, ink-dark against the clay so it
+    // reads as a mark on the floor rather than as a shadow.
+    pxRect(ctx, 'rgba(4, 22, 28, 0.72)', cx - half, GROUND_TOP, half * 2, PX * 4, PX);
+    pxRect(ctx, 'rgba(4, 22, 28, 0.45)', cx - half - PX, GROUND_TOP + PX, half * 2 + PX * 2, PX * 2, PX);
+    // A worn print line along the top edge, and stray flecks either side.
+    pxRect(ctx, 'rgba(207, 230, 236, 0.22)', cx - half, GROUND_TOP, half * 2, PX, PX);
+    pxRect(ctx, 'rgba(4, 22, 28, 0.4)', cx - half - PX * 3, GROUND_TOP + PX, PX, PX, PX);
+    pxRect(ctx, 'rgba(4, 22, 28, 0.4)', cx + half + PX * 2, GROUND_TOP + PX, PX, PX, PX);
+    // …and what it printed. A ghost of the word at scale 1 makes a stamp column
+    // unmistakable even while the stamp itself is parked high above it.
+    drawText(ctx, 'DENIED', cx, GROUND_TOP + PX + 1, {
+      scale: 1,
+      color: 'rgba(178, 208, 216, 0.4)',
+      align: 'center',
+    });
   }
 }
 
@@ -48,24 +147,24 @@ export function drawStamps(
   revealAt: number | null = null,
 ): void {
   const W = S.WIDTH;
-  const headH = S.HEAD_H;
 
   for (const s of states) {
     const cx = s.cx;
-    // On the life-lost frames the guilty stamp recoils, so the flattened player
-    // is visible underneath instead of buried inside an 88px block.
-    const lift = revealAt !== null && Math.abs(cx - revealAt) < 1 ? S.REVEAL_LIFT : 0;
-    const bottom = s.bottomY - lift;
-    const top = bottom - headH;
+    // On the life-lost frames the guilty stamp recoils, so the flattened player is
+    // visible underneath instead of buried under the die.
+    const reveal = revealAt !== null && Math.abs(cx - revealAt) < 1 ? S.REVEAL_LIFT : 0;
+    // …and during the wind-up it cocks back, which is the tell. Now that the stamp
+    // parks in view this can be on the object itself; when it parked at the ceiling
+    // the only place a tell could live was the floor.
+    const cock = Math.round(s.warn * S.WARN_LIFT);
+    const bottom = s.bottomY - reveal - cock;
+    const gridTop = bottom - STAMP_H;
 
-    // Rail from the ceiling down to the handle.
-    pxRect(ctx, 'rgba(120, 158, 170, 0.30)', cx - PX / 2, 0, PX, Math.max(0, top - PX * 5), PX);
-
-    // Floor shadow: tightens and darkens as the head bears down. Drawn on the
-    // ground band over the ink pad, so the pad visibly darkens under an incoming
+    // Floor shadow: tightens and darkens as the die bears down. Drawn on the ground
+    // band over the impression, so the print visibly darkens under an incoming
     // stamp rather than the two cues fighting for the same 4px.
     const drop = Math.max(0, Math.min(1, s.press));
-    const halfW = (W / 2) * (0.55 + 0.45 * drop);
+    const halfW = (W / 2) * (0.5 + 0.5 * drop);
     pxRect(
       ctx,
       `rgba(2, 14, 18, ${0.18 + 0.5 * drop})`,
@@ -76,64 +175,44 @@ export function drawStamps(
       PX,
     );
 
-    // Handle + neck above the head.
-    pxRect(ctx, '#2A4550', cx - PX * 5, top - PX * 6, PX * 10, PX * 3, PX);
-    pxRect(ctx, '#3E6472', cx - PX * 5, top - PX * 6, PX * 10, PX, PX);
-    pxRect(ctx, '#2A4550', cx - PX * 2, top - PX * 3, PX * 4, PX * 3, PX);
+    drawPixels(ctx, STAMP, STAMP_PALETTE, cx - W / 2, gridTop, { scale: STAMP_SCALE });
 
-    // Head block. Exactly `WIDTH` wide — never wider than the hitbox.
-    pxRect(ctx, '#33505C', cx - W / 2, top, W, headH, PX);
-    pxRect(ctx, '#4E7280', cx - W / 2, top, W, PX, PX); // lit top edge
-    pxRect(ctx, '#1E353E', cx - W / 2, bottom - PX * 3, W, PX * 3, PX); // rubber pad
-
-    // Face plate carrying the word.
-    const plateY = top + PX * 3;
-    const plateH = headH - PX * 8;
-    pxRect(
-      ctx,
-      slowed ? '#9FB6BE' : '#E6E6E6',
-      cx - W / 2 + PX * 2,
-      plateY,
-      W - PX * 4,
-      plateH,
-      PX,
-    );
-    pxRect(ctx, '#0E2A33', cx - W / 2 + PX * 2, plateY, W - PX * 4, PX, PX);
-    drawText(ctx, 'DENIED', cx, plateY + plateH / 2 - 7, {
+    // The printed index label. Cool and quiet while ANSR holds the mechanism back —
+    // the same stamp, no longer shouting.
+    const labelY = gridTop + LABEL_TOP_ROW * STAMP_SCALE;
+    const labelH = LABEL_ROWS * STAMP_SCALE;
+    if (slowed) {
+      pxRect(ctx, '#9FB6BE', cx - W / 2 + PX * 2, labelY, W - PX * 4, labelH, PX);
+    }
+    drawText(ctx, 'DENIED', cx, labelY + labelH / 2 - 7, {
       scale: 2,
       color: slowed ? '#2C4A55' : '#3A1414',
       align: 'center',
     });
 
-    // Wind-up. The slam itself is 0.14s, far too fast to react to, so this is the
-    // cue the player actually plays against: the head cocks back a few pixels and
-    // the column it is about to print lights up from the floor. Both ramp smoothly
-    // (never a strobe) and neither moves the hitbox.
     if (s.warn > 0) {
-      const w = s.warn;
-      const lit = `rgba(207, 230, 236, ${0.18 + 0.5 * w})`;
-      // A dashed column between the parked head and the floor it is about to
-      // print on — the same "this lane is next" language the fire lanes use. It
-      // has to be the column rather than a cue on the head itself: a parked stamp
-      // hangs mostly above the frame, so anything drawn up there is not seen.
-      for (let y = bottom + PX * 2; y < GROUND_TOP - PX; y += PX * 4) {
-        pxRect(ctx, lit, cx - PX, y, PX * 2, PX * 2, PX);
+      const lit = `rgba(219, 240, 246, ${0.3 + 0.6 * s.warn})`;
+      // The column it is about to print lights up from the floor: the impression's
+      // print line flares and four marks close in on it from both sides.
+      pxRect(ctx, lit, cx - W / 2 + PX, GROUND_TOP, W - PX * 2, PX * 2, PX);
+      const half = Math.round((W / 2 + PX) * (0.95 - 0.4 * s.warn));
+      for (let i = 0; i < 4; i += 1) {
+        const inset = Math.round((half * i) / 5);
+        pxRect(ctx, lit, cx - half + inset, GROUND_TOP - PX * (i + 1), PX * 2, PX, PX);
+        pxRect(ctx, lit, cx + half - inset - PX * 2, GROUND_TOP - PX * (i + 1), PX * 2, PX, PX);
       }
-      // Brightening print line + chevrons closing in on the pad.
-      pxRect(ctx, lit, cx - W / 2 + PX, GROUND_TOP, W - PX * 2, PX, PX);
-      const half = Math.round((W / 2 - PX * 2) * (0.9 - 0.45 * w));
-      for (let i = 0; i < 3; i += 1) {
-        const inset = Math.round((half * i) / 4);
-        pxRect(ctx, lit, cx - half + inset, GROUND_TOP - PX * (i + 1), PX, PX, PX);
-        pxRect(ctx, lit, cx + half - inset - PX, GROUND_TOP - PX * (i + 1), PX, PX, PX);
-      }
+      // A lit edge along the die, so the cock-back reads as loading rather than as
+      // the stamp drifting upwards.
+      pxRect(ctx, lit, cx - W / 2 + PX * 2, bottom - PX, W - PX * 4, PX, PX);
     }
 
-    // Backing off a player it cannot press: a short upward tick on both flanks so
-    // the refusal reads as the stamp being stopped, not as a miss.
+    // Backing off a player it cannot press. The refusal is drawn on the die's own
+    // face in the value orange — the field pushed it back, so the cue belongs to
+    // ANSR — with two sparks flicking up off the corners it was stopped at.
     if (s.retracting) {
-      pxRect(ctx, 'rgba(159, 230, 196, 0.7)', cx - W / 2 - PX * 2, bottom - PX * 5, PX, PX * 5, PX);
-      pxRect(ctx, 'rgba(159, 230, 196, 0.7)', cx + W / 2 + PX, bottom - PX * 5, PX, PX * 5, PX);
+      pxRect(ctx, 'rgba(255, 84, 0, 0.8)', cx - W / 2 + PX, bottom - PX, W - PX * 2, PX, PX);
+      pxRect(ctx, 'rgba(255, 184, 122, 0.85)', cx - W / 2 + PX, bottom - PX * 3, PX, PX * 2, PX);
+      pxRect(ctx, 'rgba(255, 184, 122, 0.85)', cx + W / 2 - PX * 2, bottom - PX * 3, PX, PX * 2, PX);
     }
   }
 }

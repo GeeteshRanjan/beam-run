@@ -342,10 +342,7 @@ export function drawSceneBackground(
       drawSky(ctx, '#05303a');
       drawSkyline(ctx, 23, '#042A33', '#7FC4D2', t, reduced);
       // Setup delays: stalled paperwork stacks + a slipping clock.
-      // The stage sign hangs lower here than on every other screen (100 vs 70)
-      // because the DENIED stamps park at the ceiling: at 70 the col-12 stamp
-      // clipped the S off "SETUP DELAYS" every time it was up.
-      drawFloorSign(ctx, W * 0.5, 100, 'SETUP DELAYS');
+      drawFloorSign(ctx, W * 0.5, 70, 'SETUP DELAYS');
       drawStalledStacks(ctx, 60, GROUND_TOP);
       drawStalledStacks(ctx, W - 150, GROUND_TOP);
       drawClock(ctx, W * 0.5, 150, t, reduced);

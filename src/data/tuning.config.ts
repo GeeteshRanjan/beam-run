@@ -161,8 +161,16 @@ export const HAZARDS = {
      * wind-up, only the picture.
      */
     WARN_TIME: 0.22,
-    /** px: head bottom while parked, i.e. how far it hangs into the frame. */
-    REST_BOTTOM: 64,
+    /**
+     * px: the pressing face's height while parked.
+     *
+     * Sits just above the middle of the 720px frame (owner call) rather than up
+     * against the ceiling, so the whole stamp — wooden knob, stem, body, rubber
+     * die — is on screen and reads as an object rather than as a block sliding in
+     * from off-frame. Nothing holds it up: there is no rail, and there was never a
+     * reason for one beyond "the head was somewhere you could not see".
+     */
+    REST_BOTTOM: 330,
     /**
      * px: hitbox = the pressing face. Drawn exactly this wide, never wider.
      * 96 rather than a tidier 80 because the face has to carry the word DENIED at
@@ -170,8 +178,16 @@ export const HAZARDS = {
      * the plate onto the frame, which is the only thing this hazard has to say.
      */
     WIDTH: 96,
-    /** px: height of the stamp head (the block that carries the DENIED face). */
+    /**
+     * px: height of the pressing body — flange down to the rubber die. This is
+     * the hitbox, and the sprite's body is authored to exactly this height
+     * (`STAMP_BODY_ROWS * STAMP_SCALE` in `render/stamps.ts`, guarded by a test).
+     * The handle above it is deliberately outside the box: being level with a
+     * stamp's knob is not being under its die.
+     */
     HEAD_H: 88,
+    /** px the stamp visibly cocks back during its wind-up. */
+    WARN_LIFT: 14,
     /**
      * Assisted (1Wrk): approvals move at ANSR speed, so the whole mechanism runs
      * at this fraction of real time. 0.26 turns a 1.5s cycle into ~5.8s and the

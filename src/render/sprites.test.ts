@@ -10,37 +10,22 @@ interface Rect {
 
 function recorder() {
   const rects: Rect[] = [];
-  const strokes: { color: string; r: number }[] = [];
+  const colors: string[] = [];
   let fill = '';
-  let stroke = '';
-  let arcR = 0;
   const ctx = {
     globalAlpha: 1,
-    lineWidth: 0,
     set fillStyle(v: string) {
       fill = v;
     },
     get fillStyle() {
       return fill;
     },
-    set strokeStyle(v: string) {
-      stroke = v;
-    },
-    get strokeStyle() {
-      return stroke;
-    },
     fillRect(x: number, y: number, w: number, h: number) {
       rects.push({ x, y, w, h });
+      colors.push(fill);
     },
-    createRadialGradient: () => ({ addColorStop: () => undefined }),
-    beginPath: () => undefined,
-    arc: (_x: number, _y: number, r: number) => {
-      arcR = r;
-    },
-    fill: () => undefined,
-    stroke: () => strokes.push({ color: stroke, r: arcR }),
   } as unknown as CanvasRenderingContext2D;
-  return { ctx, rects, strokes };
+  return { ctx, rects, colors };
 }
 
 function bounds(rects: Rect[]) {
@@ -86,13 +71,41 @@ describe('hero sprite', () => {
     expect(aspect(flat)).toBeGreaterThan(2);
   });
 
-  it('the ANSR bubble is an orange ring around the figure', () => {
-    const { ctx, strokes } = recorder();
-    drawAnsrBubble(ctx, CENTER, FEET, 1);
-    expect(strokes).toHaveLength(1);
-    expect(strokes[0]!.color).toContain('255, 84, 0');
-    // Big enough to enclose a 48×60 hero, small enough to stay a bubble.
-    expect(strokes[0]!.r).toBeGreaterThan(30);
-    expect(strokes[0]!.r).toBeLessThan(60);
+  describe('the ANSR bubble', () => {
+    const bubble = (pulse = 1, phase = 0) => {
+      const { ctx, rects, colors } = recorder();
+      drawAnsrBubble(ctx, CENTER, FEET, pulse, phase);
+      return { rects, colors };
+    };
+
+    it('is built from pixel cells, not a vector circle', () => {
+      // A smooth arc() stroke was the one thing on screen that was not 8-bit.
+      const { rects, colors } = bubble();
+      expect(rects.length).toBeGreaterThan(100);
+      for (const r of rects) {
+        expect(r.w).toBeLessThanOrEqual(4);
+        expect(r.h).toBeLessThanOrEqual(4);
+      }
+      expect(colors.every((c) => c.includes('255, 84, 0') || c.includes('255, 184, 122'))).toBe(
+        true,
+      );
+    });
+
+    it('encloses the figure and leaves its middle clear', () => {
+      const { rects } = bubble();
+      const cy = FEET - 30;
+      const d = rects.map((r) => Math.hypot(r.x - CENTER, r.y - cy));
+      // Big enough to wrap a 48×60 hero, small enough to still be a bubble…
+      expect(Math.max(...d)).toBeGreaterThan(40);
+      expect(Math.max(...d)).toBeLessThan(64);
+      // …and hollow, so the hero inside it stays crisp.
+      expect(Math.min(...d)).toBeGreaterThan(18);
+    });
+
+    it('is a pure function of pulse and phase, so reduced motion freezes it', () => {
+      expect(bubble(0.5, 0).rects).toEqual(bubble(0.5, 0).rects);
+      // The rim dither and the sparks move with the phase.
+      expect(bubble(0.5, 0).colors).not.toEqual(bubble(0.5, 0.5).colors);
+    });
   });
 });

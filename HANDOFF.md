@@ -21,8 +21,8 @@ since then has been post-launch passes: a meaning-model rebuild (§4), layout an
 mobile adaptivity, an 8-bit visual conversion of every remaining web-native
 surface, the finale rebuild, and a custom 404 page.
 
-- **Tests:** 280 passing (36 files)
-- **Bundle:** ESM 44.08 KB / IIFE 44.35 KB gzip · budget gate **86.4 KB of 90 KB**
+- **Tests:** 284 passing (36 files)
+- **Bundle:** ESM 44.54 KB / IIFE 44.80 KB gzip · budget gate **87.2 KB of 90 KB**
 - **Validator:** green on all 6 screens (structural + physics-aware + meaning layers)
 - **Next:** no queued task — see §7 for what is open. The owner is specifying the
   powerup *effects* one screen at a time; screen 1 is done (§4.5), so expect one of
@@ -276,9 +276,15 @@ it, capabilities unique, months sum to the benchmark) · `check-budget.mjs` + `b
   running total is warmed.
 - **Every hazard telegraphs, and the tell has to be where the player is looking.** Screen 1's
   stamps slam in 0.14s; with no wind-up a probe of 20 reactive policies could not clear the stage
-  at all — unfair, not hard. `HAZARDS.STAMPS.WARN_TIME` fixed it, but only once the cue was drawn
-  *down the column* instead of on the head: a parked stamp hangs mostly above the frame, so a tell
-  up there is a tell nobody sees.
+  at all — unfair, not hard. `HAZARDS.STAMPS.WARN_TIME` fixed it, and where a hazard *rests* decides
+  where its tell can live: while the stamps parked at the ceiling the only visible cue was on the
+  floor, because 90% of a parked stamp was off-frame.
+- **A hazard sprite is its hitbox.** `render/stamps.ts` authors the stamp's pressing body at exactly
+  `HEAD_H` × `WIDTH` (`STAMP_BODY_ROWS * STAMP_SCALE`, test-guarded) and puts the handle *outside*
+  the box. Draw the art wider than the box and you clip the player with pixels that are not there;
+  draw it narrower and the box hits them from nothing. Moving `REST_BOTTOM` also moves the press at
+  which the die reaches a standing player (536px of travel → 0.918, 270px → 0.837), so re-run the
+  fairness probe after touching it.
 - **A hazard's cycle length is a measured number.** Column width + player width ÷ walk speed is the
   crossing time (124px ≈ 0.48s on screen 1); the fully-safe part of the cycle must stay comfortably
   above it or the screen is a wall, not a test. Tune `CYCLE`, never the gaps — the geometry is the
@@ -346,22 +352,18 @@ must already be in §6.
 
 ## 10. Recent passes (newest first — full entries in `docs/JOURNAL.md`)
 
+- **Setup Delays art pass (owner feedback).** Stamps are now an authored 24×32 sprite grid reading
+  as a real desk stamp, parked just above mid-frame with **no rail**, so the wind-up cock-back is
+  visible on the object and the floor impressions carry the column read. The player's bubble was
+  rebuilt from 4px cells (haze band, dashed lit rim, sparks) — a gradient and an `arc()` stroke were
+  the only non-8-bit things on screen. 284 tests; gate **87.2 KB of 90**.
 - **Setup Delays rebuilt: DENIED stamps replace the red-tape sludge (owner call, and the first
-  per-stage badge *effect* to be specified).** Four stamps slam from the ceiling in two
-  half-cycle-offset pairs either side of a small wall; 1Wrk drops the whole mechanism to 26% speed
-  and shields the player, so a press aborts and retracts from where it touched. Unassisted, a stamp
-  flattens you. Two probe findings changed the design: with no wind-up the stage was **unclearable**
-  by any reactive policy (added `WARN_TIME`, drawn down the column because a parked stamp hangs
-  above the frame), and `CYCLE` had to go 1.5 → 1.8 so the safe window clears the 0.48s crossing
-  time. Deleted with the pit: `Quicksand`, the placed-tile mechanism, and two unused `Hazard` hooks.
-  280 tests (36 files); gate **86.4 KB of 90**.
-- **Lives, the delay log, and the badge on every screen (owner model change — see §4).** 3 lives,
-  a `LIFE_LOST` state that restarts the *same* stage and becomes the closing ledger on the last
-  life, a bounded delay log hanging top-right, Growth Points deleted, and the ANSR badge on all six
-  screens floating vertically ahead of the obstacles it answers. Also found `minifyEsOutput()` was
-  a no-op (Vite's post-phase transpile re-printed the chunk), which is why the gate *fell* to
-  **85.2 KB of 90** with the feature in. 264 tests (34 files).
-- **Navigator buttons went nowhere / 404 never appeared** — `handleCta` navigated only when
-  `!__DEV__`, so every CTA silently no-oped in dev; and Vite's SPA fallback re-served the game for
-  `/gcc-opportunity-navigator`. Added `scripts/not-found-plugin.ts` (real 404 in dev + preview,
-  byte-identical to the built file) and removed the dev gate. 245 tests; gate 85.5 KB.
+  per-stage badge *effect* to be specified).** Four stamps slam down in two half-cycle-offset pairs
+  either side of a small wall; 1Wrk drops the mechanism to 26% speed and shields the player, so a
+  press aborts and retracts. Unassisted, a stamp flattens you. Probes forced two changes: a wind-up
+  (`WARN_TIME` — without it no reactive policy could clear the stage) and `CYCLE` 1.5 → 1.8. Deleted
+  with the pit: `Quicksand`, the placed-tile mechanism, two unused `Hazard` hooks. 280 tests.
+- **Lives, the delay log, and the badge on every screen (owner model change — see §4).** 3 lives, a
+  `LIFE_LOST` state that restarts the *same* stage and becomes the closing ledger on the last life, a
+  bounded delay log, Growth Points deleted, and a floating ANSR badge on all six screens. Also found
+  `minifyEsOutput()` was a no-op (Vite's post-phase transpile re-printed the chunk). 264 tests.

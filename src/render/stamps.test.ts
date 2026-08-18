@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { drawStamps, drawInkPads } from './stamps';
+import { drawStamps, drawInkPads, STAMP_SCALE, STAMP_BODY_ROWS } from './stamps';
 import { measureText } from './PixelText';
 import { HAZARDS, RESOLUTION } from '../data/tuning.config';
 import type { StampState } from '../world/Hazards/Stamps';
@@ -57,39 +57,60 @@ describe('stamp painting', () => {
     }
   });
 
-  it('fits the word DENIED inside the face plate', () => {
-    // This is the whole message of the hazard, and it silently fell off the plate
-    // onto the frame at WIDTH 76. Guarded here rather than in a comment.
-    const plateInner = S.WIDTH - 4 * 4 - 4 * 2; // plate inset, then a pixel of air
-    expect(measureText('DENIED', 2)).toBeLessThan(plateInner);
+  it('fits the word DENIED inside the printed label panel', () => {
+    // This is the whole message of the hazard, and it silently fell off the label
+    // onto the body at WIDTH 76. Guarded here rather than in a comment.
+    const labelInner = S.WIDTH - 2 * 2 * STAMP_SCALE; // body edge + shade, both sides
+    expect(measureText('DENIED', 2)).toBeLessThan(labelInner);
   });
 
-  it('presses down to the ground and parks inside the top of the frame', () => {
+  it('the authored body is exactly the hitbox', () => {
+    // The picture and the collision box are the same object, so they cannot drift:
+    // a taller sprite would be a stamp that hits you before it reaches you.
+    expect(STAMP_BODY_ROWS * STAMP_SCALE).toBe(S.HEAD_H);
+  });
+
+  it('presses down to the ground and parks just above the middle of the frame', () => {
     const down = recorder();
     drawStamps(down.ctx, [state({ press: 1 })], false);
-    const lowest = Math.max(...down.rects.map((r) => r.y + r.h));
-    expect(lowest).toBeGreaterThanOrEqual(GROUND_TOP);
+    expect(Math.max(...down.rects.map((r) => r.y + r.h))).toBeGreaterThanOrEqual(GROUND_TOP);
 
     const up = recorder();
     drawStamps(up.ctx, [state({ press: 0 })], false);
-    const headBottom = Math.max(
+    const dieBottom = Math.max(
       ...up.rects.filter((r) => r.y + r.h < GROUND_TOP).map((r) => r.y + r.h),
     );
-    expect(headBottom).toBeCloseTo(S.REST_BOTTOM, 0);
+    expect(dieBottom).toBeCloseTo(S.REST_BOTTOM, 0);
+    expect(S.REST_BOTTOM).toBeLessThan(RESOLUTION.HEIGHT / 2);
   });
 
-  it('draws the wind-up down the column, not up on the parked head', () => {
-    // A parked stamp hangs mostly above the frame, so a tell drawn on the head is
-    // a tell nobody sees. The cue has to live between the head and the floor.
+  it('hangs from nothing — no rail, rope or rod above the stamp', () => {
+    const { ctx, rects } = recorder();
+    drawStamps(ctx, [state({ press: 0 })], false);
+    // The knob is the topmost thing drawn, and it is narrow. Nothing may reach up
+    // from it towards the ceiling.
+    const top = Math.min(...rects.map((r) => r.y));
+    expect(top).toBeGreaterThan(0);
+    expect(rects.filter((r) => r.y < top + 4)).not.toHaveLength(0);
+    const knobWidth = Math.max(
+      ...rects.filter((r) => r.y < top + 4).map((r) => r.x + r.w),
+    ) - Math.min(...rects.filter((r) => r.y < top + 4).map((r) => r.x));
+    expect(knobWidth).toBeLessThan(S.WIDTH * 0.6); // a turned handle, not a shaft
+  });
+
+  it('cocks the stamp back and lights the floor during the wind-up', () => {
     const quiet = recorder();
     drawStamps(quiet.ctx, [state({ press: 0, warn: 0 })], false);
     const winding = recorder();
     drawStamps(winding.ctx, [state({ press: 0, warn: 1 })], false);
 
-    const inColumn = (rs: Rect[]) =>
-      rs.filter((r) => r.y > S.REST_BOTTOM && r.y + r.h < GROUND_TOP).length;
-    expect(inColumn(winding.rects)).toBeGreaterThan(inColumn(quiet.rects));
-    // …and it reaches the floor, where the print is about to land.
+    // The whole object lifts — now that it parks in view, the tell can be on the
+    // stamp itself and not only on the floor.
+    const top = (rs: Rect[]) => Math.min(...rs.map((r) => r.y));
+    expect(top(winding.rects)).toBeCloseTo(top(quiet.rects) - S.WARN_LIFT, 0);
+    // …and the column it is about to print lights up from the floor.
+    const litFloor = (rs: Rect[]) => rs.filter((r) => r.y >= GROUND_TOP - 16).length;
+    expect(litFloor(winding.rects)).toBeGreaterThan(litFloor(quiet.rects));
     expect(winding.rects.some((r) => r.y === GROUND_TOP)).toBe(true);
   });
 
@@ -107,16 +128,11 @@ describe('stamp painting', () => {
     const lifted = recorder();
     drawStamps(lifted.ctx, [state({ cx: 300 }), state({ cx: 900 })], false, 300);
 
-    // The head is the only thing drawn a full hitbox wide, so its top edge is an
-    // unambiguous measure of where the stamp is.
-    const headTop = (rs: Rect[], cx: number) =>
-      Math.min(
-        ...rs
-          .filter((r) => Math.abs(r.w - S.WIDTH) <= 4 && Math.abs(r.x + r.w / 2 - cx) < 2)
-          .map((r) => r.y),
-      );
+    // The top of the knob is an unambiguous measure of where a stamp is.
+    const stampTop = (rs: Rect[], cx: number) =>
+      Math.min(...rs.filter((r) => Math.abs(r.x + r.w / 2 - cx) < S.WIDTH).map((r) => r.y));
 
-    expect(headTop(lifted.rects, 300)).toBeCloseTo(headTop(plain.rects, 300) - S.REVEAL_LIFT, 0);
-    expect(headTop(lifted.rects, 900)).toBeCloseTo(headTop(plain.rects, 900), 0);
+    expect(stampTop(lifted.rects, 300)).toBeCloseTo(stampTop(plain.rects, 300) - S.REVEAL_LIFT, 0);
+    expect(stampTop(lifted.rects, 900)).toBeCloseTo(stampTop(plain.rects, 900), 0);
   });
 });

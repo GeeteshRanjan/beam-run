@@ -105,7 +105,10 @@ describe('Screen 1 — Setup Delays (DENIED stamps → 1Wrk → walk through)', 
     expect(sim.state).toBe('LIFE_LOST');
     const hazard = sim.activeHazard as Stamps;
     expect(hazard.struckAt).toBeCloseTo(gx * T + T / 2, 5);
-    expect(hazard.stampStates().some((s) => s.pressing)).toBe(true);
+    // The guilty stamp is left at the bottom of its stroke (it catches you in the
+    // last few frames of the drop, so this is not always a completed press).
+    const guilty = hazard.stampStates().find((s) => Math.abs(s.cx - hazard.struckAt!) < 1)!;
+    expect(guilty.press).toBeGreaterThan(0.8);
   });
 
   it('a lost life restarts this stage with the badge available again', () => {

@@ -15,7 +15,7 @@
  * Grids are 16×20 cells. Feet sit on the bottom row; the sprite is centred
  * horizontally on the player's hitbox and its bottom aligns to the feet.
  */
-import { drawPixels, maxWidth, type Palette } from './PixelArt';
+import { drawPixels, maxWidth, pxRect, hash2, type Palette } from './PixelArt';
 
 /** Human tones (skin/hair) sit alongside the brand palette — a believable
  * person can't be built from the 5 brand colours alone. */
@@ -210,37 +210,110 @@ const BADGE_PALETTE: Palette = {
 export const BADGE_GRID_W = maxWidth(BADGE_GRID);
 
 /**
- * The ANSR bubble around an ANSR-backed player: a soft orange field with a
- * pulsing outline. `pulse` is 0..1 and comes from the host's presentation clock,
- * so this stays a pure function of its arguments.
+ * The ANSR bubble around an ANSR-backed player: a hazy 8-bit force field.
  *
- * Orange is allowed here and nowhere else on the player — the active capability
- * is exactly what the value accent is for. It is drawn *behind* the figure so the
- * hero stays the readable thing on screen.
+ * Built entirely out of 4px cells, because a smooth `arc()` stroke and a radial
+ * gradient — which is what this was first — is the one thing on screen that is not
+ * 8-bit, and it read as a vector circle pasted over pixel art. Three layers, all
+ * chunky:
+ *
+ *  1. a **dithered haze** filling the outer band, thickening towards the rim. 8-bit
+ *     hardware had no alpha channel and faked transparency with a chequer of solid
+ *     pixels; that is the language here (the same trick the scene overlays use).
+ *  2. a **dashed pixel rim** — alternate cells bright and dim, the alternation
+ *     rotating with `phase`, so the shell shimmers like a shield rather than sitting
+ *     there like an outline.
+ *  3. a few **orbiting sparks** just outside the rim, which is what makes it read as
+ *     powered rather than as a bubble of soap.
+ *
+ * The middle is deliberately left empty so the figure inside stays crisp — the
+ * field is drawn *behind* the hero, and haze over his face would cost more than it
+ * buys. `pulse` (0..1) and `phase` (turns) come from the host's presentation clock;
+ * with both held constant the whole thing is static, which is exactly what
+ * `prefers-reduced-motion` wants — a steady field, not no field.
+ *
+ * Orange is allowed here and nowhere else on the player: the active capability is
+ * what the value accent is for.
  */
 export function drawAnsrBubble(
   ctx: CanvasRenderingContext2D,
   centerX: number,
   feetY: number,
   pulse: number,
+  phase = 0,
 ): void {
-  const cy = feetY - 26;
-  const r = 42 + pulse * 3;
+  const P = 4; // one field cell
+  const cy = feetY - 30;
+  const r = 46 + pulse * 3;
+  const band = r * 0.7; // haze lives in the outer band only
+  const core = r * 0.5; // …and the middle stays clear for the figure
+  const drift = Math.floor(phase * 6); // dither crawl, in cells
 
-  const glow = ctx.createRadialGradient(centerX, cy, r * 0.45, centerX, cy, r);
-  glow.addColorStop(0, 'rgba(255, 84, 0, 0.06)');
-  glow.addColorStop(0.72, `rgba(255, 84, 0, ${0.12 + 0.08 * pulse})`);
-  glow.addColorStop(1, 'rgba(255, 84, 0, 0)');
-  ctx.fillStyle = glow;
-  ctx.beginPath();
-  ctx.arc(centerX, cy, r, 0, Math.PI * 2);
-  ctx.fill();
+  // 1. Dithered haze. Confined to a band just inside the shell: filling the whole
+  // disc with speckle made the hero look like he was standing in sand, and the
+  // field is supposed to be around him, not on him.
+  for (let oy = -r; oy <= r; oy += P) {
+    for (let ox = -r; ox <= r; ox += P) {
+      const d = Math.sqrt(ox * ox + oy * oy);
+      if (d > r || d < core) continue;
+      const n = hash2(Math.round(ox / P) + 97, Math.round(oy / P) + 43 + drift);
+      if (d < band) {
+        // A few charged motes drifting in the clear part of the field.
+        if (n > 0.955) pxRect(ctx, 'rgba(255, 84, 0, 0.14)', centerX + ox, cy + oy, P, P, P);
+        continue;
+      }
+      const t = (d - band) / (r - band); // 0 at the band's inner edge, 1 at the rim
+      if (n > 0.82 - 0.42 * t) {
+        const a = 0.1 + 0.22 * t;
+        const hot = n > 0.985;
+        pxRect(
+          ctx,
+          hot ? `rgba(255, 184, 122, ${a + 0.25})` : `rgba(255, 84, 0, ${a})`,
+          centerX + ox,
+          cy + oy,
+          P,
+          P,
+          P,
+        );
+      }
+    }
+  }
 
-  ctx.strokeStyle = `rgba(255, 84, 0, ${0.45 + 0.35 * pulse})`;
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.arc(centerX, cy, r - 2, 0, Math.PI * 2);
-  ctx.stroke();
+  // 2. Dashed rim. Stepping by roughly one cell of arc keeps the circle unbroken
+  // without drawing the same cell twice.
+  const steps = Math.max(16, Math.round((2 * Math.PI * r) / P));
+  const spin = Math.floor(phase * steps);
+  for (let i = 0; i < steps; i += 1) {
+    const ang = (i / steps) * Math.PI * 2;
+    const bright = (i + spin) % 2 === 0;
+    // The upper-left quadrant catches the light, the way every 8-bit sphere does.
+    const lit = Math.cos(ang + Math.PI * 0.75) > 0.4;
+    const a = bright ? (lit ? 0.9 : 0.5 + 0.25 * pulse) : 0.12;
+    pxRect(
+      ctx,
+      bright && lit ? `rgba(255, 184, 122, ${a})` : `rgba(255, 84, 0, ${a})`,
+      centerX + Math.cos(ang) * r,
+      cy + Math.sin(ang) * r,
+      P,
+      P,
+      P,
+    );
+  }
+
+  // 3. Orbiting sparks, a little outside the shell.
+  for (let k = 0; k < 5; k += 1) {
+    const ang = (phase + k / 5) * Math.PI * 2;
+    const rr = r + P * (1 + (k % 2));
+    pxRect(
+      ctx,
+      `rgba(255, 184, 122, ${0.5 + 0.4 * pulse})`,
+      centerX + Math.cos(ang) * rr,
+      cy + Math.sin(ang) * rr,
+      P,
+      P,
+      P,
+    );
+  }
 }
 
 /** Draw the ANSR badge disc centred at (cx,cy) at the given pixel scale. */
