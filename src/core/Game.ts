@@ -19,20 +19,46 @@ import { Hud } from '../ui/Hud';
 import { Overlays, type OverlayName, type CtaContext } from '../ui/Overlays';
 import { injectStyles } from '../ui/styles';
 import { Stamps } from '../world/Hazards/Stamps';
-import { Fire } from '../world/Hazards/Fire';
-import { Gates } from '../world/Hazards/Gates';
-import { Spikes } from '../world/Hazards/Spikes';
+import { Dragon } from '../world/Hazards/Dragon';
+import { ComplianceMaze } from '../world/Hazards/ComplianceMaze';
+import { Workplace } from '../world/Hazards/Workplace';
 import { Effects } from './Effects';
+import { causeLabel } from './setbackLog';
+import { DELAY_FLIGHT_TIME, delayFlightPose } from './delayFlight';
 import { finaleLayout } from './finaleScene';
 import { drawFinaleScene } from '../render/finale';
 import { AudioEngine } from '../audio/AudioEngine';
-import { drawHero, drawAnsrBubble, type HeroMotion } from '../render/sprites';
+import {
+  drawHero,
+  drawAnsrBubble,
+  BUBBLE_TEAL,
+  type HeroMotion,
+} from '../render/sprites';
 import { drawBadgePickup } from '../render/badge';
 import { drawInkPads, drawStamps as drawStampHeads } from '../render/stamps';
+import { drawMonsters, drawGatherPad, drawLift } from '../render/maze';
+import {
+  drawMummies,
+  drawShots,
+  drawCutter,
+  drawOffice,
+  drawTerminal,
+  drawTangled,
+} from '../render/workplace';
+import {
+  drawDragon,
+  drawCone,
+  drawWaterShots,
+  drawWaterCannon,
+  drawSteam,
+  drawHiredCandidates,
+  drawFloatingBrick,
+  drawScorchedGround,
+} from '../render/dragon';
+import { drawBadgeDelivery } from '../render/carrier';
 import { badgeCenter } from '../world/badgeFloat';
 import { drawTileRect, drawSceneBackground } from '../render/scenery';
 import { drawTitleScene } from '../render/titleScene';
-import { pxRect, hash2 } from '../render/PixelArt';
 import { drawText, drawLabelPlaque } from '../render/PixelText';
 import { AssistController } from './AssistController';
 import { TouchControls, isTouchDevice } from '../ui/TouchControls';
@@ -52,6 +78,19 @@ import { getSessionId, getMutePref, setMutePref } from '../analytics/Save';
 function solutionTag(badge: string): string {
   return capabilityFor(badge)?.tag ?? 'ANSR';
 }
+
+/**
+ * Where the delay log's newest row lands, in internal (1280×720) coordinates.
+ *
+ * The log is real DOM in the HUD's top-right stack, so this is an approximation of
+ * a CSS-laid position — and it is allowed to be one, because the flying label fades
+ * out as it arrives rather than snapping into the row. The figures come from
+ * `ui/styles.ts`: the stack is inset `clamp(8px, 2.2%, 22px)` from the right edge
+ * and the log hangs under the lives plaque, so the panel's own rows start around
+ * y≈120 at a 1280-wide frame. `x` is pulled well inside the right edge because the
+ * label is centred and is up to ~270px wide at scale 2.
+ */
+const DELAY_LOG_ANCHOR = { x: RESOLUTION.WIDTH - 160, y: 120 };
 
 /** A short-lived floating label (value gained / capability unlocked). */
 interface Popup {
@@ -116,6 +155,16 @@ export class Game {
   private lastFrameS = 0;
   private prevOnGround = false;
   /**
+   * Last-seen values of the hiring dragon's monotonic counters.
+   *
+   * The hazard is headless, so it cannot play a sound; the host polls instead and
+   * fires a cue for every increment it has not seen. That keeps `world/*` free of
+   * the AudioEngine and, more usefully, keeps the cue tied to the event the
+   * *simulation* booked rather than to a frame the renderer happened to draw — a
+   * jet fired inside a hit-stop still gets its hiss.
+   */
+  private dragonCues = { shots: 0, quenches: 0, hits: 0, roaring: false, beaten: false };
+  /**
    * Walk-cycle phase (s), advanced by *distance covered* rather than wall clock,
    * so any hazard that drags the player visibly slows the stride too. A
    * time-driven cycle made a slowed hero look like he was running at full pace on
@@ -123,6 +172,12 @@ export class Game {
    */
   private strideClock = 0;
   private readonly popups: Popup[] = [];
+  /**
+   * The delay currently in flight from the place of death to the log panel, if
+   * any. One at a time by construction: a setback ends the stage, so a second one
+   * cannot be booked while the first is still in the air.
+   */
+  private delayFlight: { from: { x: number; y: number }; text: string; t: number } | null = null;
   private stageObserver: ResizeObserver | null = null;
 
   constructor(root: HTMLElement, options: GameOptions = {}) {
@@ -193,6 +248,7 @@ export class Game {
       onScreenEnter: (id, name) => {
         this.effects.clear();
         this.popups.length = 0;
+        this.delayFlight = null;
         this.prevOnGround = false;
         this.analytics.screenEntered(id, name);
         this.hud.announce(COPY.a11y.screenEntered(name));
@@ -203,13 +259,38 @@ export class Game {
       },
       onSetback: (cause, monthsAdded, totalMonths, livesLeft) => {
         // A short shake, one non-strobe flash, brief hit-stop — then the sim has
-        // already moved to LIFE_LOST, which is what actually reports the cost.
-        // No in-world popups here any more: the overlay lands on the next frame
-        // and would immediately cover them.
+        // already moved to LIFE_LOST, which is the beat the impact is painted on.
         this.effects.addShake();
         this.effects.addFlash();
         this.effects.addHitStop();
+        // Caught by the wrapped figure: a burst of tape shreds off the player, in
+        // the screen's caution yellow. It is the one setback that throws debris,
+        // because it is the one where something visibly grabs him.
+        if (cause === 'mummy') {
+          const p = this.sim.player;
+          this.effects.emitBurst(p.box.x + p.box.w / 2, p.box.y + p.box.h / 2, '#E8C23A', 14, 150);
+        }
         this.audio.playSfx('setback');
+        /*
+         * The cost, written where it was paid and then carried to where it is
+         * recorded (owner call). The obstacle's name plus "+2 MONTHS" appears over
+         * the body, holds long enough to be read, and flies up into the delay log —
+         * so the row that appears in the panel visibly came off the player rather
+         * than materialising in a corner nobody was looking at.
+         *
+         * Presentation only: the sim booked the delay on the frame of contact and
+         * `logPanel` is already correct. The label is the *same string the log row
+         * uses* (`COPY.hud.logRow`) with the unit spelled out, because the whole
+         * point is that the player recognises it when it lands.
+         */
+        {
+          const p = this.sim.player;
+          this.delayFlight = {
+            from: { x: p.box.x + p.box.w / 2, y: p.box.y - 6 },
+            text: `${causeLabel(cause)} +${monthsAdded} MONTHS`,
+            t: 0,
+          };
+        }
         this.analytics.setbackIncurred(this.sim.screenId, cause, totalMonths, livesLeft);
         const reason = COPY.setback.reason[cause] ?? cause;
         this.hud.announce(
@@ -223,10 +304,11 @@ export class Game {
         this.hud.announce(COPY.a11y.outOfLives(months, delays));
       },
       onBadgeCollected: (id, type) => {
-        const b = this.sim.screen.data.badge;
-        // The badge is mid-float, so the burst has to come from where it actually
-        // was — its anchor cell is only where it started.
-        const c = b ? badgeCenter(b, this.sim.clock) : null;
+        // The badge moves — it is mid-float on five screens and lying where a drone
+        // put it on the sixth — so the burst has to come from where it actually was.
+        // Its anchor cell is only where the *rail* starts, and on the dragon screen
+        // it means nothing at all. `badgePoint` answers for both.
+        const c = this.sim.badgePoint;
         if (c) {
           // Orange = the "value" accent, reserved for the badge burst.
           this.effects.emitBurst(c.x, c.y, BRAND.ORANGE, 16, 190);
@@ -461,7 +543,13 @@ export class Game {
     const dt = this.lastFrameS ? Math.min(0.1, nowS - this.lastFrameS) : 0;
     this.lastFrameS = nowS;
     this.effects.update(dt);
-    if (!this.paused) this.updatePopups(dt);
+    if (!this.paused) {
+      this.updatePopups(dt);
+      if (this.delayFlight) {
+        this.delayFlight.t += dt;
+        if (this.delayFlight.t >= DELAY_FLIGHT_TIME) this.delayFlight = null;
+      }
+    }
 
     const state = this.sim.state;
     const p = this.sim.player;
@@ -480,6 +568,7 @@ export class Game {
       }
     }
     this.prevOnGround = p.onGround;
+    this.syncDragonAudio();
 
     const shake = this.effects.shakeOffset();
     this.renderer.begin(shake.x, shake.y);
@@ -490,6 +579,7 @@ export class Game {
       this.drawWorld(ctx, alpha);
       this.drawParticles(ctx);
       this.drawPopups(ctx);
+      this.drawDelayFlight(ctx);
     }
     this.drawFlash(ctx);
     this.renderer.end();
@@ -540,21 +630,40 @@ export class Game {
     else if (this.paused) overlay = 'pause';
     else if (state === 'START' || state === 'BOOT') overlay = 'start';
     else if (state === 'TITLE_CARD') overlay = 'titlecard';
-    // The life-lost screen outranks nothing and is outranked by pause and the
-    // mid-run receipt: both are things the player asked for, and neither loses
-    // the delay — the sim stays in LIFE_LOST until it is acknowledged.
-    else if (state === 'LIFE_LOST') overlay = 'lifelost';
-    else if (state === 'WIN') overlay = 'win';
+    /*
+     * A lost life shows NOTHING (owner call). The sim holds in LIFE_LOST for
+     * `LIVES.LOST_HOLD`, which is the beat the impact is painted on — the hero
+     * flat under the stamp, or wrapped in the Workplace tape — and then restarts
+     * the stage from its title card, where the retry hint carries the one thing
+     * the deleted overlay used to say. The delay is still announced to assistive
+     * tech (`onSetback` → `hud.announce`), so nothing is lost for a screen-reader
+     * user by there being no dialog.
+     *
+     * The last life is the exception: that is the end of the attempt, and it lands
+     * on the conversion surface.
+     */
+    else if (state === 'LIFE_LOST') {
+      overlay = this.sim.lifeLost?.outOfLives ? 'gameover' : null;
+    } else if (state === 'WIN') overlay = 'win';
 
     // The assist dialog sits above everything; hide the base overlay behind it.
     if (this.assistOpen) overlay = null;
 
     this.overlays.show(overlay, {
       levelLabel: this.sim.screenLabel,
+      // The retry hint, and the only surviving trace of the life-lost screen.
+      hint: this.sim.retrying ? COPY.lifeLost.retryHint : undefined,
       receipt: this.sim.receipt,
       lifeLost: this.sim.lifeLost ?? undefined,
     });
 
+    // The fourth thumb target exists only where it does something, and says which
+    // tool it is: the Workplace cutter or the hiring dragon's water cannon.
+    const cannon = this.dragon?.hasCannon === true;
+    this.touch.setShootVisible(
+      cannon || this.workplace?.hasCutter === true,
+      cannon ? COPY.controls.shootWater : COPY.controls.shoot,
+    );
     // On-screen touch controls: only while actively playing on a touch device.
     this.touch.setVisible(
       this.isTouch &&
@@ -564,10 +673,18 @@ export class Game {
         !this.summaryOpen,
     );
 
+    /*
+     * The HUD stays up through a lost life now that nothing covers the frame: the
+     * heart going out *is* the feedback, and hiding the plaque on the one frame it
+     * changes would be hiding the news. It goes on the last life, where the screen
+     * over the top of it is the whole message.
+     */
     const hudVisible =
       !this.paused &&
       !this.summaryOpen &&
-      (state === 'PLAYING' || state === 'TITLE_CARD');
+      (state === 'PLAYING' ||
+        state === 'TITLE_CARD' ||
+        (state === 'LIFE_LOST' && this.sim.lifeLost?.outOfLives === false));
     this.hud.setVisible(hudVisible);
     // The model is fed even while hidden, so the plaques are already correct
     // (lives spent, log grown) the instant the next title card puts them back.
@@ -576,10 +693,9 @@ export class Game {
       this.hud.update({
         // The plaque gets the place name, not the title card's framing line
         // ("Arrival — ANSR Tech Park"): a 24-character string set in the bitmap
-        // font would run into the clock on a phone frame. The title card still
-        // shows the full line on entry.
+        // font would run into the lives plaque opposite on a phone frame. The
+        // title card still shows the full line on entry.
         levelLabel: this.sim.screen.name,
-        months: this.sim.months,
         lives: this.sim.lives,
         livesTotal: this.sim.livesTotal,
         log: this.sim.logPanel,
@@ -624,8 +740,13 @@ export class Game {
       this.drawFinale(ctx);
     } else {
       // Ground/platforms/walls as textured 8-bit level material (per-level
-      // meaning: lobby floor, red-tape ground, scorched brick, etc.).
-      for (const s of screen.solids) drawTileRect(ctx, screen.id, s.x, s.y, s.w, s.h);
+      // meaning: lobby floor, red-tape ground, scorched brick, etc.). Solids the
+      // screen paints as its own prop (`Screen.propRects` — the badge's floating
+      // bricks on Hire Under Fire) are skipped here and drawn with that screen's art.
+      for (const s of screen.solids) {
+        if (screen.propRects.includes(s)) continue;
+        drawTileRect(ctx, screen.id, s.x, s.y, s.w, s.h);
+      }
     }
 
     this.drawEngagedLabel(ctx);
@@ -637,7 +758,82 @@ export class Game {
     const feetY = lerp(p.prevY, p.box.y, alpha) + p.box.h;
     const flicker =
       !this.reducedMotion && p.isInvulnerable && Math.floor(this.now() * 20) % 2 === 0;
-    if (!flicker) this.drawPlayer(ctx, cx, feetY);
+    if (!flicker) {
+      this.drawPlayer(ctx, cx, feetY);
+      const workplace = this.workplace;
+      // The cutter is *held*, so it goes on after the figure — and only where the
+      // badge has actually armed it.
+      if (workplace?.hasCutter) {
+        drawCutter(ctx, cx, feetY, p.facing, workplace.sinceShot, this.reducedMotion);
+      }
+      // Same rule for the water cannon on Hire Under Fire: held, so it is drawn
+      // after the hero, and only once Talent500 has put it in his hands.
+      const dragon = this.dragon;
+      if (dragon?.hasCannon) {
+        drawWaterCannon(ctx, cx, feetY, p.facing, dragon.sinceShot, this.reducedMotion);
+      }
+      // Caught by the wrapped figure: the room does to the player exactly what it
+      // did to him. Same job as the flattened stamp pose on Setup Delays.
+      if (this.tangled) {
+        drawTangled(ctx, cx, feetY, this.reducedMotion ? 0 : this.now(), this.reducedMotion);
+      }
+    }
+  }
+
+  /** The current screen's Workplace hazard, or null anywhere else. */
+  private get workplace(): Workplace | null {
+    const hazard = this.sim.activeHazard;
+    return hazard instanceof Workplace ? hazard : null;
+  }
+
+  /** The current screen's hiring dragon, or null anywhere else. */
+  private get dragon(): Dragon | null {
+    const hazard = this.sim.activeHazard;
+    return hazard instanceof Dragon ? hazard : null;
+  }
+
+  /**
+   * Turn the dragon's counters into sound, once each.
+   *
+   * Five cues, five edges: the opening roar, a jet leaving the cannon, a jet
+   * beating the fire back, a layer of the costume going, and the five hires
+   * landing. The counters only ever go up, so "how many have I not played yet" is
+   * subtraction — and a reload resets them to zero, which is why the roar is
+   * detected as a *rising edge* of `isRoaring` rather than counted.
+   */
+  private syncDragonAudio(): void {
+    const dragon = this.dragon;
+    if (!dragon) {
+      this.dragonCues = { shots: 0, quenches: 0, hits: 0, roaring: false, beaten: false };
+      return;
+    }
+    const c = this.dragonCues;
+    const roaring = dragon.isRoaring && this.sim.state === 'PLAYING';
+    if (roaring && !c.roaring) this.audio.playSfx('roar');
+    c.roaring = roaring;
+
+    // Capped at one cue per frame per kind: several jets can land inside one
+    // rendered frame, and four hisses stacked on the same millisecond is a click.
+    if (dragon.shotsFired > c.shots) this.audio.playSfx('water');
+    if (dragon.quenches > c.quenches) this.audio.playSfx('steam');
+    if (dragon.hits > c.hits) this.audio.playSfx('strip');
+    c.shots = dragon.shotsFired;
+    c.quenches = dragon.quenches;
+    c.hits = dragon.hits;
+
+    if (dragon.isBeaten && !c.beaten) {
+      this.audio.playSfx('hired');
+      // Confetti in the world as well as on the canvas: the one burst in the game
+      // that is not about a badge, so it gets the mint the HIRED stamps are in.
+      const b = dragon.dragonState().box;
+      this.effects.emitBurst(b.x + b.w / 2, b.y + b.h / 2, '#9FE6C4', 18, 210);
+    }
+    c.beaten = dragon.isBeaten;
+  }
+
+  /** True on the life-lost frames that follow contact with the wrapped figure. */
+  private get tangled(): boolean {
+    return this.sim.state === 'LIFE_LOST' && this.sim.lifeLost?.cause === 'mummy';
   }
 
   /**
@@ -720,9 +916,12 @@ export class Game {
   private drawShield(ctx: CanvasRenderingContext2D, centerX: number, feetY: number): void {
     const t = this.reducedMotion ? 0 : this.now();
     const pulse = this.reducedMotion ? 0.5 : 0.5 + 0.5 * Math.sin(t * 3.2);
+    // Teal on Hire Under Fire, orange everywhere else: an orange field on a screen
+    // of orange fire hid the player inside his own hazard (see `BUBBLE_TEAL`).
+    const tint = this.dragon ? BUBBLE_TEAL : undefined;
     // `phase` turns the rim dither and the sparks; frozen with the pulse under
     // reduced motion, which leaves a steady field rather than none.
-    drawAnsrBubble(ctx, centerX, feetY, pulse, (t * 0.22) % 1);
+    drawAnsrBubble(ctx, centerX, feetY, pulse, (t * 0.22) % 1, tint);
   }
 
   // --- floating value popups ------------------------------------------------
@@ -754,6 +953,37 @@ export class Game {
     }
   }
 
+  /**
+   * The booked delay, in flight from the place of death to the delay log.
+   *
+   * Drawn last of everything in the world, because for these 0.8s it *is* the
+   * news. The geometry is `core/delayFlight.ts` (pure, and tested there); this
+   * method only chooses the plaque's colours.
+   *
+   * The plaque is cool, never the value orange. Same rule that keeps orange off
+   * the log itself: a ledger of avoidable months is the opposite of value, and the
+   * one warm thing on it is the running total on the panel it is flying into.
+   */
+  private drawDelayFlight(ctx: CanvasRenderingContext2D): void {
+    const flight = this.delayFlight;
+    if (!flight) return;
+    const pose = delayFlightPose(
+      flight.from,
+      DELAY_LOG_ANCHOR,
+      flight.t / DELAY_FLIGHT_TIME,
+      this.reducedMotion,
+    );
+    drawLabelPlaque(ctx, flight.text, pose.x, pose.y, {
+      scale: 2,
+      fg: '#F2FBFD',
+      bg: 'rgba(0,20,27,0.86)',
+      frame: 'rgba(159,200,210,0.7)',
+      padX: 8,
+      padY: 6,
+      alpha: pose.alpha,
+    });
+  }
+
   /** Landing dust + pickup/badge bursts (empty under reduced motion). */
   private drawParticles(ctx: CanvasRenderingContext2D): void {
     for (const pt of this.effects.activeParticles()) {
@@ -780,16 +1010,16 @@ export class Game {
       this.drawStamps(ctx);
       return;
     }
-    if (data.hazard === 'fire') {
-      this.drawFire(ctx);
+    if (data.hazard === 'dragon') {
+      this.drawDragonScreen(ctx);
       return;
     }
-    if (data.hazard === 'gates') {
-      this.drawGates(ctx);
+    if (data.hazard === 'maze') {
+      this.drawMaze(ctx);
       return;
     }
-    if (data.hazard === 'spikes') {
-      this.drawSpikes(ctx);
+    if (data.hazard === 'workplace') {
+      this.drawWorkplace(ctx);
       return;
     }
   }
@@ -814,207 +1044,80 @@ export class Game {
     );
   }
 
-  private drawFire(ctx: CanvasRenderingContext2D): void {
+  /**
+   * Hire Under Fire: the dragon, its fire, and the water going the other way.
+   *
+   * All of the painting lives in `render/dragon.ts` — pure, so it rasterises on its
+   * own — and this host supplies only the snapshot and a clock. The order is the
+   * argument: the dragon and its fire go down first, then the water and the steam
+   * over them, then the people who came out of the costume on top of everything,
+   * because by the time they are on screen nothing else on it matters.
+   *
+   * The inline flame painting this replaced was the last hazard in the game that
+   * was still drawn from inside `Game` — 70 lines that could not be rasterised or
+   * tested without a browser. It went with the fire lanes.
+   */
+  private drawDragonScreen(ctx: CanvasRenderingContext2D): void {
     const hazard = this.sim.activeHazard;
-    if (!(hazard instanceof Fire)) return;
-    const T = RESOLUTION.TILE;
-    const groundY = 15 * T;
+    if (!(hazard instanceof Dragon)) return;
     const t = this.reducedMotion ? 0 : this.now();
-    const PX = 5; // chunky flame pixels
-    for (const lane of hazard.laneStates()) {
-      const cx = lane.x + T / 2;
-      if (lane.state === 'out') {
-        // Talent500 filled the role: the lane is out for good. Visible proof —
-        // a cool doused column with steam, in grey/teal, never the value orange.
-        const d = lane.doused;
-        ctx.fillStyle = `rgba(159, 216, 228, ${0.06 + 0.06 * (1 - d)})`;
-        ctx.fillRect(lane.x + 6, 0, T - 12, groundY);
-        // Extinguished stub at the base.
-        pxRect(ctx, '#4A5A60', cx - PX * 2, groundY - PX * 3, PX * 4, PX * 3, PX);
-        pxRect(ctx, '#6E8288', cx - PX * 2, groundY - PX * 3, PX * 4, PX, PX);
-        // Steam curling up (settles as the douse completes; static if reduced).
-        const steam = this.reducedMotion ? 0 : (1 - d) * 0.8 + 0.2;
-        for (let s = 0; s < 4; s += 1) {
-          const seed = hash2(lane.x + s * 11, 7);
-          const sy = groundY - 20 - ((t * 40 * steam + seed * 200) % 140);
-          const sx = cx + Math.sin(t * 2 + s) * 8;
-          pxRect(ctx, `rgba(207,230,236,${0.28 * steam})`, sx, sy, PX, PX, PX);
-        }
-        continue;
-      }
-      if (lane.state === 'telegraph') {
-        // Smooth warning ramp (never a strobe) — a growing orange glow column.
-        const a = 0.1 + lane.progress * 0.25;
-        ctx.fillStyle = `rgba(255, 84, 0, ${a})`;
-        ctx.fillRect(lane.x + 4, 0, T - 8, groundY);
-        // A pixel warning marker at the top of the lane.
-        const markColor = `rgba(255, 84, 0, ${0.4 + lane.progress * 0.4})`;
-        const s = 3 + Math.round(lane.progress * 4);
-        pxRect(ctx, markColor, cx - s * PX, 30, s * PX * 2, PX, PX);
-        pxRect(ctx, markColor, cx - PX, 24, PX * 2, PX * 3, PX);
-      } else if (lane.state === 'active') {
-        // Lethal pixel flame: full and hot at the base, tapering into wavy
-        // tongues with a white-hot core and rising embers (hiring pressure).
-        for (let y = 0; y < groundY; y += PX) {
-          const up = y / groundY; // 0 at ground → 1 at top
-          const wave = this.reducedMotion ? 0 : Math.sin(t * 12 + y * 0.12 + lane.x) * 3;
-          const half = Math.max(PX, (T / 2 - 4) * (1 - up * 0.55) + wave);
-          const base = up > 0.66 ? '#FF5400' : up > 0.33 ? '#FF7A2A' : '#FFA24A';
-          pxRect(ctx, base, cx - half, groundY - PX - y, half * 2, PX, PX);
-          pxRect(ctx, '#FFD9A8', cx - PX, groundY - PX - y, PX * 2, PX, PX); // core
-        }
-        // Rising embers (respect reduced-motion).
-        if (!this.reducedMotion) {
-          for (let e = 0; e < 5; e += 1) {
-            const seed = hash2(lane.x + e * 7, 3);
-            const ey = groundY - ((t * (70 + seed * 70) + seed * 500) % groundY);
-            const ex = cx + Math.sin(t * 3 + e) * 10;
-            pxRect(ctx, '#FFB07A', ex, ey, PX, PX, PX);
-          }
-        }
-      }
-    }
+    const state = hazard.dragonState();
+    // The ground first: the floor it has already burnt. It sits over the level
+    // material and under everything that moves.
+    drawScorchedGround(ctx, state.box.x + state.box.w / 2);
+    // The floating bricks the badge is delivered onto. Before the fire, because the
+    // outer end of the cone crosses the last one and fire goes in front of masonry.
+    drawFloatingBrick(ctx, this.sim.screen.propRects, t, this.reducedMotion);
+    drawDragon(ctx, state, t, this.reducedMotion);
+    drawCone(ctx, hazard.fireState(), t, this.reducedMotion);
+    drawWaterShots(ctx, hazard.waterStates());
+    drawSteam(ctx, hazard.steamStates());
+    drawHiredCandidates(ctx, hazard.candidateStates(), t, this.reducedMotion);
   }
 
   /**
-   * Approval gates: a filing-cabinet post with a striped barrier arm that sweeps
-   * across the path, plus a rubber stamp head. Replaces the old carnivorous
-   * plant, which said nothing about tax, GST or audit. Once GCC-BOT clears the
-   * filing the arm lifts and the stamp reads OK — same object, opposite meaning.
+   * The compliance maze: toll gates, then the five monsters over them, then the
+   * pad they leave for once GCC-BOT has filed everything.
+   *
+   * The painting lives in `render/maze.ts` — pure, so it rasterises on its own —
+   * and this host supplies nothing but the hazard's snapshot. The lift and the
+   * landing pad go down first, so the monsters read in front of them: they are the
+   * thing to watch on this screen.
    */
-  private drawGates(ctx: CanvasRenderingContext2D): void {
+  private drawMaze(ctx: CanvasRenderingContext2D): void {
     const hazard = this.sim.activeHazard;
-    if (!(hazard instanceof Gates)) return;
-    const groundY = 15 * RESOLUTION.TILE;
-    const PX = 5;
-    for (const g of hazard.gateStates()) {
-      const open = g.open; // 0 = blocking, 1 = cleared
-      // Post: a squat cabinet with drawer lines, standing still on the ground.
-      const postX = g.cx - PX * 2;
-      pxRect(ctx, '#33505C', postX, groundY - PX * 6, PX * 4, PX * 6, PX);
-      pxRect(ctx, '#4E7280', postX, groundY - PX * 6, PX * 4, PX, PX);
-      for (let d = 1; d <= 2; d += 1) {
-        pxRect(ctx, '#1E353E', postX + PX, groundY - PX * 6 + d * PX * 2, PX * 2, PX, PX);
-      }
-
-      // Barrier arm: sweeps laterally while blocking, rotates up when cleared.
-      const lift = open * (PX * 7); // how far the arm has risen
-      const armY = g.topY + PX * 2 - lift;
-      const armLen = PX * 7;
-      const sweep = (1 - open) * g.sway * 0.5;
-      for (let i = 0; i < armLen / PX; i += 1) {
-        const seg = i * PX;
-        // Hazard stripes read without colour (shape + pattern).
-        const stripe = Math.floor(i / 2) % 2 === 0 ? '#E6E6E6' : '#233A44';
-        pxRect(ctx, stripe, g.cx - armLen / 2 + seg + sweep, armY - open * seg * 0.55, PX, PX * 2, PX);
-      }
-
-      // Stamp head on top of the post: a dark "PENDING" block, or a bright
-      // cleared plate once the filing is through.
-      const headY = g.topY - PX;
-      const face = open > 0.5 ? '#9FE6C4' : '#CFE6EC';
-      const core = open > 0.5 ? '#0A3A2A' : '#3A1414';
-      const head = [' HHHH ', 'HHHHHH', 'HccccH', 'HHHHHH', ' HHHH '];
-      for (let r = 0; r < head.length; r += 1) {
-        for (let c = 0; c < head[r]!.length; c += 1) {
-          const ch = head[r]![c];
-          if (ch === ' ') continue;
-          pxRect(
-            ctx,
-            ch === 'c' ? core : face,
-            g.cx - 3 * PX + c * PX + sweep,
-            headY - PX + r * PX,
-            PX,
-            PX,
-            PX,
-          );
-        }
-      }
-    }
+    if (!(hazard instanceof ComplianceMaze)) return;
+    drawLift(ctx, hazard.liftState());
+    drawGatherPad(ctx, hazard.gatherAt, hazard.isFriendly);
+    drawMonsters(ctx, hazard.monsterStates());
   }
 
-  private drawSpikes(ctx: CanvasRenderingContext2D): void {
+  /**
+   * The Workplace. The room first (gloom, fittings, tape, signs), then the
+   * terminal, then the figure and any pulses in the air.
+   *
+   * All of it lives in `render/workplace.ts` — pure, so it rasterises on its own —
+   * and this host supplies only the snapshot and a clock. The room is painted here
+   * rather than in `scenery.ts` because everything in it is driven by the hazard's
+   * `restore` dial, and `drawSceneBackground` has no business knowing about a
+   * hazard.
+   */
+  private drawWorkplace(ctx: CanvasRenderingContext2D): void {
     const hazard = this.sim.activeHazard;
-    if (!(hazard instanceof Spikes)) return;
-    const T = RESOLUTION.TILE;
-    const groundY = 15 * T;
-    for (const s of hazard.spikeStates()) {
-      const cx = s.x + T / 2;
-
-      // 500Leaders: local context. The drop rhythm is unchanged — you can just
-      // read it now. Landing spots are marked well ahead, and the clear ground
-      // between columns is called out as the safe line.
-      if (s.foreseen) {
-        const lead = Spikes.previewWindow;
-        const incoming = s.state === 'telegraph' && s.timeToFall <= lead;
-        const urgency = incoming ? 1 - s.timeToFall / lead : 0;
-        // Landing footprint on the ground.
-        ctx.fillStyle = `rgba(159, 230, 196, ${0.18 + 0.3 * urgency})`;
-        ctx.fillRect(s.x + 4, groundY - 6, T - 8, 6);
-        // Dashed drop corridor, always visible so the pattern is legible.
-        ctx.strokeStyle = `rgba(159, 230, 196, ${0.14 + 0.2 * urgency})`;
-        ctx.lineWidth = 2;
-        ctx.setLineDash([6, 10]);
-        ctx.beginPath();
-        ctx.moveTo(cx, 20);
-        ctx.lineTo(cx, groundY);
-        ctx.stroke();
-        ctx.setLineDash([]);
-        if (incoming) {
-          drawText(ctx, 'INCOMING', cx, 26, {
-            scale: 2,
-            color: '#9FE6C4',
-            align: 'center',
-            outline: 'rgba(0,20,26,0.9)',
-            alpha: 0.5 + 0.5 * urgency,
-          });
-        }
-      }
-
-      if (s.state === 'telegraph') {
-        // Warning marker at the column top — a smooth ramp, never a strobe.
-        const a = 0.15 + s.progress * 0.35;
-        ctx.fillStyle = `rgba(255, 84, 0, ${a})`;
-        // Downward-pointing chevron hint so it reads without colour.
-        ctx.beginPath();
-        ctx.moveTo(cx - 12, 6);
-        ctx.lineTo(cx + 12, 6);
-        ctx.lineTo(cx, 6 + 14 + s.progress * 6);
-        ctx.closePath();
-        ctx.fill();
-        // Faint drop guide-line down the column.
-        ctx.strokeStyle = `rgba(230, 230, 230, ${0.08 + s.progress * 0.12})`;
-        ctx.lineWidth = 2;
-        ctx.setLineDash([4, 8]);
-        ctx.beginPath();
-        ctx.moveTo(cx, 22);
-        ctx.lineTo(cx, groundY);
-        ctx.stroke();
-        ctx.setLineDash([]);
-        continue;
-      }
-
-      // Falling / resting / despawning: a chunky steel spike (apex up, wide
-      // base) built row by row — distinct silhouette + metallic shading.
-      const alpha = s.state === 'despawning' ? 1 - s.progress : 1;
-      const top = s.y;
-      const PX = 4;
-      ctx.save();
-      ctx.globalAlpha = alpha;
-      for (let i = 0; i * PX < T; i += 1) {
-        const yy = top + i * PX;
-        const frac = (i * PX) / T; // 0 apex → 1 base
-        const halfW = Math.max(PX, 4 + frac * (T / 2 - 6));
-        pxRect(ctx, BRAND.LIGHT_GREY, cx - halfW, yy, halfW * 2, PX, PX); // steel face
-        pxRect(ctx, '#9AA0A6', cx + halfW - PX, yy, PX, PX, PX); // right-edge shade
-        pxRect(ctx, '#FFFFFF', cx - PX / 2, yy, PX, PX, PX); // centre highlight ridge
-      }
-      // Motion streak while falling (respects reduced-motion).
-      if (s.state === 'falling' && !this.reducedMotion) {
-        pxRect(ctx, 'rgba(230,230,230,0.25)', cx - PX / 2, top - 28, PX, 18, PX);
-      }
-      ctx.restore();
-    }
+    if (!(hazard instanceof Workplace)) return;
+    const t = this.reducedMotion ? 0 : this.now();
+    const mummies = hazard.mummyStates();
+    drawOffice(ctx, this.sim.screen.data.clutter ?? [], hazard.restore, t, this.reducedMotion);
+    drawTerminal(
+      ctx,
+      hazard.terminalAt,
+      mummies.some((m) => m.phase === 'working'),
+      hazard.restore,
+      t,
+      this.reducedMotion,
+    );
+    drawMummies(ctx, mummies, t, this.reducedMotion);
+    drawShots(ctx, hazard.shotStates());
   }
 
   /**
@@ -1035,6 +1138,38 @@ export class Game {
     const badge = this.sim.screen.data.badge;
     if (!badge || this.sim.powerups.collected) return;
     const T = RESOLUTION.TILE;
+
+    // Delivered rather than hung up (Hire Under Fire): the drone, the mark falling
+    // out of it, and the clock running down on the ground. All of the positions come
+    // from the sim, which collides against the same function.
+    const delivery = this.sim.badgeDrop;
+    if (delivery) {
+      drawBadgeDelivery(
+        ctx,
+        delivery,
+        this.reducedMotion ? 0.12 : (this.now() * 0.3) % 1,
+        this.reducedMotion,
+      );
+      // The capability plaque rides with it, above the mark rather than below: there
+      // is no float band to collide with here, and while the badge is on the floor
+      // *below* it is inside the ground.
+      if (delivery.phase !== 'gone') {
+        const tag = solutionTag(badge.type);
+        if (tag) {
+          // High enough to clear the carrier's own "TAKE IT" plaque, which appears
+          // 46px over the mark in the last beat of its life (`render/carrier.ts`).
+          drawLabelPlaque(ctx, tag, delivery.badge.x, delivery.badge.y - 92, {
+            scale: 2,
+            fg: '#CFE6EC',
+            bg: 'rgba(0,26,34,0.7)',
+            frame: 'rgba(28,130,150,0.6)',
+            alpha: 0.95,
+          });
+        }
+      }
+      return;
+    }
+
     const c = badgeCenter(badge, this.sim.clock);
     const anchorY = badge.gy * T + T / 2;
     const lane = POWERUPS.FLOAT_AMPLITUDE;

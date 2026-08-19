@@ -22,6 +22,17 @@ export class Screen {
   readonly data: ScreenData;
   /** Static, non-lethal collidables (ground, walls, platforms). */
   readonly solids: AABB[] = [];
+  /**
+   * The subset of `solids` the screen's own render module paints as a **prop**
+   * rather than as level material (role `pedestal`).
+   *
+   * Same objects, by reference, so nothing is derived twice: they collide like any
+   * other solid and the host simply skips them when it lays the brickwork. The ones
+   * on Hire Under Fire are the three floating bricks the badge is dropped onto —
+   * level material would draw them as lumps of scorched ground hanging in the air,
+   * and the whole point of them is that they are placed blocks with a pickup on top.
+   */
+  readonly propRects: AABB[] = [];
   readonly spawnX: number;
   readonly spawnY: number;
   readonly exitX?: number;
@@ -33,7 +44,9 @@ export class Screen {
     for (const s of this.data.solids) {
       // Non-collidable decorative facades (e.g. the Tech Park tower) are skipped.
       if (s.role && s.role.includes('noncollide')) continue;
-      this.solids.push({ x: s.gx * T, y: s.gy * T, w: s.w * T, h: s.h * T });
+      const box: AABB = { x: s.gx * T, y: s.gy * T, w: s.w * T, h: s.h * T };
+      this.solids.push(box);
+      if (s.role?.includes('pedestal')) this.propRects.push(box);
     }
 
     // Spawn: feet on the top of the given tile, near far-left.

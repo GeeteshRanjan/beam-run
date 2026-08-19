@@ -69,7 +69,21 @@ describe('Stamps (DENIED rubber stamps)', () => {
     let warnedFrames = 0;
     let warnedWhileMoving = 0;
     let lastWarn = 0;
-    let warnEndedBeforeDrop = false;
+    /**
+     * Frames left to see a press after the wind-up has finished.
+     *
+     * This used to demand the press on the *very next* frame, which passed for a
+     * reason that had nothing to do with the mechanism: at the old CYCLE of 1.8 the
+     * accumulated clock reached 1.7999999999999985 after 108 steps, so it never
+     * landed on the wrap exactly. `CYCLE / DT` is a whole 84 at 1.4, the clock does
+     * land on it, and at `e === 0` the press is 0 *by definition* (it is the instant
+     * the drop begins). So the honest claim is "the wind-up runs into the drop with
+     * no idle gap", allowing the single wrap frame — 16ms — rather than "the next
+     * frame is already pressing".
+     */
+    let dropDue = 0;
+    let idleGapAfterWarn = false;
+    let warnRanIntoDrop = false;
     for (let i = 0; i < CYCLE_STEPS + 8; i += 1) {
       h.update(DT, clear, CTX);
       const s = h.stampStates()[0]!;
@@ -77,13 +91,25 @@ describe('Stamps (DENIED rubber stamps)', () => {
         warnedFrames += 1;
         if (s.press > 0) warnedWhileMoving += 1;
       }
+      if (dropDue > 0) {
+        if (s.press > 0) {
+          warnRanIntoDrop = true;
+          dropDue = 0;
+        } else if (--dropDue === 0) {
+          idleGapAfterWarn = true;
+        }
+      }
       // The wind-up must run right up to the drop: it ends as the press begins.
-      if (lastWarn > 0.8 && s.warn === 0 && s.press > 0) warnEndedBeforeDrop = true;
+      if (lastWarn > 0.8 && s.warn === 0 && dropDue === 0 && !warnRanIntoDrop) {
+        if (s.press > 0) warnRanIntoDrop = true;
+        else dropDue = 2;
+      }
       lastWarn = s.warn;
     }
     expect(warnedFrames).toBeCloseTo(Math.round(S.WARN_TIME / DT), -1);
     expect(warnedWhileMoving).toBe(0); // never while it is already moving
-    expect(warnEndedBeforeDrop).toBe(true);
+    expect(warnRanIntoDrop).toBe(true);
+    expect(idleGapAfterWarn).toBe(false);
   });
 
   it('flattens anything standing under it when it lands', () => {
@@ -132,10 +158,19 @@ describe('Stamps (DENIED rubber stamps)', () => {
       if (a!.pressing && b!.pressing) bothDown += 1;
       if (quiet(a!) && quiet(b!)) bothQuiet += 1;
     }
-    // They take turns — never both flat at once — and there is never a frame where
-    // both are idle: one is always pressing, lifting or winding up.
+    /*
+     * They take turns — never both flat at once — and there is (all but) never a
+     * frame where both are idle: one is always pressing, lifting or winding up.
+     *
+     * "All but" is one frame, and it is the same wrap artefact the wind-up test
+     * documents. `CYCLE` is a whole 84 frames and half of it a whole 42, so the
+     * trailing stamp's clock lands exactly on its own wrap, where `press` is 0
+     * because that is the instant its drop begins. 16ms of both stamps reading
+     * idle is invisible; asserting zero here only ever passed because the old 1.8
+     * cycle could not be reached exactly in floating point.
+     */
     expect(bothDown).toBe(0);
-    expect(bothQuiet).toBe(0);
+    expect(bothQuiet).toBeLessThanOrEqual(1);
   });
 
   describe('assisted (1Wrk stands the setup up)', () => {
@@ -202,7 +237,15 @@ describe('Stamps (DENIED rubber stamps)', () => {
   it('reset() clears aborted strokes for a fresh attempt', () => {
     const h = stamps();
     const p = underStamp();
-    run(h, p, 40, ASSISTED);
+    /*
+     * Long enough for the assisted stroke to actually reach a standing head, DERIVED
+     * rather than guessed: the die has to fall ~84% of its travel to touch him, which
+     * is most of `DROP_TIME`, and the assisted clock stretches that by
+     * `1 / ASSIST_TIME_SCALE`. A hardcoded 40 frames was 0.17s of hazard time at the
+     * old 0.26 scale and only 0.12s at 0.18 — three frames short of contact, so the
+     * test failed for a reason that had nothing to do with `reset()`.
+     */
+    run(h, p, Math.ceil(S.DROP_TIME / S.ASSIST_TIME_SCALE / DT) + 8, ASSISTED);
     expect(h.retractingCount).toBeGreaterThan(0);
     h.reset();
     expect(h.retractingCount).toBe(0);

@@ -214,22 +214,79 @@ export function drawHero(
  * with both held constant the whole thing is static, which is exactly what
  * `prefers-reduced-motion` wants — a steady field, not no field.
  *
- * Orange is allowed here and nowhere else on the player: the active capability is
- * what the value accent is for.
+ * The field is orange by default, because the active capability is what the value
+ * accent is for and this is one of the two places it is allowed on the player. It
+ * takes a `tint` for the one screen where that backfires — see `BUBBLE_TEAL`.
  */
+export interface BubbleTint {
+  /** `"r, g, b"` for the field and the dim half of the rim. */
+  base: string;
+  /** `"r, g, b"` for the lit cells, the motes and the sparks. */
+  hot: string;
+  /**
+   * Multiplier on every alpha in the field, clamped at 1.
+   *
+   * A colour swap is not a brightness swap. Orange at 0.1–0.35 alpha reads clearly
+   * against the deep teal sky because it is the sky's complement; teal at the same
+   * alphas is nearly the sky, and the first teal field rasterised as a faint dashed
+   * ring nobody would call a halo. Same cells, more alpha — which is the shape of
+   * the fix the badge's dithered glow also needed.
+   */
+  boost: number;
+  /**
+   * Multiplier on the shell's radius.
+   *
+   * The default 46px shell passes through the hero's shoulders, which is right for a
+   * field that is *on* him. The owner asked for a halo *around* the player on Hire
+   * Under Fire, and a ring that clears the figure is a different picture from one
+   * that crosses it — so that screen gets a wider shell rather than a recoloured one.
+   */
+  spread: number;
+}
+
+/** The default: the value accent. Every screen but Hire Under Fire uses it. */
+export const BUBBLE_ORANGE: BubbleTint = {
+  base: '255, 84, 0',
+  hot: '255, 184, 122',
+  boost: 1,
+  spread: 1,
+};
+
+/**
+ * The teal field, for Hire Under Fire only (owner call).
+ *
+ * Not a style preference — a legibility one. That screen is full of orange fire, so
+ * an orange shell round the player put the one thing he needs to see (himself,
+ * unharmed, inside a field) in the same colour as the thing it is protecting him
+ * from: rasterised, the hero disappeared into his own hazard. Teal is the brand and
+ * the water's colour, which is the correct read anyway — the halo and the cannon
+ * arrive together and do the same job. The reserved orange keeps the badge burst,
+ * the ANSR ENGAGED label and the HUD chip on this screen, so the value accent is
+ * still what says "ANSR is with you"; it just is not painted on top of the fire.
+ */
+export const BUBBLE_TEAL: BubbleTint = {
+  base: '79, 190, 220',
+  hot: '168, 236, 250',
+  boost: 2.6,
+  spread: 1.22,
+};
+
 export function drawAnsrBubble(
   ctx: CanvasRenderingContext2D,
   centerX: number,
   feetY: number,
   pulse: number,
   phase = 0,
+  tint: BubbleTint = BUBBLE_ORANGE,
 ): void {
   const P = 4; // one field cell
   const cy = feetY - 30;
-  const r = 46 + pulse * 3;
+  const r = (46 + pulse * 3) * tint.spread;
   const band = r * 0.7; // haze lives in the outer band only
   const core = r * 0.5; // …and the middle stays clear for the figure
   const drift = Math.floor(phase * 6); // dither crawl, in cells
+  /** Alpha, tinted and clamped — a boosted field must not exceed opaque. */
+  const av = (a: number) => Math.min(1, a * tint.boost);
 
   // 1. Dithered haze. Confined to a band just inside the shell: filling the whole
   // disc with speckle made the hero look like he was standing in sand, and the
@@ -241,7 +298,9 @@ export function drawAnsrBubble(
       const n = hash2(Math.round(ox / P) + 97, Math.round(oy / P) + 43 + drift);
       if (d < band) {
         // A few charged motes drifting in the clear part of the field.
-        if (n > 0.955) pxRect(ctx, 'rgba(255, 84, 0, 0.14)', centerX + ox, cy + oy, P, P, P);
+        if (n > 0.955) {
+          pxRect(ctx, `rgba(${tint.base}, ${av(0.14)})`, centerX + ox, cy + oy, P, P, P);
+        }
         continue;
       }
       const t = (d - band) / (r - band); // 0 at the band's inner edge, 1 at the rim
@@ -250,7 +309,7 @@ export function drawAnsrBubble(
         const hot = n > 0.985;
         pxRect(
           ctx,
-          hot ? `rgba(255, 184, 122, ${a + 0.25})` : `rgba(255, 84, 0, ${a})`,
+          hot ? `rgba(${tint.hot}, ${av(a + 0.25)})` : `rgba(${tint.base}, ${av(a)})`,
           centerX + ox,
           cy + oy,
           P,
@@ -273,7 +332,7 @@ export function drawAnsrBubble(
     const a = bright ? (lit ? 0.9 : 0.5 + 0.25 * pulse) : 0.12;
     pxRect(
       ctx,
-      bright && lit ? `rgba(255, 184, 122, ${a})` : `rgba(255, 84, 0, ${a})`,
+      bright && lit ? `rgba(${tint.hot}, ${av(a)})` : `rgba(${tint.base}, ${av(a)})`,
       centerX + Math.cos(ang) * r,
       cy + Math.sin(ang) * r,
       P,
@@ -288,7 +347,7 @@ export function drawAnsrBubble(
     const rr = r + P * (1 + (k % 2));
     pxRect(
       ctx,
-      `rgba(255, 184, 122, ${0.5 + 0.4 * pulse})`,
+      `rgba(${tint.hot}, ${av(0.5 + 0.4 * pulse)})`,
       centerX + Math.cos(ang) * rr,
       cy + Math.sin(ang) * rr,
       P,

@@ -10,13 +10,22 @@
  * Keys are captured only while the container is focused so the host page stays
  * scrollable (Tech Architecture §7).
  */
-export type InputAction = 'left' | 'right' | 'jump' | 'pause' | 'mute';
+export type InputAction = 'left' | 'right' | 'jump' | 'shoot' | 'pause' | 'mute';
+
+/** The actions the on-screen touch buttons can drive. */
+export type VirtualControl = 'left' | 'right' | 'jump' | 'shoot';
 
 export interface InputState {
   left: boolean;
   right: boolean;
   jumpPressed: boolean;
   jumpHeld: boolean;
+  /**
+   * Edge only, and used by exactly one screen: the Workplace cutter fires once per
+   * press. Held-down auto-fire is deliberately not offered — three deliberate
+   * shots is the beat that screen is built on.
+   */
+  shootPressed: boolean;
   pausePressed: boolean;
   mutePressed: boolean;
   /** Any mapped key went down this frame (used to skip the title card). */
@@ -29,6 +38,7 @@ export const NEUTRAL_INPUT: Readonly<InputState> = {
   right: false,
   jumpPressed: false,
   jumpHeld: false,
+  shootPressed: false,
   pausePressed: false,
   mutePressed: false,
   anyPressed: false,
@@ -47,6 +57,11 @@ const KEY_MAP: Record<string, InputAction> = {
   Space: 'jump',
   ArrowUp: 'jump',
   KeyW: 'jump',
+  // Two keys for the cutter, both reachable without leaving the arrow keys or
+  // WASD. Not Ctrl/Shift (browser and screen-reader shortcuts) and not Enter,
+  // which activates whatever overlay button has focus.
+  KeyF: 'shoot',
+  KeyJ: 'shoot',
   Escape: 'pause',
   KeyP: 'pause',
   KeyM: 'mute',
@@ -63,10 +78,11 @@ function isFormControl(target: EventTarget | null): boolean {
 
 export class Input {
   private held = new Set<InputAction>();
-  private edges = { jump: false, pause: false, mute: false, any: false };
+  private edges = { jump: false, shoot: false, pause: false, mute: false, any: false };
 
   // Virtual (touch) held state, merged with keyboard.
-  private virtual = { left: false, right: false, jump: false };
+  private virtual = { left: false, right: false, jump: false, shoot: false };
+  private virtualShootEdge = false;
   private virtualJumpEdge = false;
 
   /** One-tap play: forward motion is automatic, the only decision is when to act. */
@@ -98,6 +114,7 @@ export class Input {
     if (!wasDown && !repeat) {
       this.edges.any = true;
       if (action === 'jump') this.edges.jump = true;
+      if (action === 'shoot') this.edges.shoot = true;
       if (action === 'pause') this.edges.pause = true;
       if (action === 'mute') this.edges.mute = true;
     }
@@ -107,12 +124,13 @@ export class Input {
     this.held.delete(action);
   }
 
-  setVirtual(dir: 'left' | 'right' | 'jump', down: boolean): void {
-    const wasJump = this.virtual.jump;
+  setVirtual(dir: VirtualControl, down: boolean): void {
+    const was = this.virtual[dir];
     this.virtual[dir] = down;
-    if (dir === 'jump' && down && !wasJump) {
-      this.virtualJumpEdge = true;
-      this.edges.any = true;
+    if (down && !was) {
+      if (dir === 'jump') this.virtualJumpEdge = true;
+      if (dir === 'shoot') this.virtualShootEdge = true;
+      if (dir === 'jump' || dir === 'shoot') this.edges.any = true;
     }
   }
 
@@ -120,7 +138,8 @@ export class Input {
     this.focused = focused;
     if (!focused) {
       this.held.clear();
-      this.virtual.left = this.virtual.right = this.virtual.jump = false;
+      this.virtual.left = this.virtual.right = false;
+      this.virtual.jump = this.virtual.shoot = false;
     }
   }
 
@@ -152,6 +171,7 @@ export class Input {
       right,
       jumpHeld,
       jumpPressed,
+      shootPressed: this.edges.shoot || this.virtualShootEdge,
       pausePressed: this.edges.pause,
       mutePressed: this.edges.mute,
       anyPressed: this.edges.any,
@@ -161,10 +181,12 @@ export class Input {
   /** Clear edge signals. Call once per rendered frame, after the sim steps. */
   endFrame(): void {
     this.edges.jump = false;
+    this.edges.shoot = false;
     this.edges.pause = false;
     this.edges.mute = false;
     this.edges.any = false;
     this.virtualJumpEdge = false;
+    this.virtualShootEdge = false;
   }
 
   attach(target: (Window & typeof globalThis) | HTMLElement): void {

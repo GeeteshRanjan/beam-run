@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { makeInput } from './Input';
-import { JOURNEY, HAZARDS, RESOLUTION } from '../data/tuning.config';
+import { JOURNEY, HAZARDS, PLAYER, RESOLUTION } from '../data/tuning.config';
 import { Stamps } from '../world/Hazards/Stamps';
 import {
   DT,
@@ -75,6 +75,38 @@ describe('Screen 1 — Setup Delays (DENIED stamps → 1Wrk → walk through)', 
     const busy = S.DROP_TIME + S.HOLD_TIME + S.LIFT_TIME;
     expect(busy).toBeLessThan(S.CYCLE / 2);
     expect(busy + S.WARN_TIME).toBeGreaterThan(S.CYCLE / 2);
+  });
+
+  it('leaves a safe window wider than the time it takes to cross a column', () => {
+    /*
+     * The fairness floor, and the reason this screen can be sped up but not much
+     * further. `CYCLE` came down 1.8 → 1.4 (owner call: too slow, too easy) and the
+     * stroke was compressed with it so the safe window only fell 0.86s → 0.60s.
+     * Against the 0.48s it takes to walk a stamp column plus your own width, that
+     * is 1.26× — which a 60-policy probe puts right at the edge: at 1.26× the stage
+     * still clears, and a cycle of 1.32 at the *same* ratio clears 0/60, because the
+     * real test is stamp → hurdle → stamp rather than one column.
+     *
+     * So this guards the ratio, and `CYCLE` itself has a floor: going faster means
+     * changing the geometry, not the clock.
+     */
+    const crossing = (S.WIDTH + PLAYER.WIDTH) / PLAYER.WALK_SPEED;
+    const safe = S.CYCLE - S.DROP_TIME - S.HOLD_TIME - S.LIFT_TIME - S.WARN_TIME;
+    expect(crossing).toBeCloseTo(0.48, 2);
+    expect(safe / crossing).toBeGreaterThanOrEqual(1.25);
+    expect(S.CYCLE).toBeGreaterThanOrEqual(1.38);
+  });
+
+  it('keeps the assisted window as wide as it has ever been', () => {
+    // 1Wrk has to mean "walk through it". That window is the safe gap divided by
+    // the assisted time scale, so it is a function of CYCLE — cutting the cycle
+    // without cutting the scale would quietly shrink the capability's whole payoff.
+    const safe = S.CYCLE - S.DROP_TIME - S.HOLD_TIME - S.LIFT_TIME - S.WARN_TIME;
+    const crossing = (S.WIDTH + PLAYER.WIDTH) / PLAYER.WALK_SPEED;
+    const assistedWindow = safe / S.ASSIST_TIME_SCALE;
+    expect(assistedWindow).toBeGreaterThan(3);
+    // …and it must stay a stroll rather than a dash: many times the crossing time.
+    expect(assistedWindow / crossing).toBeGreaterThan(6);
   });
 
   it('a stamp landing on you costs months and a life', () => {

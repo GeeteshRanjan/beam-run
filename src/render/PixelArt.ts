@@ -123,6 +123,27 @@ export interface BrickOptions {
   mortar: string;
   /** Speckle amount 0..1 (how many face pixels get the shade for texture). */
   speckle?: number;
+  /**
+   * Optional per-brick face tones, picked stably per brick from `hash2`.
+   *
+   * Speckle is texture *within* a brick and it is the only variation this
+   * function used to have, which is why every surface in the game read as one
+   * flat slab with dirt on it: real brickwork varies brick to brick, and at 8-bit
+   * scale that variation is what says "laid by hand" rather than "tiled". Two or
+   * three tones one step either side of `face` is plenty — more and the wall
+   * starts to look like a mosaic.
+   *
+   * Opt-in (undefined = the old behaviour), so adding it to one material cannot
+   * change how another screen looks.
+   */
+  faces?: readonly string[];
+  /**
+   * Draw a shade line along the *bottom* of every course, i.e. the shadow one
+   * brick casts on the one below it. Turns a flat grid of joints into courses
+   * with depth, which is the other half of "laid" — and it costs one fill per
+   * course. Opt-in for the same reason as `faces`.
+   */
+  bevel?: boolean;
 }
 
 /**
@@ -146,6 +167,29 @@ export function drawBricks(
   // Base fill.
   ctx.fillStyle = o.face;
   ctx.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h));
+
+  // Per-brick tone, so no two neighbours are quite the same value (see `faces`).
+  // Courses are offset by half a brick, matching the joints laid down below.
+  const faces = o.faces;
+  if (faces && faces.length > 0) {
+    for (let ry = 0; ry < h; ry += bh) {
+      const course = Math.floor(ry / bh);
+      const start = course % 2 === 0 ? 0 : -bw / 2;
+      for (let rx = start; rx < w; rx += bw) {
+        const x0 = Math.max(0, rx);
+        const x1 = Math.min(w, rx + bw);
+        if (x1 <= x0) continue;
+        const n = hash2(Math.round(rx / bw) + 97, course);
+        ctx.fillStyle = faces[Math.floor(n * faces.length)] ?? o.face;
+        ctx.fillRect(
+          Math.round(x + x0),
+          Math.round(y + ry),
+          Math.round(x1 - x0),
+          Math.min(bh, h - ry),
+        );
+      }
+    }
+  }
 
   // Per-pixel speckle for a hand-placed texture feel (stable via hash2).
   for (let py = 0; py < h; py += px) {
@@ -171,6 +215,15 @@ export function drawBricks(
         Math.max(1, px / 2),
         Math.min(bh, h - ry),
       );
+    }
+  }
+
+  // The shadow each course casts on the one under it, drawn just above the joint.
+  if (o.bevel) {
+    ctx.fillStyle = o.shade;
+    const t = Math.max(1, px / 2);
+    for (let ry = bh; ry <= h; ry += bh) {
+      ctx.fillRect(Math.round(x), Math.round(y + ry - t), Math.round(w), t);
     }
   }
 

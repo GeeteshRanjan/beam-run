@@ -13,9 +13,12 @@
  *
  *  - `PLACE_TILE` SET UP — the DENIED stamps slow to a walk-through pace and can
  *                          no longer press you at all (1Wrk)
- *  - `EXTINGUISH` STAFF  — fire lanes ahead go out for good (Talent500)
- *  - `CLEAR_PATH` CLEAR  — approval gates ahead lift for good (GCC-BOT)
- *  - `FORESIGHT`  KNOW   — spike landing spots are shown (500Leaders)
+ *  - `EXTINGUISH` STAFF  — a teal halo the hiring dragon's fire cannot touch, plus
+ *                          a water cannon that quenches that fire and then strips
+ *                          the dragon's suit off, freeing five hires (Talent500)
+ *  - `CLEAR_PATH` CLEAR  — every toll gate in the compliance maze stands open for
+ *                          good and its monsters turn friendly (GCC-BOT)
+ *  - `UNWRAP`     FREE   — a cutter that frees the taped-up colleague (500Leaders)
  *
  * The hazards themselves implement the behaviour via `HazardContext.assisted`;
  * this class only tracks *whether* the capability is engaged. It used to also own

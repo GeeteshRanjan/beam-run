@@ -42,10 +42,15 @@ export function expireGrace(sim: Simulation): void {
 /**
  * Walk onto the current screen's badge so its ANSR capability engages.
  *
- * The badge floats, so its box has to be read from the sim rather than computed
- * from the anchor cell — that is the same trap the renderer has.
+ * The badge moves, so its box has to be read from the sim rather than computed from
+ * the anchor cell — that is the same trap the renderer has. And on the one screen
+ * whose badge is **air-dropped** there is no box at all until the drone has let go and
+ * the mark has landed, so this waits for the delivery first. Every hazard test on that
+ * screen goes through here, which is why the waiting belongs in the helper rather
+ * than in each of them.
  */
 export function engageBadge(sim: Simulation): void {
+  for (let i = 0; i < 3000 && !sim.badgeBox; i += 1) sim.step(DT, makeInput());
   const box = sim.badgeBox;
   if (!box) return;
   sim.player.box.x = box.x + (box.w - sim.player.box.w) / 2;

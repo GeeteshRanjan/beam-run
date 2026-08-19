@@ -1,5 +1,5 @@
 /**
- * badge.ts — the floating ANSR pickup, in 8-bit.
+ * badge.ts — the floating ANSR pickup: the real brand mark, on 8-bit staging.
  *
  * The badge used to be a teal disc with a white "A" on it, glowing through a
  * canvas radial gradient and hanging on a solid 3px cyan line. Three things were
@@ -7,19 +7,29 @@
  * on screen that was not pixel art (the same defect the player's bubble had), and
  * the rail read as a rope rather than as the path the pickup travels.
  *
- * What is here now, all built from whole cells:
+ * What is here now:
  *
- *  1. **The mark.** An authored 21×21 reduction of the real brand sunburst — the
- *     ring of rays around an empty core (`render/ansrLogo.ts` draws the true
- *     vector path, which is right for the Tech Park plaza at 92px but turns to
- *     mush at badge size, and is not 8-bit). Rays come in two classes so the
- *     palette can swap them for a shimmer; at scale 2 the grid is 42px, which is
- *     the 40px pickup hitbox plus a cell of overhang.
+ *  1. **The mark — the real ANSR logo** (`render/ansrLogo.ts`, the same path the
+ *     DOM lockup and the Tech Park plaza draw), sized to span the pickup hitbox
+ *     exactly. It replaced an authored 19×19 pixel reduction of the sunburst,
+ *     which the owner rightly called out as not being the logo we have: the
+ *     brand mark is a hollow ring of ~32 fine rays, and a 19-cell grid can only
+ *     hold 16 fat ones around a filled core, so it read as a generic star.
+ *     Rasterised side by side at 40px, the real path is legible and unmistakably
+ *     the logo; every attempt to quantise it to cells needed ~28 cells (56px, far
+ *     wider than the hitbox) before the ray ring survived, and at 20 cells it
+ *     collapsed into a blob. See the pass entry in `docs/JOURNAL.md` for the
+ *     contact sheet. Precedent: the plaza mark and the attract-screen tower
+ *     facade were switched from procedural approximations to this same path for
+ *     the same reason, on the same instruction.
  *  2. **A levitation shaft** marking the band the badge travels: dashed cells with
  *     a bracket at each end of the swing, plus a short bright wake behind the
  *     badge so which way it is heading is readable at a glance.
- *  3. **A flare** — eight bright cells off the ray tips, alternating cardinals and
- *     diagonals in two held frames. Never a gradient.
+ *  3. **A halo** — a dashed ring of 2px cells 8px clear of the ray tips, brighter
+ *     across the upper-left where the light comes from, with the dash pattern
+ *     crawling one cell per held frame. It replaced four lone cells that sat off
+ *     the ray tips and alternated cardinals/diagonals: the owner called those out,
+ *     and they were detached dots rather than light. Never a gradient.
  *  4. **A chevron on the ground** under the shaft. The band no longer dips into a
  *     standing player, so taking the badge is a jump; the chevron says where to
  *     stand to make it, which is the affordance a platformer owes the player.
@@ -30,63 +40,43 @@
  * here: it comes from `world/badgeFloat.ts`, the one source the simulation reads
  * too (see the invariant in HANDOFF §6).
  */
-import { drawPixels, pxRect, maxWidth, type Palette } from './PixelArt';
+import { drawPixels, pxRect, type Palette } from './PixelArt';
+import { drawAnsrLogo } from './ansrLogo';
 import { LOGO_ORANGE } from '../ui/ansrMark';
-
-/**
- * The ANSR sunburst at 19×19 (the mark's own bounding box — no empty border, so
- * at scale 2 it is 38px inside the 40px pickup hitbox). Four cardinal rays (`R`), four diagonals, eight
- * shorter rays between them (`r`) and a hub ring where they all spring from
- * (`h`), every cell mirrored eight ways so the mark is exactly symmetric — an odd
- * grid is what makes that possible, because the centre is a real cell and no ray
- * is forced to two cells wide. `K` is the core the brand mark leaves empty, kept
- * here as a faint dark backing so the rays still read against the fire screen's
- * warm sky.
- *
- * The hub ring is not in the brand asset and is not decoration: without it the
- * mark was sixteen loose hairs at 42px and read as a smudge (rasterised and
- * compared side by side). With it the sunburst has a body, which is what the real
- * logo's density gives you at poster size.
- */
-const MARK: readonly string[] = [
-  '.........R.........',
-  '.........R.........',
-  '..R...r..R..r...R..',
-  '...R...r.R.r...R...',
-  '....R..rhRhr..R....',
-  '.....RhhKKKhhR.....',
-  '..r..h.KKKKK.h..r..',
-  '...rrhKKKKKKKhrr...',
-  '....hKKKKKKKKKh....',
-  'RRRRRKKKKKKKKKRRRRR',
-  '....hKKKKKKKKKh....',
-  '...rrhKKKKKKKhrr...',
-  '..r..h.KKKKK.h..r..',
-  '.....RhhKKKhhR.....',
-  '....R..rhRhr..R....',
-  '...R...r.R.r...R...',
-  '..R...r..R..r...R..',
-  '.........R.........',
-  '.........R.........',
-];
+import { RESOLUTION } from '../data/tuning.config';
 
 /** Brand orange, and a lighter tint of it for the shimmer. */
 const RAY = LOGO_ORANGE;
 const RAY_LIT = '#ff8a4d';
-const CORE = 'rgba(1, 28, 38, 0.66)';
 
 /**
- * Two palettes, swapped on alternate shimmer frames: the long rays and the short
- * ones trade brightness while the hub stays lit, which is how an 8-bit machine
- * animated anything glowing — swap the palette, never the pixels.
+ * The two shimmer tones, held on alternate frames. The old pixel mark shimmered
+ * by swapping ray *classes* between them; the real mark is one path, so the whole
+ * sunburst glints instead. Both tones are brand orange, so it reads as light
+ * catching the mark rather than as a colour change.
  */
-const MARK_PALETTES: readonly Palette[] = [
-  { R: RAY, r: RAY_LIT, h: RAY_LIT, K: CORE },
-  { R: RAY_LIT, r: RAY, h: RAY_LIT, K: CORE },
-];
+const MARK_TONES: readonly string[] = [RAY, RAY_LIT];
 
-/** Cells across the mark grid — the badge is `CELLS * scale` px wide. */
-export const BADGE_CELLS = maxWidth(MARK);
+/**
+ * Diameter of the mark, in px: exactly the pickup hitbox (`RESOLUTION.TILE`, the
+ * box `badgeBoxAt` returns), so the thing you can see is the thing you can take.
+ * Drawing it larger would promise reach the rules do not give — the same rule the
+ * hazards follow ("a hazard sprite is its hitbox"), pointing the other way.
+ */
+export const BADGE_MARK_D = RESOLUTION.TILE;
+
+/**
+ * A dark backing for the void at the centre of the mark: a 4×4 block of whole
+ * cells with the corners cut, 20px across at the badge's own size.
+ *
+ * The brand mark's core is empty, which is right on a page and wrong on a small
+ * moving object: rasterised over screen 1's skyline, a lit cyan office window sat
+ * inside the ring and the pickup read as a hole in the art rather than as a mark.
+ * Kept translucent so it stays a shadow behind the rays, not a filled disc — and
+ * kept to whole cells, because everything else in the world is.
+ */
+const CORE_CELLS: readonly string[] = ['.CC.', 'CCCC', 'CCCC', '.CC.'];
+const CORE_PALETTE: Palette = { C: 'rgba(1, 28, 38, 0.86)' };
 
 /** Cyan, the "this is a path, not a thing" colour. Also the shaft's colour. */
 const SHAFT = '92, 226, 244';
@@ -95,18 +85,27 @@ const SHAFT = '92, 226, 244';
 const P = 4;
 
 /**
- * Draw the ANSR mark centred on (cx, cy). `twinkle` (0 or 1) picks which ray
- * class is the lit one; hold it constant for a static mark.
+ * Draw the ANSR mark centred on (cx, cy). `twinkle` (0 or 1) picks the tone; hold
+ * it constant for a static mark.
+ *
+ * `diameter` defaults to the pickup hitbox. Where `Path2D` is unavailable (jsdom)
+ * `drawAnsrLogo` is a no-op, so the shaft, flare and chevron still mark the spot —
+ * the pickup is never invisible, just unbranded.
  */
 export function drawAnsrBadgeMark(
   ctx: CanvasRenderingContext2D,
   cx: number,
   cy: number,
-  scale: number,
+  diameter: number = BADGE_MARK_D,
   twinkle: 0 | 1 = 0,
 ): void {
-  const size = BADGE_CELLS * scale;
-  drawPixels(ctx, MARK, MARK_PALETTES[twinkle]!, cx - size / 2, cy - size / 2, { scale });
+  // Core first, so the rays always sit on top of their own backing.
+  // 0.12 of the diameter per cell (20px of 40) fills the void with a cell to
+  // spare on every side. Measured against the rasterised mark, not guessed: at
+  // 0.10 the window edges still showed at 3 and 9 o'clock.
+  const core = Math.round(diameter * 0.12);
+  drawPixels(ctx, CORE_CELLS, CORE_PALETTE, cx - core * 2, cy - core * 2, { scale: core });
+  drawAnsrLogo(ctx, cx, cy, diameter, 0, MARK_TONES[twinkle]!);
 }
 
 export interface BadgePickupView {
@@ -122,8 +121,8 @@ export interface BadgePickupView {
   phase: number;
   /** Signed vertical direction, -1 rising, +1 falling. Drives the wake. */
   rising: boolean;
-  /** Authored pixel size of the mark (2 → a 42px badge). */
-  scale?: number;
+  /** Mark diameter in px. Defaults to the pickup hitbox ({@link BADGE_MARK_D}). */
+  diameter?: number;
 }
 
 /**
@@ -133,10 +132,15 @@ export interface BadgePickupView {
  * reduced-motion decision.
  */
 export function drawBadgePickup(ctx: CanvasRenderingContext2D, v: BadgePickupView): void {
-  const scale = v.scale ?? 2;
   drawShaft(ctx, v);
-  drawFlare(ctx, v.cx, v.cy, v.phase);
-  drawAnsrBadgeMark(ctx, v.cx, v.cy, scale, Math.floor(v.phase * 8) % 2 === 0 ? 0 : 1);
+  drawHalo(ctx, v.cx, v.cy, v.phase);
+  drawAnsrBadgeMark(
+    ctx,
+    v.cx,
+    v.cy,
+    v.diameter ?? BADGE_MARK_D,
+    Math.floor(v.phase * 8) % 2 === 0 ? 0 : 1,
+  );
   drawGroundChevron(ctx, v.cx, v.groundY, v.phase);
 }
 
@@ -170,28 +174,53 @@ function drawShaft(ctx: CanvasRenderingContext2D, v: BadgePickupView): void {
 }
 
 /**
- * The flare: eight bright cells sitting just off the ray tips, the cardinal set
- * and the diagonal set alternating with the phase, so the mark throws light in
- * two held frames.
+ * The halo, in one cell size: a dashed ring 8px clear of the ray tips, lit across
+ * the upper-left, its dash pattern crawling one cell per held frame.
  *
- * This started life as a dithered halo — a chequer of low-alpha cells thinning
- * outwards, the trick the player's bubble uses. Rasterised at badge size it did
- * not work: a warm colour at 0.15–0.4 alpha over the deep teal sky desaturates to
- * grey-brown, so the mark came with a ring of what looked like dirt or damage. A
- * *few* cells at high alpha, placed symmetrically, read as light; many cells at
- * low alpha read as a rendering fault. The dither belongs on the bubble, where it
- * is 46px of field around a figure, not 12px of edge round an icon.
+ * Three earlier attempts and why they failed, so nobody spends the afternoon again
+ * (all four rasterised side by side on screens 1, 2 and 5 — see `docs/JOURNAL.md`):
+ *  - **A dithered field.** Warm cells at 0.15–0.4 alpha over the teal sky
+ *    desaturate to grey-brown, so the mark came ringed in what looked like dirt.
+ *    Same for stepped low-alpha *bands*: at 40px they read as a smudge, not a glow.
+ *    Dither belongs on the player's bubble, where it is 46px of field around a
+ *    figure, not 12px of edge around an icon.
+ *  - **Four lone cells** off the ray tips (what shipped, and what the owner
+ *    rejected). Detached dots read as stray pixels, not as light.
+ *  - **A radial corona** of short ticks. It reads beautifully as light — and it
+ *    also reads as *more rays*, so the brand mark stops being a closed shape and
+ *    starts being the middle of a bigger sunburst. Rejected on fidelity: the logo
+ *    has to read as itself.
+ *
+ * A tangential dashed ring says "halo" without adding rays, and it is the same
+ * device as the ANSR bubble's rim on the player, so the two read as one family.
+ * `HALO_PX` is deliberately 2, not the `P` = 4 field cell: at 4px the ring is as
+ * thick as the ray tips are long and it swallows the mark.
  */
-function drawFlare(ctx: CanvasRenderingContext2D, cx: number, cy: number, phase: number): void {
-  // The rays reach ~20px; 26 leaves a clear gap so the sunburst keeps its
-  // silhouette instead of merging into an orange blob.
-  const r = 26;
-  const diagonals = Math.floor(phase * 8) % 2 === 1;
-  for (let k = 0; k < 4; k += 1) {
-    const ang = (k / 4) * Math.PI * 2 + (diagonals ? Math.PI / 4 : 0);
-    // Solid, not translucent, for the same reason: a flat orange cell reads as a
-    // spark, the same colour at 35% reads as grime.
-    pxRect(ctx, RAY_LIT, cx + Math.cos(ang) * r, cy + Math.sin(ang) * r, P, P, P);
+const HALO_PX = 2;
+/** Ring radius in halo cells (14 × 2px = 28px, clear of the 20px ray tips). */
+const HALO_R = 14;
+/** Dash pattern, in cells: 3 lit, 2 blank. */
+const HALO_ON = 3;
+const HALO_OFF = 2;
+
+function drawHalo(ctx: CanvasRenderingContext2D, cx: number, cy: number, phase: number): void {
+  const period = HALO_ON + HALO_OFF;
+  const steps = Math.round(2 * Math.PI * HALO_R);
+  // Two dash cycles per turn, in held steps — an 8-bit machine would not ease it.
+  const spin = Math.floor(phase * period * 2) % period;
+  // Snap the ring's origin the way `drawPixels` snaps a sprite's, so the cells sit
+  // on a stable lattice as the badge drifts instead of shivering against it.
+  const ox = Math.round(cx);
+  const oy = Math.round(cy);
+  for (let i = 0; i < steps; i += 1) {
+    if ((i + spin) % period >= HALO_ON) continue;
+    const ang = (i / steps) * Math.PI * 2;
+    // Radius in whole cells, so the ring is a real circle on the lattice.
+    const dx = Math.round(Math.cos(ang) * HALO_R) * HALO_PX;
+    const dy = Math.round(Math.sin(ang) * HALO_R) * HALO_PX;
+    // The upper-left quadrant catches the light, the way every 8-bit sphere does.
+    const lit = Math.cos(ang + Math.PI * 0.75) > 0.35;
+    pxRect(ctx, lit ? RAY_LIT : RAY, ox + dx, oy + dy, HALO_PX, HALO_PX, HALO_PX);
   }
 }
 

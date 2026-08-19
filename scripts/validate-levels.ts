@@ -9,7 +9,8 @@
  *
  *  2. NARRATIVE — the things that make this a playable explainer rather than a
  *     platformer with logos on it, now machine-enforced:
- *       · EVERY screen carries a badge (the ANSR mark is on all six);
+ *       · every screen with an OBSTACLE carries a badge (a screen with nothing to
+ *         defend against may omit it, and Reception does);
  *       · the badge is anchored AHEAD of the obstacles it answers, so it can be
  *         taken before the problem is met — that is the whole instruction the
  *         game gives;
@@ -52,6 +53,12 @@ import { CAPABILITIES } from '../src/data/copy';
 import { Player } from '../src/world/Player';
 import { aabbOverlap, type AABB } from '../src/world/Physics';
 import { badgeLowestBox } from '../src/world/badgeFloat';
+import {
+  dropColumnsOf,
+  dropLandsAt,
+  dropRestBox,
+  isAirdropped,
+} from '../src/world/badgeDrop';
 import { makeInput } from '../src/core/Input';
 
 type Problem = { screen: number | 'model'; message: string };
@@ -62,9 +69,17 @@ const { WIDTH, HEIGHT } = RESOLUTION;
 
 const HAZARD_FIELDS: Record<string, keyof ScreenData> = {
   stamps: 'stamps',
-  fire: 'fireLanes',
-  gates: 'gates',
-  spikes: 'spikeColumns',
+  // Exactly one dragon is authored, but it is registered as a list like every other
+  // family so this rule stays "one non-empty hazard array per screen".
+  dragon: 'dragons',
+  // The maze family is authored as `monsters` + `tollGates` + `gather`. Only the
+  // monsters are registered here: `tollGates` is part of the same family, so
+  // listing it too would trip the "multiple hazard families" rule on the one
+  // screen that legitimately has both.
+  maze: 'monsters',
+  // The Workplace family is authored as `mummies` + `terminal`. Only the figures
+  // are registered: the terminal is not an obstacle, it is where the fix happens.
+  workplace: 'mummies',
 };
 
 // --- structural checks ------------------------------------------------------
@@ -93,17 +108,71 @@ function validateStructure(s: ScreenData): Problem[] {
   if (s.hazard !== 'none' && present.length === 0) {
     push(`declares hazard "${s.hazard}" but has no hazard data`);
   }
-  // Every screen, not just the hazard ones: the ANSR mark is on all six.
-  if (!s.badge) push(`screen "${s.name}" has no badge`);
+  /*
+   * Every screen that has an obstacle on it must carry a badge — that is the
+   * argument the game makes, and a hazard screen without one is a stage the player
+   * is asked to survive with no answer offered.
+   *
+   * A screen with NO obstacle may omit it, and Reception now does (owner call).
+   * The rule used to be "all six carry the mark", which is what put a badge with a
+   * deliberately unassigned effect on the tutorial screen: the first ANSR mark a
+   * player ever saw taught them that taking one does nothing, one screen before
+   * the one that saves them. The Tech Park keeps its `SAFE_PASSAGE` mark because
+   * the arrival is the payoff, not a lesson.
+   */
+  if (!s.badge && s.hazard !== 'none') {
+    push(`screen "${s.name}" has obstacles but no badge`);
+  }
 
   const inBounds = (gx: number, gy: number) =>
     gx >= 0 && gx <= GRID.cols && gy >= 0 && gy <= GRID.rows;
   if (s.badge && !inBounds(s.badge.gx, s.badge.gy)) {
     push(`badge out of bounds at (${s.badge.gx},${s.badge.gy})`);
   }
-  // The badge floats, so its band must stay inside the frame too — an anchor that
-  // is technically in bounds can still swing the pickup off the top of the screen.
-  if (s.badge) {
+  /*
+   * An AIR-DROPPED badge (Hire Under Fire) answers a different set of questions from
+   * a levitating one, so it gets its own rules and skips the float band's entirely.
+   *
+   * The float rules exist to prove the badge is *jumpable and not walkable*. A dropped
+   * badge answers that differently — it comes to rest on a floating brick, so it is
+   * jumpable by construction and the interesting questions are geometric: every drop
+   * has to sit *on top of* something rather than inside it, and (below, in the physics
+   * pass) has to be reachable, and reachable *in time*.
+   */
+  if (s.badge && isAirdropped(s.badge)) {
+    const cols = dropColumnsOf(s.badge);
+    if (cols.length === 0) push('airdropped badge has no drop columns');
+    const solids = screenSolids(s);
+    for (const gx of cols) {
+      if (!inBounds(gx, s.badge.gy)) push(`badge drop column gx=${gx} is out of bounds`);
+      const rest = dropRestBox(s.badge, cols.indexOf(gx));
+      for (const solid of solids) {
+        if (aabbOverlap(rest, solid)) {
+          push(
+            `badge drop at gx=${gx} lands inside a solid (${solid.x / T},${solid.y / T}) — ` +
+              'a dropped badge has to come to rest on top of something, not inside it',
+          );
+        }
+      }
+      // …and it has to come to rest on something. A drop with nothing under it is a
+      // badge hanging in mid-air, which is a different mechanic on a screen that
+      // deliberately does not have one.
+      const supported = solids.some(
+        (solid) =>
+          Math.abs(solid.y - (rest.y + rest.h)) < 1 &&
+          solid.x < rest.x + rest.w &&
+          solid.x + solid.w > rest.x,
+      );
+      if (!supported) {
+        push(
+          `badge drop at gx=${gx} has nothing under it (rest bottom y=${rest.y + rest.h}) — ` +
+            'every drop column needs its floating brick, or the ground band under it',
+        );
+      }
+    }
+  } else if (s.badge) {
+    // The badge floats, so its band must stay inside the frame too — an anchor that
+    // is technically in bounds can still swing the pickup off the top of the screen.
     const box = badgeLowestBox(s.badge);
     const topY = box.y - 2 * POWERUPS.FLOAT_AMPLITUDE;
     if (topY < 0) push(`badge float rises above the frame (top y=${Math.round(topY)})`);
@@ -131,9 +200,27 @@ function validateStructure(s: ScreenData): Problem[] {
 /** Every hazard instance's grid column, with its declared zone (if any). */
 function hazardInstances(s: ScreenData): { gx: number; zone?: string }[] {
   if (s.hazard === 'stamps') return (s.stamps ?? []).map((p) => ({ gx: p.gx, zone: p.zone }));
-  if (s.hazard === 'fire') return (s.fireLanes ?? []).map((l) => ({ gx: l.gx, zone: l.zone }));
-  if (s.hazard === 'gates') return (s.gates ?? []).map((g) => ({ gx: g.gx, zone: g.zone }));
-  if (s.hazard === 'spikes') return (s.spikeColumns ?? []).map((c) => ({ gx: c.gx, zone: c.zone }));
+  if (s.hazard === 'dragon') {
+    // Same rule as a monster's corridor and the Workplace figure's walk: the roam
+    // STARTS at `from`, so that is the column the badge has to precede. It is what
+    // proves the opening of the screen belongs to the player — the badge is at gx 4
+    // and the dragon cannot reach it, which is half of the guaranteed safe beat
+    // (the roar timer is the other half).
+    return (s.dragons ?? []).map((d) => ({ gx: d.from, zone: d.zone }));
+  }
+  if (s.hazard === 'maze') {
+    // A monster's corridor STARTS at `from`, so that is the column the badge has
+    // to precede — a monster whose corridor begins before the badge could meet
+    // the player on the way to it.
+    return (s.monsters ?? []).map((m) => ({ gx: m.from, zone: m.zone }));
+  }
+  if (s.hazard === 'workplace') {
+    // Same rule as a monster's corridor: the figure's walk STARTS at `from`, so
+    // that is the column the badge has to precede. It is also what proves the
+    // partition wall is doing its job — the player must never share the corridor
+    // with him on the way to the badge.
+    return (s.mummies ?? []).map((m) => ({ gx: m.from, zone: m.zone }));
+  }
   return [];
 }
 
@@ -154,14 +241,23 @@ function validateNarrative(s: ScreenData): Problem[] {
   const push = (message: string) => problems.push({ screen: s.id, message });
   if (s.hazard === 'none' || !s.badge) return problems;
 
+  /*
+   * The column(s) the badge can actually be taken from. For a rail badge that is its
+   * anchor; for an air-dropped one it is **every** authored drop column, because a
+   * drop behind the obstacle would be a badge you can only take after the thing it
+   * answers — which is the rule this function exists to enforce, and the one thing a
+   * multi-column delivery could quietly break.
+   */
   const badgeGx = s.badge.gx;
+  const columns = isAirdropped(s.badge) ? [...dropColumnsOf(s.badge), badgeGx] : [badgeGx];
+  const lastColumn = Math.max(...columns);
   const instances = hazardInstances(s);
-  const before = instances.filter((i) => i.gx <= badgeGx);
-  const after = instances.filter((i) => i.gx > badgeGx);
+  const before = instances.filter((i) => i.gx <= lastColumn);
+  const after = instances.filter((i) => i.gx > lastColumn);
 
   for (const i of before) {
     push(
-      `hazard at gx=${i.gx} sits at or before the badge (gx=${badgeGx}) — the badge ` +
+      `hazard at gx=${i.gx} sits at or before the badge (gx=${lastColumn}) — the badge ` +
         'must be reachable before the first obstacle is met',
     );
   }
@@ -195,10 +291,10 @@ function validateModel(): Problem[] {
   }
 
   // Each capability must be earned exactly once across the run. `SAFE_PASSAGE`
-  // is the deliberate exception: it carries no capability, so it may repeat (it
-  // is on Reception and the Tech Park, the two screens with nothing to defend
-  // against) and it must never appear on a hazard screen, where the player would
-  // take a badge that does nothing.
+  // is the deliberate exception: it carries no capability, so it may repeat (the
+  // Tech Park is its only holder now that Reception carries no badge at all) and
+  // it must never appear on a hazard screen, where the player would take a badge
+  // that does nothing.
   const badges = SCREENS.filter((s) => s.badge).map((s) => s.badge!.type);
   for (const cap of CAPABILITIES) {
     const count = badges.filter((b) => b === cap.badge).length;
@@ -242,6 +338,37 @@ function screenSolids(s: ScreenData): AABB[] {
 function badgeBox(s: ScreenData): AABB | null {
   if (!s.badge) return null;
   return badgeLowestBox(s.badge);
+}
+
+/**
+ * Air-drop fairness: is the FIRST delivery makeable from the spawn?
+ *
+ * The badge expires, so "reachable" is not enough — it has to be reachable inside the
+ * window. Walking from the spawn to the first drop column at `WALK_SPEED` must finish
+ * with time to spare before the badge is gone, or the screen opens by taking the
+ * capability away from a player who did nothing wrong. Measured, not felt: this is the
+ * same class of gate as the badge's one-tap jump window.
+ */
+function validateAirdropTiming(s: ScreenData): Problem[] {
+  const problems: Problem[] = [];
+  if (!s.badge || !isAirdropped(s.badge)) return problems;
+  const cols = dropColumnsOf(s.badge);
+  if (cols.length === 0) return problems;
+
+  const spawnX = s.spawn.gx * T;
+  const firstX = cols[0]! * T + T / 2;
+  const walk = Math.abs(firstX - spawnX) / PLAYER.WALK_SPEED;
+  const gone = dropLandsAt(s.badge, 0) + POWERUPS.DROP.LIFETIME;
+  const margin = gone - walk;
+  if (margin < 1) {
+    problems.push({
+      screen: s.id,
+      message:
+        `first air-drop at gx=${cols[0]} expires ${gone.toFixed(2)}s in but takes ` +
+        `${walk.toFixed(2)}s to walk to from spawn — only ${margin.toFixed(2)}s of slack`,
+    });
+  }
+  return problems;
 }
 
 // --- physics-aware reachability search -------------------------------------
@@ -331,16 +458,27 @@ function validatePhysics(s: ScreenData): Problem[] {
   const reachesTarget = (solids: AABB[]) =>
     flood(solids, spawn, (box) => box.x + box.w >= targetX);
 
-  // Badge reachability (searched over the pre-bridge geometry, at the bottom of
-  // the badge's float).
-  const badge = badgeBox(s);
-  if (badge) {
-    const found = flood(base, spawn, (box) => aabbOverlap(box, badge));
-    if (!found) {
-      push(
-        `badge anchored at (${s.badge!.gx},${s.badge!.gy}) is not reachable from spawn ` +
-          'even at the bottom of its float',
-      );
+  // Badge reachability. On a rail screen that is the bottom of the float; on the
+  // air-drop screen it is every authored resting place, because a drop the player
+  // cannot walk to is a delivery that never happened.
+  if (s.badge && isAirdropped(s.badge)) {
+    const cols = dropColumnsOf(s.badge);
+    cols.forEach((gx, i) => {
+      const rest = dropRestBox(s.badge!, i);
+      if (!flood(base, spawn, (box) => aabbOverlap(box, rest))) {
+        push(`badge drop at gx=${gx} is not reachable from spawn`);
+      }
+    });
+  } else {
+    const badge = badgeBox(s);
+    if (badge) {
+      const found = flood(base, spawn, (box) => aabbOverlap(box, badge));
+      if (!found) {
+        push(
+          `badge anchored at (${s.badge!.gx},${s.badge!.gy}) is not reachable from spawn ` +
+            'even at the bottom of its float',
+        );
+      }
     }
   }
 
@@ -365,6 +503,7 @@ function main(): void {
   for (const s of SCREENS) {
     problems.push(...validateStructure(s));
     problems.push(...validateNarrative(s));
+    problems.push(...validateAirdropTiming(s));
     problems.push(...validatePhysics(s));
   }
 

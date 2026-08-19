@@ -1,15 +1,24 @@
 # ANSRcade: The GCC Game — Handoff (current state)
 
-> **Read this first, then start work.** This file is deliberately short: it holds
-> *current state* only. The full narrative history of every build pass lives in
-> **`docs/JOURNAL.md`** (append-only, never pruned).
->
-> **How to update it after a pass** (see §9 for the rule):
-> 1. Append the full entry to `docs/JOURNAL.md`.
-> 2. Add a one-line summary to §10 here and drop the oldest so the list stays at 3.
-> 3. Refresh the baseline numbers in §3, and §5/§7/§8 if they changed.
-> 4. If the pass produced a *permanent* rule or trap, promote it to §6 — that is
->    the only content here that grows, and it is the content worth keeping.
+> **Read §1–§4 of this file, then the ONE section file your task touches.** This file is the
+> router and the current state; the detail lives in four companion docs so a session does not
+> pay to load all of it.
+
+## Where things are — read only what the task needs
+
+| Doc | Holds | Read it when |
+|---|---|---|
+| **`HANDOFF.md`** (this) | status · environment · locked defaults · the model proper (§4.1–§4.8) · recent passes | **always, first** |
+| **`docs/INVARIANTS.md`** | every rule and trap this build paid for, each one a defect that shipped once | **before editing anything** |
+| **`docs/SCREENS.md`** | the per-screen model, §4.9–§4.14 (Reception · Setup Delays · Compliance · Workplace · Hire Under Fire) | touching one screen's gameplay, art or hazard |
+| **`docs/ARCHITECTURE.md`** | the module map, §5 — engine · world · render · ui · scripts, with a "where to look by task" table | writing code anywhere in `src/` |
+| **`docs/OPEN.md`** | §7 open owner decisions, §8 what stays in web type | picking the next job, or the answer is "the owner decides" |
+| **`docs/JOURNAL.md`** | full narrative of every pass, append-only, never pruned | you need the *background* on one past decision |
+
+**After a pass:** append the full entry to `docs/JOURNAL.md` · add a one-liner to §10 here and
+drop the oldest so the list stays at 3 · refresh the numbers in §1 · put any permanent rule in
+`docs/INVARIANTS.md` (the doc that is *meant* to grow) · put per-screen detail in `docs/SCREENS.md`,
+not back into §4 here.
 
 ---
 
@@ -18,19 +27,25 @@
 All 16 planned build tasks are complete and the game is playable end to end
 (6 screens, win receipt, embed API, analytics, a11y, audio, touch). Everything
 since then has been post-launch passes: a meaning-model rebuild (§4), layout and
-mobile adaptivity, an 8-bit visual conversion of every remaining web-native
-surface, the finale rebuild, and a custom 404 page.
+mobile adaptivity, an 8-bit conversion of every remaining web-native surface, the
+finale rebuild, a custom 404 page and the badge work.
 
-- **Tests:** 314 passing (38 files)
-- **Bundle:** ESM 44.94 KB / IIFE 45.21 KB gzip · budget gate **88.0 KB of 90 KB** (2 KB of
-  headroom — check `npm run analyze` early in any pass that adds art)
+- **Tests:** 462 passing (43 files)
+- **Bundle:** ESM 60.0 KB / IIFE 60.4 KB gzip — **the real download is 60.4 KB, 67% of the
+  90 KB budget.** The deployed site payload is **63.2 KB**. The `analyze` gate reads **~117 KB of 90 and
+  fails**, because it sums *every* `.js` in `dist/` and so adds the two alternative output formats
+  together. **This is an open owner decision, not a regression — see `docs/OPEN.md` §1.**
+  Everything else is green.
 - **Validator:** green on all 6 screens (structural + physics-aware + meaning layers)
-- **Next:** no queued task — see §7 for what is open. The owner is specifying the
-  powerup *effects* one screen at a time; screen 1 is done (§4.5), so expect one of
-  screens 2–4 next.
-
-The original 16-task build list (scaffold → hardening) is all ticked; it lives in
-`docs/JOURNAL.md` along with the detail of every task and every pass since.
+- **Screen order (owner calls):** Reception (an office lobby interior, and the one screen with
+  **no badge**) · **Setup Delays (1)** · **Compliance (2)** · **Workplace (3)** ·
+  **Hire Under Fire (4)** · Tech Park (5). Compliance was rebuilt from scratch as a staircase maze;
+  **Local Expertise is gone** — the Workplace screen replaced it outright and took the slot after
+  Compliance; Hire Under Fire is now a **boss fight against a dragon in a tie and glasses**. Detail
+  for all of these: `docs/SCREENS.md`.
+- **Next:** resolve `docs/OPEN.md` §1 (the budget measurement), then no queued task. **All four
+  capability effects are owner-specified and built**; the Tech Park's `SAFE_PASSAGE` badge is the
+  only one still deliberately unassigned (Reception's was deleted with its badge).
 
 ---
 
@@ -44,7 +59,7 @@ The original 16-task build list (scaffold → hardening) is all ticked; it lives
 - Specs live in the parent `ANSR Game/` folder (`01_…` – `10_…`, plus `tuning.config.ts`,
   `levels.json`, `analytics-events.json`, the ANSR SVG logos). They are authoritative
   **except** where §4 supersedes them. `src/data/{tuning.config.ts,levels.json}` are
-  mirrors of the root files — update both.
+  mirrors of the root files — **update both** (they are byte-identical today; nothing enforces it).
 
 ### Verify after every task (all must be green)
 ```
@@ -54,20 +69,18 @@ npm run typecheck && npm run lint && npm run test && npm run build && npm run bu
 `npm run analyze` prints the gzip budget report. Budgets: JS ≤ 90 KB, total ≤ 250 KB.
 
 ### You can look at the pixels — do it for any visual change
-There is no browser here, but `@napi-rs/canvas` installs in seconds and the render
-modules run directly, so a screen can be rasterised to PNG and *inspected*:
+No browser here, but `@napi-rs/canvas` installs in seconds and the render modules run directly:
 
 ```
 mkdir -p /tmp/brrender && cd /tmp/brrender && npm init -y && npm i @napi-rs/canvas
-# set globalThis.Path2D from the package (drawAnsrLogo needs it), await import the
-# render module, draw into createCanvas(1280,720), writeFileSync a PNG
+# set globalThis.Path2D from the package (drawAnsrLogo needs it), await import the render
+# module, draw into createCanvas(1280,720), writeFileSync a PNG
 "<abs>/beam-run/node_modules/.bin/tsx" shot.mts   # project's own tsx resolves TS + JSON
 ```
-Keep it out of the project (native binary; nothing in `src/` may depend on it).
-Every visual pass that skipped this shipped a defect that was invisible in the code
-and obvious in the image — an occluded sun, an invisible crowd, a figure rendering
-at a third of its size. DOM screens can be rasterised the same way via jsdom + the
-real generators.
+Keep it out of the project (native binary; nothing in `src/` may depend on it). DOM screens
+rasterise the same way via jsdom + the real generators. **Every visual pass that skipped this
+shipped a defect** invisible in the code and obvious in the image — an occluded sun, an invisible
+crowd, a figure at a third of its size, and one pass a maze that was one grey slab.
 
 ---
 
@@ -94,303 +107,146 @@ real generators.
 
 ## 4. MODEL — read before touching gameplay (supersedes doc 01 §2/§6/§7)
 
-The owner has redesigned the *meaning layer* twice since launch. Six-screen structure, art
-direction, physics and budgets unchanged both times; the progression model is not. Where doc 01
-or `07_Analytics_and_Lead_Handoff.md` disagree, **this section wins** (the prose docs predate
-both revisions and still describe a no-lives model; `analytics-events.json` matches this).
+The owner has redesigned the *meaning layer* repeatedly since launch — the lives model, then
+Compliance, then the Workplace, then Hire Under Fire; structure, art direction, physics and budgets
+are unchanged. Where doc 01 or `07_Analytics_and_Lead_Handoff.md` disagree, **this
+section wins** — they predate every one of those revisions and still describe a no-lives model.
+`analytics-events.json` matches this. Rationale for every line is in `docs/JOURNAL.md`.
 
-1. **Two stakes measuring the same thing: months, and three lives.** Clearing a screen books
-   its `monthsBase`; the six sum to `JOURNEY.ANSR_BENCHMARK_MONTHS` (11), so a clean run lands
-   exactly on ANSR's published benchmark. Being stopped by an obstacle books `SETBACK_MONTHS`
-   (2), writes a line in the **delay log**, and costs one of `LIVES.TOTAL` (3). The total is
-   capped at `MAX_MONTHS` (23) so a run always beats the going-alone baseline (24).
-2. **A lost life restarts the SAME stage, never the next one and never screen 0.** The run
-   resumes at that stage's title card, so a delay costs a life and two months but never
-   progress. Spend the last life and the attempt ends on the itemised ledger and hands back to
-   the title screen. This is the `LIFE_LOST` state (§5).
-3. **Nothing is ever a dead end and nothing blames the player.** Running out of lives lands on
-   a conversion surface — the ledger, the argument, and both routes — exactly like reaching
-   the Tech Park. Every setback line names the *system* as the cause, by obstacle name.
-4. **Every screen carries an ANSR badge, anchored ahead of the obstacles it answers, and it
-   levitates.** It rides a straight vertical line through ±`POWERUPS.FLOAT_AMPLITUDE` px around
-   its authored `gy` (8 on every screen), one cycle per `FLOAT_PERIOD`. The band rides up to just
-   below the ceiling and back down to **41px above a standing player's head**: taking the badge is
-   a timed jump, never a walk-through (owner call — it was too easy). Missable on purpose, which
-   is what gives the life-lost screen's instruction something to say. `POWERUPS` in
-   `tuning.config.ts` carries the derivation of both ends; the validator fails the build if the
-   band dips into a standing player, if any obstacle sits at or before the badge, or if none sit
-   beyond it. Never label or offer a "do it yourself" route — self-build is the actual competitor.
-5. **Four distinct verbs, not one reskinned shield.** `PLACE_TILE` slows the DENIED stamps to a
-   walk-through pace *and* shields the player (1Wrk — owner-specified, the first effect nailed down)
-   · `EXTINGUISH` puts hiring lanes out for good (Talent500) · `CLEAR_PATH` lifts approval barriers
-   for good (GCC-BOT) · `FORESIGHT` shows landing spots and stops setbacks (500Leaders).
-   `SAFE_PASSAGE` is the non-capability badge on Reception and the Tech Park; its effect is
-   deliberately unassigned. **Help never expires** — a 5-second shield would say ANSR helps briefly
-   then leaves. No badge places geometry any more (`PLACE_TILE`'s bridge went with screen 1's pit).
-6. **No score collectibles.** The Growth Points are gone (owner call): a second score competed
-   with the only figure the game argues about, and picking one up said nothing about ANSR.
-7. **The receipt is the conversion surface.** The win screen shows the run's months, two
-   *attributed* reference lines, the delay summary, and four capability rows that are Navigator
-   links carrying a declared `br_topic`. Leaving mid-run shows the same receipt. Intent is
-   declared, never inferred.
+**§4.1–§4.8 below are the model proper. The per-screen calls (§4.9–§4.14) are in
+`docs/SCREENS.md`** — read the one screen you are touching from there.
+
+1. **Two stakes, one measure: months and three lives.** Clearing a screen books its `monthsBase`;
+   the six sum to `ANSR_BENCHMARK_MONTHS` (11), so a clean run lands exactly on the benchmark. An
+   obstacle books `SETBACK_MONTHS` (2), writes a **delay log** line and costs one of `LIVES.TOTAL`
+   (3). Capped at `MAX_MONTHS` (23), always under the going-alone baseline (24).
+2. **A lost life restarts the SAME stage and SHOWS NO SCREEN** (owner call). `LIFE_LOST` still books
+   the delay, but with lives left the host paints **no overlay**: the state is the beat the impact is
+   drawn on (`LIVES.LOST_HOLD` 0.9s — the hero flat under the stamp, or wrapped in the tape), the HUD
+   stays up so the heart going out is visible, and then the stage restarts from its own title card,
+   never the next screen and never screen 0. The card carries **one orange line, "TAKE THE ANSR
+   BADGE"** (`Simulation.retrying` → `COPY.lifeLost.retryHint`), which is all that survives of the
+   deleted coaching overlay; the delay itself is still announced through the HUD's live region.
+   **The cost is shown where it was paid** (owner call): the obstacle's name and `+2 MONTHS` are
+   written over the body, held long enough to read, and then flown up into the delay log
+   (`core/delayFlight.ts`, pure; 0.8s, inside `LOST_HOLD`; holds and fades instead of travelling under
+   `prefers-reduced-motion`). It applies on every screen.
+   **The last life is the exception** and the only end-of-attempt screen there is: `gameover` (§4.3).
+3. **No dead ends, and nothing blames the player.** Out of lives lands on a conversion surface, the
+   same as reaching the Tech Park. Every setback line names the *system*, by obstacle name.
+   That screen is **four things on one centre line** (owner call: less text, symmetrical, low
+   cognitive load): the headline, one figure ("3 DELAYS COST 6 MONTHS"), the argument it is evidence
+   for, and two single-line routes (Start again · GCC Opportunity Navigator). The itemised ledger,
+   the cause line, the lives readout and the two-column split are all **deleted** — the same
+   breakdown is on the closing receipt, where it is read rather than skipped.
+4. **Every screen WITH AN OBSTACLE carries an ANSR badge, ahead of the obstacles it answers, and it is
+   always a jump.** **Reception carries none** (owner call): its badge was a `SAFE_PASSAGE` mark with
+   no effect, which taught the player that taking an ANSR badge changes nothing one screen before the
+   one that saves them. Its three labelled steps are the tutorial. On four screens the badge
+   levitates: a straight vertical line, ±`POWERUPS.FLOAT_AMPLITUDE` around `gy 8`,
+   one cycle per `FLOAT_PERIOD` (**6.4s** — owner call, slower than the old 4.8) — topping out just
+   under the HUD and bottoming out **41px above a standing head**, so it is a timed jump and never a
+   walk-through (owner call). It **rises first and then falls**, which is why `badgeFloatOffset` is a
+   cosine: it starts at the bottom of the band, i.e. at its most reachable on the frame the screen
+   starts (owner call — do not flip it back to a sine, see `docs/INVARIANTS.md`). On Hire Under Fire it
+   is **delivered onto a floating brick** instead (`docs/SCREENS.md` §4.12) — same rule, different
+   question. (Four rail screens: 1, 2, 3 and the Tech Park.) Missable on purpose: that is what the
+   retry title card's line is for. `POWERUPS` derives both ends of the band;
+   the validator fails the build if the band dips into a standing player, if a drop has nothing under
+   it, if any obstacle sits at or before the badge, or if none sit beyond it. **Never offer a
+   "do it yourself" route** — self-build is the actual competitor.
+5. **Four structurally different verbs, never one reskinned shield.**
+   `PLACE_TILE` slows the DENIED stamps to a walk-through pace *and* shields (1Wrk) ·
+   `CLEAR_PATH` turns the compliance monsters friendly, raises their toll arms and walks them off
+   the route (GCC-BOT) · `UNWRAP` hands the player a cutter and a shoot button; three hits
+   free the taped-up colleague, who then fixes the room (500Leaders) · `EXTINGUISH` raises a
+   teal halo the hiring dragon's fire cannot touch **and** hands over a water cannon that quenches
+   that fire and then strips the dragon's suit off (Talent500). All four owner-specified; the screen
+   mechanics are in `docs/SCREENS.md` §4.9–§4.11.
+   `UNWRAP` is the only one that gives the player a verb *instead of* changing the world, and the
+   only one that does not make contact safe — it makes the obstacle *solvable*, so there is
+   deliberately no bubble on that screen. `EXTINGUISH` is the only one that does **both**: the
+   immunity is what buys the player time to stand still and aim, so the two halves are one mechanic
+   rather than two effects bolted to one badge.
+   `SAFE_PASSAGE` is the non-capability badge on the Tech Park (its only holder now), effect
+   deliberately unassigned. **Help never expires** (a 5-second shield would say ANSR helps briefly then leaves).
+   No badge places geometry any more.
+6. **No score collectibles.** The Growth Points are gone (owner call): a second score competed with
+   the only figure the game argues about, and picking one up said nothing about ANSR.
+7. **The receipt is the conversion surface.** Months, two *attributed* reference lines, the delay
+   summary, and four capability rows that are Navigator links carrying a declared `br_topic`.
+   Leaving mid-run shows the same receipt. Intent is declared, never inferred.
 8. **One-tap auto-run is the default on touch.** The audience is executives on phones.
 
 ---
 
-## 5. Architecture map (what exists — reuse, don't duplicate)
+## 5. Architecture map — moved to `docs/ARCHITECTURE.md`
 
-**Engine (`src/core/`)**
-- `Loop.ts` — `advanceAccumulator()` (pure) + fixed 1/60 loop, dt clamp, timeScale, injectable now/raf.
-- `StateMachine.ts` + `gameStates.ts` — `GameState` and transitions (BOOT→START→TITLE_CARD→
-  PLAYING→WIN, plus PLAYING→**LIFE_LOST**→TITLE_CARD (same stage) | START (out of lives)).
-  `LIFE_LOST` cannot reach PLAYING directly — every retry goes via the stage's title card.
-- `Renderer.ts` — `computeViewport()` + `clampPixelRatio()` (both pure; DPR capped at 2), HiDPI,
-  teal letterbox, internal 1280×720 transform + clip, shake offsets.
-- `Input.ts` — edge-detected `InputState`, arrows/WASD/Space/Esc/P/M, `setVirtual()`, `setAutoRun()`,
-  `NEUTRAL_INPUT`/`makeInput()` for headless use.
-- `Simulation.ts` — **authoritative headless sim.** Owns state machine, Player, Screen, `months`,
-  `setbacks`, `lives`, `log`/`logPanel`/`delayMonths`, `clock`, `badgeBox`, `engaged`, `receipt`,
-  `lifeLost`, `powerups`, `hazard`, `shielded`. `buildHazard()` switches on `screen.data.hazard`.
-  `setback(cause)` books months, spends a life, pushes a log entry and transitions to LIFE_LOST
-  (it does **not** reset the hazard — see §6); `continueAfterLifeLost()` reloads the same screen or
-  resets the attempt. `forceSetback('fall')` still relocates via the bounded safe-ground history
-  (ground a hazard is dragging on never counts as safe) when the fall is *not* chargeable — that is
-  the only remaining use of it. Events: onStateChange /
-  onScreenEnter / onScreenClear / onSetback / onOutOfLives / onBadgeCollected.
-- `setbackLog.ts` — pure: `SetbackLogEntry`, `ledgerRows()` (groups repeats), `logPanelView()`
-  (bounded — newest `LIVES.LOG_VISIBLE_ROWS`, the rest rolled up, total counts everything).
-  The HUD panel and the end screens both read through it, so they cannot disagree.
-- `Game.ts` — DOM/render host. Owns Loop/Renderer/Input/Hud/Overlays/Effects/Audio/Assist/Touch/
-  Analytics. HUD + overlays are created **before** the sim (the sim ctor fires START→syncUI).
-  `ResizeObserver` on the stage drives `renderer.resize()`. `handleCta` → navigator payload.
-- `Effects.ts` — deterministic mulberry32 RNG, pooled particles (140) + trail ring buffer (14),
-  shake / hit-stop / flash; one `reducedMotion` switch disables all of it.
-- `AssistController.ts`, `DebugOverlay.ts`, `finaleScene.ts` (pure finale geometry, snapshot-tested).
+Engine · world · render · ui · scripts, one line per module, with a "where to look by task"
+table at the top. Read the block for the layer you are touching.
 
-**World (`src/world/`, headless)**
-- `Physics.ts` — `AABB`, `aabbOverlap`, `isOnGround`, `moveAndCollide` (≤8px substeps, axis-separated).
-- `Player.ts` — walk/air accel + friction, gravity clamp, coyote + buffer, jump-cut, i-frames.
-  `update(dt, input, solids, speedMult, jumpMult)` — accel is scaled by `speedMult` too, so a
-  dragging hazard costs traction, not just top speed. No hazard uses either multiplier today.
-- `Screen.ts` (grid→px, skips `noncollide`; no collectibles any more), `Powerups.ts` (timer-free;
-  permanent help; badges carry no geometry), `badgeFloat.ts` (**pure**
-  `badgeCenter`/`badgeBoxAt`/`badgeLowestBox` — the one source of the badge's position, read by the
-  sim *and* the renderer with the same clock), `types.ts`
-  (`Hazard {solids, speedMultAt, shieldsPlayer?, update, reset}`,
-  `HazardContext {assisted, extraTelegraph}`).
-- `Hazards/` — `Stamps.ts` (screen 1's slamming DENIED stamps; replaced `Quicksand.ts`), `Fire.ts`,
-  `Gates.ts` (replaced the old `Plants.ts`), `Spikes.ts`. Each answers `assisted` in its own way;
-  only `Stamps` sets `shieldsPlayer`, which is what licenses the bubble on the player.
+## 6. Invariants & traps — moved to `docs/INVARIANTS.md`
 
-**Render (`src/render/`, canvas)** — `PixelArt.ts` (crisp fillRect core), `PixelText.ts` (5×7 font,
-`FONT` exported), `sprites.ts` (hero incl. the `squash` pose, `drawAnsrBubble`),
-`badge.ts` (the floating pickup: authored 19×19 ANSR sunburst + levitation shaft + flare + ground
-chevron — pure, so it rasterises alone; `Game.drawBadge` only supplies the band and a phase),
-`stamps.ts` (screen 1's hazard — pure, no wall clock, so it can be rasterised alone),
-`scenery.ts` (per-level materials, skies, signage), `titleScene.ts` (attract screen),
-`finale.ts` (screen 5 painting), `ansrLogo.ts` (cached `Path2D` of the real brand mark;
-resolves to null without `Path2D`, draw is a no-op).
+**Read it before editing anything.** Every expensive lesson this build has paid for — bundle traps,
+DOM bitmap type, layout, gameplay, art and testing — each one a defect that shipped once. **This is
+the document that is meant to grow.**
 
-**UI (`src/ui/`, DOM)** — `styles.ts` (scoped CSS in a TS template literal, minified by a Vite plugin),
-`Hud.ts` (two absolutely-positioned flex **columns**: left = stage · lives · engaged capability,
-right = clock · delay log), `Overlays.ts` (start / titlecard / pause / **lifelost** / win /
-summary — `columns()` splits the end screens at ≥900px), `LivesPips.ts` (the lives readout, shared
-by the plaque and the life-lost screen), `PixelType.ts` (bitmap type in the DOM as inline SVG:
-`setPixelText`, `setPixelButtonLabel`, `wrapPixelLabel`, `PX_TYPE` specs), `BrandMark.ts` +
-`ansrMark.ts` (generated brand path), `TouchControls.ts`, `AssistMenu.ts`, `NotFoundPage.ts`
-(build-time only — its copy lives in `data/notFoundCopy.ts`, apart from `COPY`, so the 404 page's
-strings do not ship inside the game bundle).
+## 7. Open for the owner — moved to `docs/OPEN.md`
 
-**Other** — `audio/AudioEngine.ts` (Web Audio buses, synthesised cues, 0 audio bytes shipped),
-`analytics/{Analytics,navigator,Save}.ts` (consent-gated), `embed/{mount,FallbackCard}.ts`
-(kill switch, lazy IntersectionObserver boot, error boundary, React factory),
-`data/{tuning.config.ts,levels.json,tokens.ts,copy.ts,levels.ts}`.
-
-**Scripts** — `validate-levels.ts` (three layers: structural · physics-aware BFS over the reachable
-state space using the real Player, with badge reachability proved against `badgeLowestBox` ·
-meaning-layer, i.e. every screen has a badge, it precedes every obstacle, obstacles exist beyond
-it, capabilities unique, months sum to the benchmark) · `check-budget.mjs` + `budget.mjs` ·
-`css-minify.mjs` ·
-`build-ansr-mark.mjs` (regenerates the logo path from the SVG) · `build-404.ts` ·
-`not-found-plugin.ts` (serves the real 404 page in dev/preview).
+Sixteen items in priority order, plus §8 (what stays in web type). Top three: the budget gate's
+measurement · the placeholder `navigatorUrl` · screen 1 unassisted, played by hand.
 
 ---
 
-## 6. Invariants & traps (the expensive lessons — read before editing)
+## 9. Document rotation rules
 
-**Bundle**
-- Vite's terser plugin **skips `es`-format library output**; `minifyEsOutput()` in `vite.config.ts`
-  re-adds it. Without it the ESM bundle ships unminified (~5 KB of the gate).
-- **That plugin must run in `generateBundle`, not `renderChunk`.** As a `renderChunk` hook it ran,
-  terser returned 135 KB, and a 176 KB file still landed on disk: Vite's `vite:esbuild-transpile`
-  runs in the **post** phase after every normal plugin's renderChunk and re-prints the chunk.
-  Mangled identifiers survive that, so the output *looks* minified — the regression hid for many
-  passes. `budget.test.mjs` now asserts the two bundles are within 10% of each other and that
-  neither is beautified; "es much bigger than umd" is the signature.
-- Dev-only code must be **constructed** behind `__DEV__`, not merely used behind it. `DebugOverlay`
-  was an eager field initialiser, so the class stayed reachable and shipped to every host.
-- Copy for build-time-only pages does not belong in `COPY` — that object is imported by the game,
-  so anything in it ships (this is why the 404 strings live in `data/notFoundCopy.ts`).
-- The scoped stylesheet is a TS template literal, so nothing minifies it by default —
-  `scripts/css-minify.mjs` runs as a Vite plugin and guards structure by counting braces.
-- **Backticks inside `styles.ts` terminate the template literal.** Write CSS comments in prose.
-- The budget gate sums the ESM *and* UMD builds even though a host loads exactly one. Real
-  download is the IIFE figure. Effective per-bundle budget is therefore ~45 KB.
-
-**DOM bitmap type**
-- **Any `PixelSpec` without `maxShare` is a bug waiting to happen.** The default `min(96%, …)` cap
-  is circular inside a shrink-wrapping flex box, and the browser silently falls back to the SVG's
-  intrinsic width — that is how the closing months figure rendered at a third of its size.
-  Size in frame units (`--beam-run-u`, i.e. `cqw` against the stage) with an explicit `maxShare`.
-- The 5×7 font has **no lower case and no apostrophe**. Any string drawn as pixels must avoid
-  apostrophes (there is a test guarding this). Unsupported chars fold (em dash → hyphen, → → >).
-- Every pixel heading must ship a `.beam-run__sr` span with the real prose, and the artwork must
-  be decorative, so `textContent` and screen readers are unchanged.
-
-**Layout**
-- The stage clamps on **both** axes (`max-width` derived from `--beam-run-max-height`), with a
-  `dvh` layer. Portrait deliberately stops being 16:9: `aspect-ratio: auto` plus a control band
-  (`--beam-run-portrait-band`), HUD in the top band, thumb controls in the bottom.
-- Host-overridable knobs: `--beam-run-max-width`, `--beam-run-max-height`, `--beam-run-portrait-band`.
-- Type inside the frame is sized in `cqw` (`--beam-run-u`), never `vw` — the frame is letterboxed,
-  so window-relative type overflows it.
-
-**Gameplay**
-- Level data drives everything; the engine hardcodes no gameplay number. Mirror any change to
-  `src/data/{tuning.config.ts,levels.json}` into the root copies.
-- The physics-aware validator searches **hazard-ignoring** (as if assisted), so hazard tuning
-  changes cannot break it — but geometry changes can.
-- **The badge moves, so its position has exactly one source: `world/badgeFloat.ts`.** Derive it a
-  second time anywhere (a render-only bob, a `now()`-based offset, the anchor cell) and you ship a
-  pickup that is visible where the collision is not. Same reason it is **not** frozen under
-  `prefers-reduced-motion`: that would move the hitbox, which is a rules change, not a comfort
-  setting. Its clock is `Simulation.screenClock`, a sim-time accumulator — never the wall clock,
-  or `step()` stops being replayable.
-- **The float band's ceiling is the HUD, not the frame.** The badge column is `gx 4` (x=180) and
-  the HUD's left stack hangs directly over it to y≈150 at a 1280 frame, so the top of the swing
-  stops at a box top of 165. The badge cannot be moved right to escape it either — screens 2–4 put
-  their first obstacle at `gx 6` and the validator requires the badge to precede every obstacle.
-- **Raising the band is a touch decision before it is a difficulty one.** One-tap auto-run hides the
-  move pad, so a phone player cannot wait under the badge: one pass, one tap, currently a **0.40s**
-  window (`src/core/badgeReach.test.ts` fails below 0.3s or if the working taps stop being
-  contiguous). Re-prove it there after any change to the band, the period or `JUMP_VELOCITY`.
-- A lost life reloads the screen, which resets `Powerups` — so the badge is always available again
-  on the retry. Do not "optimise" that into an in-place respawn.
-- `zone` in `levels.json` is **authoring intent, not a position** (it predates the badge moving to
-  the front of the screen). Nothing validates it against geometry, and doing so would fail every
-  screen for being correct.
-- The delay log panel grows downwards from the top of the frame, so it must stay bounded
-  (`LIVES.LOG_VISIBLE_ROWS` + a roll-up). This is also why the HUD stacks plaques in flex columns
-  instead of anchoring them to corners — a hand-tuned pixel offset under the log is wrong again on
-  the next delay.
-- Orange stays off the delay log (a ledger of avoidable months is the opposite of value); only the
-  running total is warmed.
-- **"Help is active" is signalled on the player, not on the world.** The ANSR bubble and the HUD chip
-  say it; a cue painted along the level's surface does not. `drawZoneRead` used to cap every solid
-  with a cyan edge on pickup and it read as a defect in the floor, because a full-stage stripe is
-  indistinguishable from a rendering bug. (The badge's float rail is cyan too, but it is drawn only
-  *before* pickup, and it shows the line the pickup travels — do not confuse the two.)
-- **Every hazard telegraphs, and the tell has to be where the player is looking.** Screen 1's
-  stamps slam in 0.14s; with no wind-up a probe of 20 reactive policies could not clear the stage
-  at all — unfair, not hard. `HAZARDS.STAMPS.WARN_TIME` fixed it, and where a hazard *rests* decides
-  where its tell can live: while the stamps parked at the ceiling the only visible cue was on the
-  floor, because 90% of a parked stamp was off-frame.
-- **A hazard sprite is its hitbox.** `render/stamps.ts` authors the stamp's pressing body at exactly
-  `HEAD_H` × `WIDTH` (`STAMP_BODY_ROWS * STAMP_SCALE`, test-guarded) and puts the handle *outside*
-  the box. Draw the art wider than the box and you clip the player with pixels that are not there;
-  draw it narrower and the box hits them from nothing. Moving `REST_BOTTOM` also moves the press at
-  which the die reaches a standing player (536px of travel → 0.918, 270px → 0.837), so re-run the
-  fairness probe after touching it.
-- **A hazard's cycle length is a measured number.** Column width + player width ÷ walk speed is the
-  crossing time (124px ≈ 0.48s on screen 1); the fully-safe part of the cycle must stay comfortably
-  above it or the screen is a wall, not a test. Tune `CYCLE`, never the gaps — the geometry is the
-  argument. Re-run the probe (`docs/JOURNAL.md`) after any change to either.
-- `Simulation.setback()` does **not** reset the hazard: `loadScreen` rebuilds it on every retry, and
-  resetting wiped the pose the host paints the impact from (the stamp holding the player flat).
-  `Stamps.struckAt` survives `reset()` for the same reason.
-- **A dithered glow works at bubble size and fails at badge size.** Warm cells at 0.15–0.4 alpha over
-  the deep teal sky desaturate to grey-brown: round a 46px figure that is a field, round a 38px icon
-  it is dirt. Few cells at full alpha say "light"; many at low alpha say "rendering fault".
-- **Pixel marks are authored, not quantised.** Sampling the logo path to 14–24 cells is asymmetric
-  and noisy at every threshold. Author on an **odd** grid (an even one puts the centre between cells
-  and forces cardinal rays to two cells wide) and mirror the template eight ways.
-- Only draw a shield on the player where contact is genuinely harmless (`Hazard.shieldsPlayer` →
-  `Simulation.shielded`). On the screens where help means "the obstacles ahead are cleared", a
-  bubble would promise protection the rules do not give.
-
-**Testing**
-- For time-windowed hazards, read the hazard's own state getter right after `update()` rather than
-  recomputing `t = i * DT` (float consistency).
-- Test helpers live in `src/test/helpers.ts`: `driveToScreen`, `expireGrace`, `engageBadge` (reads
-  `sim.badgeBox`, never the anchor cell), `standAtColumn`, `forceSetbackAt` and
-  **`recoverFromLifeLost`** — almost every hazard test needs the last one now, because a delay
-  leaves the sim in `LIFE_LOST` and the stage restarts from its title card.
-
----
-
-## 7. Open for the owner (unresolved, in priority order)
-
-1. **`navigatorUrl` is still the placeholder `/gcc-opportunity-navigator`** (in `main.ts` and
-   `DEFAULT_OPTIONS`). Every CTA in the game lands on our own 404 page until it points at the real
-   GCC Opportunity Navigator, or a Vercel rewrite is added. Highest-value fix outstanding.
-2. Does the Navigator accept a parameter that **pre-selects a stage**? If so, wire `br_topic` to it.
-3. **The per-screen powerup effects.** Specified one screen at a time. **Screen 1 is done** (the
-   DENIED stamps — see §4.5). Screens 2–4 keep their existing capability behaviour; the two
-   `SAFE_PASSAGE` badges (Reception, Tech Park) collect and do nothing yet, by design.
-4. **Screen 1 unassisted is deliberately punishing.** A probe's best reactive policy took ~28s and
-   most policies died on the first pair of stamps. That is the teaching loop working (lose a life,
-   get told to take the badge), but if telemetry shows attempts ending here, lengthen
-   `HAZARDS.STAMPS.CYCLE` rather than widening the gaps.
-5. Are these four pains the ones the pipeline actually voices, or the four service lines? Swapping
-   a pain is cheap now (level data + re-skin), expensive after launch.
-6. Mobile traffic share, to confirm the auto-run default.
-7. Portrait play area: the camera is one fixed 1280×720 screen per level, so there is nothing to
-   crop. A bigger portrait frame means either a rotate-to-landscape hint or a portrait-specific
-   camera — both product decisions.
-8. Brand typography: the lockup's "ANSRcade" and the 404 body copy are still web type by choice.
-9. The prose specs (doc 01 §2/§6/§7, doc 07) still describe the pre-lives model and the quicksand
-   screen, so they now disagree with the build. §4 and `analytics-events.json` are current.
-
----
-
-## 8. Deliberately left in web type
-
-The two attributed reference lines' *supporting* prose, the assist dialog's intro and checkbox
-labels (real form controls, real sentences), the 404 page's body paragraph, and the brand wordmark.
-Everything else on the start, HUD, pause, win and summary screens is bitmap.
-
----
-
-## 9. Journal rotation rule
-
-`docs/JOURNAL.md` is append-only and complete. **Nothing is ever deleted from it** — the findings
-(what was measured, what was ruled out, why) are what stop a future session repeating a dead end.
-This file keeps only the last 3 passes as one-liners; when a fourth is added, the oldest drops off
-the list here and stays in the journal. Before an entry rotates out, any permanent rule it contains
-must already be in §6.
+- **`docs/JOURNAL.md` is append-only and complete.** Nothing is ever deleted from it — the findings
+  (what was measured, what was ruled out, why) are what stop a future session repeating a dead end.
+- **This file keeps the last 3 passes** as one short paragraph each (§10). When a fourth is added the
+  oldest drops off here and stays in the journal. Before an entry rotates out, any permanent rule it
+  contains must already be in `docs/INVARIANTS.md`.
+- **Nothing per-screen comes back into §4.** New screen detail goes to `docs/SCREENS.md`; new module
+  detail to `docs/ARCHITECTURE.md`; new owner questions to `docs/OPEN.md`. This file is the router
+  plus current state, and it should stay under ~250 lines / ~20 KB. It reached 592 lines / 48 KB —
+  twice its own guide — before §4.9–§4.14, §5 and §7 were split out into those three docs; the
+  growth was almost entirely §4 gaining a per-screen entry every pass, which is exactly what
+  `docs/SCREENS.md` now absorbs.
 
 ---
 
 ## 10. Recent passes (newest first — full entries in `docs/JOURNAL.md`)
 
-- **The badge levitates properly and is now the ANSR mark (owner call: too easily accessible, and
-  it should be the logo).** Band ±48 → **±155** around a new anchor `gy 8`, period 4.8s: the swing
-  tops out just under the HUD and bottoms out 41px above a standing head, so taking it is a timed
-  jump. New pure `render/badge.ts` — authored 19×19 sunburst (38px inside the 40px hitbox), dashed
-  levitation shaft with end brackets and a wake, a four-cell flare, a ground chevron. The old teal
-  "A" disc and the last `createRadialGradient`/`arc()` in the world layer are gone. Probed the
-  one-tap auto-run case (0.40s tap window) and kept the probe as a test. 314 tests; gate
-  **88.0 KB of 90**.
-- **Setup Delays art pass (owner feedback).** Stamps are now an authored 24×32 sprite grid reading
-  as a real desk stamp, parked just above mid-frame with **no rail**, so the wind-up cock-back is
-  visible on the object and the floor impressions carry the column read. The player's bubble was
-  rebuilt from 4px cells (haze band, dashed lit rim, sparks) — a gradient and an `arc()` stroke were
-  the only non-8-bit things on screen. Then dropped the cyan floor cap that `drawZoneRead` painted
-  on pickup (a blue stripe along the whole stage); the bubble and the HUD chip carry that read now.
-  284 tests; gate **87.1 KB of 90**.
-- **Setup Delays rebuilt: DENIED stamps replace the red-tape sludge (owner call, and the first
-  per-stage badge *effect* to be specified).** Four stamps slam down in two half-cycle-offset pairs
-  either side of a small wall; 1Wrk drops the mechanism to 26% speed and shields the player, so a
-  press aborts and retracts. Unassisted, a stamp flattens you. Probes forced two changes: a wind-up
-  (`WARN_TIME` — without it no reactive policy could clear the stage) and `CYCLE` 1.5 → 1.8. Deleted
-  with the pit: `Quicksand`, the placed-tile mechanism, two unused `Hazard` hooks. 280 tests.
+Three only, one short paragraph each. The findings live in the journal; anything permanent is
+already in `docs/INVARIANTS.md`.
+
+- **The Workplace, refined: an office that is broken *and lit*, and a mummy made of cloth.** The
+  raster said two things the code did not — the room had **one value** (wall, dividers, cabinets and
+  terminal all within two steps, so the bottom third was an indistinct field) and **"restored" looked
+  like "broken"**. `scenery.ts` now authors the room **as the fix leaves it** and `render/workplace.ts`
+  lays the damage over it from `restore`, sharing exported geometry; furniture went *darker* than the
+  wall with one lit edge each; the four gradient wedges became a lit diffuser, a **seven-step floor
+  pool** and up-facing edges, with two fittings holding and two striking. Clumsy is now ceiling tiles
+  out, a tile hanging by a corner, a bucket under a stain, a chair over, drawers open and notices
+  taped to the wall; the payoff is four pools, live monitors, two colleagues back at their desks and a
+  full-frame wash. The figure is **cloth-first** (seams every other row, tape cut to one-cell bands, a
+  fist on the reach, 3px of empty hitbox instead of 9). **462 tests**; the new
+  `render/workplace.test.ts` caught two live defects — a ceiling hole 4px inside a light's aperture,
+  and caution yellow at full alpha in a layer the fix does not reach.
+- **Docs audit: this file became a router.** It was 592 lines / 48 KB — 2.4× its own cap — and a
+  mandatory read every session (~12k tokens). §4.9–§4.14, §5 and §7 moved verbatim to
+  `docs/SCREENS.md`, `docs/ARCHITECTURE.md` and `docs/OPEN.md`; §10's entries were cut to ~6 lines
+  each. **241 lines / 17 KB now**, ~7k tokens saved per session. `docs/INVARIANTS.md` got a
+  five-group index (Gameplay is ~70% of it — split per screen if it grows). The hygiene sweep found
+  **no dead code and no stale tracked files**, but three things worth knowing: **45 files are
+  uncommitted** (the maze, the dragon, the Workplace, the lives model *and* `docs/INVARIANTS.md`
+  are all unversioned — `HEAD` is still `4c9461d`) · the root/`src/data` copies of
+  `tuning.config.ts` + `levels.json` are byte-identical with **nothing enforcing it** · the steering
+  file exists **twice** by design, so edit both. The root `index.html` looks stale and is not — it
+  is the host-embed demo.
+- **The exodus is a walk now, and descents drop instead of floating.** `GATHER_SPEED` 420 → **160**
+  (bracketed by things already on screen: above the creatures' own `SPEED_MAX` 132, well under the
+  player's 260), so taking the badge sends five obstacles home over ~4s instead of deleting them in
+  1.77s. Slowing it exposed a second defect: `walkHome` moved both axes at one speed, so LEGAL's and
+  AUDIT's pure-vertical descents read as *floating* — the leftover vertical part of a descent now
+  falls at a new `GATHER_DROP_SPEED` (420). **451 tests**; the new one measures frames with a fixture
+  shaped like LEGAL's real route, because the existing `STAIR` fixture never produces a pure drop.

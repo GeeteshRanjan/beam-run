@@ -35,7 +35,8 @@ import { Player } from '../world/Player';
 import { Screen } from '../world/Screen';
 import { aabbOverlap, type AABB } from '../world/Physics';
 import { Powerups, type ActivePowerView } from '../world/Powerups';
-import { badgeBoxAt } from '../world/badgeFloat';
+import { badgeBoxAt, badgeCenter } from '../world/badgeFloat';
+import { dropBoxAt, dropStateAt, isAirdropped, type DropView } from '../world/badgeDrop';
 import {
   ledgerRows,
   logPanelView,
@@ -45,9 +46,9 @@ import {
   type SetbackLogEntry,
 } from './setbackLog';
 import { Stamps } from '../world/Hazards/Stamps';
-import { Fire } from '../world/Hazards/Fire';
-import { Gates } from '../world/Hazards/Gates';
-import { Spikes } from '../world/Hazards/Spikes';
+import { Dragon } from '../world/Hazards/Dragon';
+import { ComplianceMaze } from '../world/Hazards/ComplianceMaze';
+import { Workplace } from '../world/Hazards/Workplace';
 import type { Hazard, SetbackCause } from '../world/types';
 
 export type { SetbackCause } from '../world/types';
@@ -99,7 +100,10 @@ export interface LifeLostView {
   livesLeft: number;
   livesTotal: number;
   screenName: string;
-  /** True on the last life: the screen becomes the closing ledger. */
+  /**
+   * True on the last life, and the only case the host shows a screen for: with
+   * lives left the stage simply restarts (see `continueAfterLifeLost`).
+   */
   outOfLives: boolean;
   ledger: LedgerRow[];
   delayMonths: number;
@@ -170,6 +174,18 @@ export class Simulation {
 
   private titleCardT = 0;
   private lifeLostT = 0;
+  /**
+   * True while the stage the player is on is a *retry* — i.e. the last thing that
+   * happened was a lost life on this same screen.
+   *
+   * It exists because losing a life no longer shows a screen (owner call): the
+   * stage simply starts again, so the one thing the deleted overlay said that
+   * mattered — take the ANSR badge — has to be said somewhere, and the retry's
+   * title card is the only surface left. The host reads this to decide whether the
+   * card carries that line. Cleared by `loadScreen`, so progressing forwards or
+   * starting a fresh attempt never inherits it.
+   */
+  private _retry = false;
   private setbacksOnScreen = 0;
   private readonly safeHistory: SafeSpot[] = [];
   private readonly events: SimulationEvents;
@@ -205,6 +221,10 @@ export class Simulation {
   }
   get titleCardProgress(): number {
     return Math.min(1, this.titleCardT / TRANSITION.TITLE_CARD_HOLD);
+  }
+  /** True when the current stage is a retry after a lost life (see `_retry`). */
+  get retrying(): boolean {
+    return this._retry;
   }
 
   /**
@@ -242,11 +262,45 @@ export class Simulation {
     return this.screenClock;
   }
 
-  /** The badge hitbox right now, or null when there is nothing to collect. */
+  /**
+   * The badge hitbox right now, or null when there is nothing to collect.
+   *
+   * Null has two meanings and they are both "not now": the badge is already taken,
+   * or this screen's badge is air-dropped and is currently in the air, expired, or
+   * waiting for the next drone (`world/badgeDrop.ts`). The rail is always
+   * collectable somewhere; a delivery is not, and that is the mechanic.
+   */
   get badgeBox(): AABB | null {
     const b = this._screen.data.badge;
     if (!b || this.powerups.collected) return null;
-    return badgeBoxAt(b, this.screenClock);
+    return isAirdropped(b) ? dropBoxAt(b, this.screenClock) : badgeBoxAt(b, this.screenClock);
+  }
+
+  /**
+   * The air-drop delivery in progress, or null on a rail screen.
+   *
+   * Read by the host to draw the drone, the parcel and the countdown. Still
+   * reported after the badge has been collected being *pointless* rather than
+   * wrong — the host stops drawing at that point — so this getter stays a plain
+   * function of the clock and nothing has to be remembered.
+   */
+  get badgeDrop(): DropView | null {
+    const b = this._screen.data.badge;
+    if (!b || !isAirdropped(b)) return null;
+    return dropStateAt(b, this.screenClock);
+  }
+
+  /**
+   * Where the badge is on screen right now, whichever way it is delivered.
+   *
+   * Valid after collection too, because both delivery models are pure functions of
+   * the clock: that is what lets the host throw the pickup burst from where the
+   * badge actually was rather than from its anchor cell.
+   */
+  get badgePoint(): { x: number; y: number } | null {
+    const b = this._screen.data.badge;
+    if (!b) return null;
+    return isAirdropped(b) ? dropStateAt(b, this.screenClock).badge : badgeCenter(b, this.screenClock);
   }
   /** Capabilities engaged this run, in pickup order. */
   get engaged(): readonly BadgeType[] {
@@ -314,6 +368,7 @@ export class Simulation {
 
   private loadScreen(id: number): void {
     this._screenId = id;
+    this._retry = false;
     this._screen = new Screen(id);
     this.powerups.reset();
     this.hazard = this.buildHazard();
@@ -329,12 +384,12 @@ export class Simulation {
     switch (d.hazard) {
       case 'stamps':
         return new Stamps(d.stamps ?? []);
-      case 'fire':
-        return new Fire(d.fireLanes ?? []);
-      case 'gates':
-        return new Gates(d.gates ?? []);
-      case 'spikes':
-        return new Spikes(d.spikeColumns ?? []);
+      case 'dragon':
+        return new Dragon(d.dragons ?? []);
+      case 'maze':
+        return new ComplianceMaze(d.monsters ?? [], d.gather, d.lift);
+      case 'workplace':
+        return new Workplace(d.mummies ?? [], d.terminal);
       default:
         return null;
     }
@@ -349,10 +404,12 @@ export class Simulation {
    * The engaged capability makes hazard *contact* harmless on this screen, so the
    * host may draw the player inside the ANSR bubble.
    *
-   * Only true where the hazard actually says so (`Hazard.shieldsPlayer`): on the
-   * screens where help means "the obstacles ahead are cleared" rather than "you
-   * cannot be hit", a shield visual would promise protection the rules do not
-   * give.
+   * Only true where the hazard actually says so (`Hazard.shieldsPlayer`): the
+   * DENIED stamps cannot press an ANSR-backed player, the compliance maze turns
+   * friendly outright, and the hiring dragon's fire cannot touch a haloed player.
+   * On the screens where help means "the obstacles ahead are cleared" rather than
+   * "you cannot be hit" — the Workplace, where the badge makes the obstacle
+   * *solvable* — a shield visual would promise protection the rules do not give.
    */
   get shielded(): boolean {
     return this.powerups.isAssisted && this.hazard?.shieldsPlayer === true;
@@ -375,12 +432,17 @@ export class Simulation {
   }
 
   /**
-   * Public: leave the life-lost screen.
+   * Public: leave the lost-life state.
    *
    * With lives left this reloads the stage the player was already on — not the
    * screen after it and never screen 0 — so a delay costs a life and two months,
-   * never progress. Out of lives, the attempt is over and we hand back to the
-   * title screen with a clean slate.
+   * never progress. There is no screen to acknowledge any more (owner call): the
+   * host shows nothing, `step()` calls this itself after `LIVES.LOST_HOLD`, and the
+   * stage restarts from its own title card, which is now flagged as a retry so it
+   * can carry the badge instruction.
+   *
+   * Out of lives, the attempt is over and we hand back to the title screen with a
+   * clean slate — that one *is* a screen, and it is the only one left.
    */
   continueAfterLifeLost(): void {
     if (this.sm.state !== 'LIFE_LOST') return;
@@ -392,6 +454,7 @@ export class Simulation {
       return;
     }
     this.loadScreen(this._screenId);
+    this._retry = true;
     this.enterTitleCard();
   }
 
@@ -522,9 +585,11 @@ export class Simulation {
 
       case 'LIFE_LOST': {
         this.lifeLostT += dt;
-        // With lives left this is a coaching beat, so it moves on by itself (or
-        // on a press, after a moment's grace so it cannot be skipped blind).
-        // Out of lives it is the closing ledger and a conversion surface: it
+        // With lives left this is not a screen at all: it is the beat the impact
+        // is drawn on (the flattened hero, the stamp still on him), and then the
+        // stage starts again by itself. A press cuts the beat short, after a
+        // moment's grace so a held button cannot skip it before it is seen.
+        // Out of lives it is the closing screen and a conversion surface: it
         // waits for a deliberate choice and never times out from under the
         // player.
         if (this._lives > 0) {
@@ -560,6 +625,9 @@ export class Simulation {
       const cause = this.hazard.update(dt, this._player, {
         assisted: this.powerups.isAssisted,
         extraTelegraph: this.assist.extraTime ? ASSIST.EXTRA_TELEGRAPH_BONUS : 0,
+        // Passed straight through as an edge: the one hazard with a verb of its
+        // own fires once per press, never from a held button.
+        shoot: input.shootPressed,
       });
       if (cause) {
         this.setback(cause);
@@ -606,9 +674,10 @@ export class Simulation {
   }
 
   /**
-   * The badge moves, so its hitbox is read from `badgeBoxAt` at the current
-   * simulation clock — the same function the renderer draws from. Deriving it
-   * twice is how a pickup ends up visually somewhere the collision is not.
+   * The badge moves, so its hitbox is read from the same function the renderer
+   * draws from, at the current simulation clock — `badgeBoxAt` on a rail screen,
+   * `dropBoxAt` on the air-drop one. Deriving it twice is how a pickup ends up
+   * visually somewhere the collision is not.
    *
    * `SAFE_PASSAGE` badges are collected like any other; they simply have no
    * capability to add to the receipt.
@@ -616,8 +685,8 @@ export class Simulation {
   private tryCollectBadge(): void {
     const b = this._screen.data.badge;
     if (!b || this.powerups.collected) return;
-    const box = badgeBoxAt(b, this.screenClock);
-    if (aabbOverlap(this._player.box, box)) {
+    const box = this.badgeBox;
+    if (box && aabbOverlap(this._player.box, box)) {
       this.powerups.collect(b);
       if (!this._engaged.includes(b.type)) this._engaged.push(b.type);
       this.events.onBadgeCollected?.(this._screenId, b.type);

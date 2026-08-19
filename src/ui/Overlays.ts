@@ -1,16 +1,23 @@
 /**
  * Overlays — the real-DOM screens layered over the canvas: Start, title card,
- * Pause, the life-lost screen, the mid-run Summary and the Win receipt. Built as
- * accessible dialogs (roles, labels, logical focus).
+ * Pause, the out-of-lives screen, the mid-run Summary and the Win receipt. Built
+ * as accessible dialogs (roles, labels, logical focus).
  *
- * `lifelost` is one surface doing two jobs, told apart by the lives remaining.
- * With lives left it is a coaching beat with a single instruction — take the
- * floating ANSR badge — and it hands straight back into the same stage. On the
- * last life it becomes the closing ledger: every delay itemised, the total, the
- * sentence that total is evidence for, and the two routes every other end screen
- * offers. So there is still no dead end and still nothing that tells the player
- * they failed; an attempt that runs out of lives ends on a conversion surface,
- * the same as one that reaches the Tech Park.
+ * **Losing a life shows no screen at all** (owner call). It used to: one surface
+ * did two jobs, coaching mid-attempt and closing the attempt on the last life. The
+ * coaching half is gone — the stage simply starts again, and the one thing that
+ * screen said that mattered ("take the ANSR badge") is now a single line under the
+ * stage name on the retry's title card. What is left here is `gameover`, which
+ * fires once per attempt.
+ *
+ * `gameover` is deliberately four things: the headline, the one figure that
+ * matters, the argument that figure is evidence for, and the two routes onward. No
+ * itemised ledger (the closing receipt carries the same breakdown, and here it was
+ * a table competing with the instruction), no lives readout (there are none left),
+ * no two-column split — one centred column, so the whole screen reads down one
+ * axis. It is still not a dead end and still nothing that tells the player they
+ * failed: an attempt that runs out of lives ends on a conversion surface, the same
+ * as one that reaches the Tech Park.
  *
  * The receipt is the conversion surface. Each of the four capability rows is a
  * *button* that deep-links the Navigator with its own topic, so expressing
@@ -20,7 +27,6 @@ import { COPY, CAPABILITIES } from '../data/copy';
 import { JOURNEY } from '../data/tuning.config';
 import type { LedgerRow } from '../core/setbackLog';
 import { createBrandLockup } from './BrandMark';
-import { createLivesPips, paintLivesPips } from './LivesPips';
 import {
   createPixelHeading,
   createPixelSvg,
@@ -83,14 +89,12 @@ const PX_TYPE = {
 } as const;
 
 /*
- * The delay ledger and the life-lost instruction reuse the specs above rather
- * than authoring near-identical ones: an obstacle name is a row label like a
- * receipt product (`rowStrong`), its months are a figure in a fixed column like a
- * bar value (`barValue`), and the instruction is the one sentence on its screen
- * that has to carry, exactly like the title screen's stake (`stakeText`).
+ * The out-of-lives instruction reuses a spec above rather than authoring a
+ * near-identical one: it is the one sentence on its screen that has to carry,
+ * exactly like the title screen's stake (`stakeText`).
+ *
+ * The ledger specs that used to live here went with the itemised table.
  */
-const LEDGER_LABEL = { ...PX_TYPE.rowStrong, maxChars: 24 } as const;
-const LEDGER_MONTHS = { ...PX_TYPE.barValue, maxShare: 14 } as const;
 const ADVICE = PX_TYPE.stakeText;
 
 /** Muted ink for supporting bitmap lines (the stake lead-in / tail). */
@@ -101,7 +105,7 @@ const VALUE_INK = { color: '#FF5400', shadow: 'rgba(0,16,22,0.9)' } as const;
 /** Captions and other secondary lines — cool grey, one step down from body. */
 const DIM_INK = { color: '#9FC8D2', shadow: 'rgba(0,16,22,0.85)' } as const;
 
-export type OverlayName = 'start' | 'titlecard' | 'pause' | 'lifelost' | 'summary' | 'win';
+export type OverlayName = 'start' | 'titlecard' | 'pause' | 'gameover' | 'summary' | 'win';
 export type CtaContext = 'win' | 'summary' | 'skip';
 
 export interface OverlayCallbacks {
@@ -109,7 +113,7 @@ export interface OverlayCallbacks {
   onSkip: () => void;
   onResume: () => void;
   onRestart: () => void;
-  /** Leave the life-lost screen: back into the stage, or back to the title. */
+  /** Leave the out-of-lives screen: back to the title with a clean slate. */
   onContinue: () => void;
   /** `topic` is set when the click came from a capability row. */
   onCta: (context: CtaContext, topic?: string) => void;
@@ -133,21 +137,24 @@ export interface ReceiptModel {
   reachedScreenName: string;
 }
 
-/** What the life-lost screen shows — mirrors `LifeLostView` from the Simulation. */
+/**
+ * What the out-of-lives screen shows — a narrowing of `LifeLostView` from the
+ * Simulation, which still carries the obstacle and the lives for the host's own
+ * use (the impact poses) and for analytics.
+ */
 export interface LifeLostModel {
-  cause: string;
-  monthsAdded: number;
-  livesLeft: number;
-  livesTotal: number;
-  screenName: string;
-  outOfLives: boolean;
-  ledger: readonly LedgerRow[];
-  delayMonths: number;
+  /** The delays booked this attempt, and what they cost. The whole payload. */
   delays: number;
+  delayMonths: number;
 }
 
 export interface OverlayData {
   levelLabel?: string;
+  /**
+   * One line under the title card. Present only on a retry, where it carries the
+   * instruction the deleted life-lost screen used to: take the ANSR badge.
+   */
+  hint?: string;
   receipt?: ReceiptModel;
   lifeLost?: LifeLostModel;
 }
@@ -170,13 +177,6 @@ interface ReceiptView {
   >;
   /** The delay summary under the capability rows (replaced the quick-win count). */
   delays: HTMLElement;
-}
-
-/** The itemised delay ledger, rebuilt from data each time it is shown. */
-interface LedgerView {
-  root: HTMLDivElement;
-  rows: HTMLDivElement;
-  totalValue: HTMLElement;
 }
 
 /** The three closing comparison bars (your run, ANSR average, going alone). */
@@ -208,6 +208,7 @@ export class Overlays {
   private titleCardLabel!: HTMLElement;
   private titleCardSr!: HTMLElement;
   private titleCardArt!: SVGSVGElement;
+  private titleCardHint!: HTMLElement;
   private winMonths!: HTMLElement;
   private winMonthsSr!: HTMLElement;
   private winMonthsArt!: SVGSVGElement;
@@ -222,17 +223,8 @@ export class Overlays {
   private summaryReached!: HTMLElement;
   private summaryMonths!: HTMLElement;
   private summaryReceipt!: ReceiptView;
-  // Life lost / out of lives.
-  private lostTitle!: HTMLElement;
-  private lostCause!: HTMLElement;
+  // Out of lives (the only end-of-attempt screen).
   private lostCost!: HTMLElement;
-  private lostLives!: HTMLElement;
-  private lostLivesSr!: HTMLElement;
-  private lostLivesArt!: SVGSVGElement;
-  private lostAdvice!: HTMLElement;
-  private lostLedger!: LedgerView;
-  private lostContinue!: HTMLButtonElement;
-  private lostCta!: HTMLButtonElement;
 
   private readonly reducedMotion: boolean;
   // Months count-up state (driven each frame by the Game).
@@ -249,7 +241,7 @@ export class Overlays {
     this.entries.set('start', this.buildStart());
     this.entries.set('titlecard', this.buildTitleCard());
     this.entries.set('pause', this.buildPause());
-    this.entries.set('lifelost', this.buildLifeLost());
+    this.entries.set('gameover', this.buildGameOver());
     this.entries.set('summary', this.buildSummary());
     this.entries.set('win', this.buildWin());
     for (const { el } of this.entries.values()) parent.appendChild(el);
@@ -267,10 +259,17 @@ export class Overlays {
         ...PX_TYPE.title,
         ...TITLE_INK,
       });
+      // The retry hint. Painted here rather than once at build time because the
+      // same card is shown for a first attempt (no hint) and a retry (hint), and
+      // the two must not be able to disagree.
+      this.titleCardHint.hidden = !data.hint;
+      if (data.hint) {
+        setPixelText(this.titleCardHint, data.hint, { ...PX_TYPE.caption, ...VALUE_INK });
+      }
     }
-    // Painted before the no-change bail-out, like the title card: the same
-    // overlay is shown again for the *next* delay, with different numbers.
-    if (name === 'lifelost' && data.lifeLost) this.renderLifeLost(data.lifeLost);
+    // Painted before the no-change bail-out, like the title card: the figures
+    // differ per attempt even when the screen itself is already up.
+    if (name === 'gameover' && data.lifeLost) this.renderGameOver(data.lifeLost);
     if (this._current === name) return;
     this.hideAll();
     this._current = name;
@@ -453,76 +452,20 @@ export class Overlays {
     }
   }
 
-  /** Paint an itemised ledger (obstacle, count, months) plus its total. */
-  private fillLedger(view: LedgerView, ledger: readonly LedgerRow[], total: number): void {
-    const rows = ledger.map((row) => {
-      const line = this.h('div', 'beam-run__ledger-row') as HTMLDivElement;
-      const label = this.pixel(
-        'span',
-        'beam-run__ledger-label',
-        row.count > 1 ? `${row.label} x${row.count}` : row.label,
-        { ...LEDGER_LABEL, ...TITLE_INK },
-      );
-      const months = this.pixel('span', 'beam-run__ledger-months', `+${row.months}`, {
-        ...LEDGER_MONTHS,
-        ...MUTED_INK,
-      });
-      line.append(label, months);
-      return line;
+  /**
+   * The out-of-lives screen, per attempt. One line changes: what the delays cost.
+   *
+   * Everything else on the screen is constant, so it is painted once at build
+   * time — a headline, an instruction and two buttons that never vary are not
+   * per-attempt data, and treating them as such is how the old version ended up
+   * repainting eight elements to change two numbers.
+   */
+  private renderGameOver(m: LifeLostModel): void {
+    setPixelText(this.lostCost, COPY.gameOver.cost(m.delays, m.delayMonths), {
+      ...PX_TYPE.clockStrong,
+      ...VALUE_INK,
+      maxChars: 24,
     });
-    view.rows.replaceChildren(...rows);
-    setPixelText(view.totalValue, `+${total}`, { ...LEDGER_MONTHS, ...VALUE_INK });
-  }
-
-  private renderLifeLost(m: LifeLostModel): void {
-    const obstacle = COPY.setback.tag[m.cause] ?? m.cause;
-    const reason = COPY.setback.reason[m.cause] ?? obstacle;
-
-    // Two very different screens, one surface. Out of lives the headline stops
-    // being about this obstacle and starts being about the attempt.
-    setPixelText(this.lostTitle, m.outOfLives ? COPY.gameOver.title : COPY.lifeLost.title, {
-      ...PX_TYPE.title,
-      ...TITLE_INK,
-      maxChars: 18,
-    });
-    setPixelText(
-      this.lostCause,
-      m.outOfLives ? COPY.gameOver.reached(m.screenName) : COPY.lifeLost.cause(obstacle),
-      { ...PX_TYPE.body, ...MUTED_INK },
-    );
-    setPixelText(
-      this.lostCost,
-      m.outOfLives
-        ? COPY.gameOver.cost(m.delays, m.delayMonths)
-        : COPY.lifeLost.cost(m.monthsAdded),
-      { ...PX_TYPE.clockStrong, ...VALUE_INK, maxChars: 24 },
-    );
-
-    paintLivesPips(this.lostLivesArt, m.livesLeft, m.livesTotal);
-    this.lostLivesSr.textContent = COPY.hud.lives(m.livesLeft, m.livesTotal);
-    this.lostLives.setAttribute('aria-label', COPY.hud.lives(m.livesLeft, m.livesTotal));
-
-    // The instruction is the reason this screen exists, and it is the same
-    // sentence in both variants — the only difference is the tense.
-    const advice = m.outOfLives ? COPY.gameOver.advice : COPY.lifeLost.advice;
-    setPixelText(this.lostAdvice, advice, { ...ADVICE, ...VALUE_INK });
-
-    // The itemised ledger is the out-of-lives payload. Mid-attempt it would
-    // bury the one instruction under a table.
-    this.lostLedger.root.hidden = !m.outOfLives || m.ledger.length === 0;
-    if (!this.lostLedger.root.hidden) {
-      this.fillLedger(this.lostLedger, m.ledger, m.delayMonths);
-    }
-
-    setPixelButtonLabel(
-      this.lostContinue,
-      m.outOfLives ? COPY.gameOver.restart : COPY.lifeLost.cont,
-      'primary',
-    );
-    this.lostCta.hidden = !m.outOfLives;
-
-    const el = this.entries.get('lifelost')?.el;
-    el?.setAttribute('aria-label', m.outOfLives ? COPY.gameOver.title : reason);
   }
 
   // --- builders -------------------------------------------------------------
@@ -682,74 +625,42 @@ export class Overlays {
     return { root, rows, delays };
   }
 
-  /** The itemised ledger shell (rows filled per-run by `fillLedger`). */
-  private buildLedger(title: string, totalLabel: string): LedgerView {
-    const root = this.h('div', 'beam-run__ledger') as HTMLDivElement;
-    root.append(
-      this.pixel('div', 'beam-run__receipt-title', title, {
-        ...PX_TYPE.caption,
-        ...DIM_INK,
-      }),
-    );
-    const rows = this.h('div', 'beam-run__ledger-rows') as HTMLDivElement;
-    const total = this.h(
-      'div',
-      'beam-run__ledger-row beam-run__ledger-row--total',
-    ) as HTMLDivElement;
-    const label = this.pixel('span', 'beam-run__ledger-label', totalLabel, {
-      ...LEDGER_LABEL,
-      ...TITLE_INK,
-    });
-    const totalValue = this.h('span', 'beam-run__ledger-months');
-    total.append(label, totalValue);
-    root.append(rows, total);
-    return { root, rows, totalValue };
-  }
-
   /**
-   * The life-lost screen. Every element is built once and repainted per delay
-   * (see `renderLifeLost`), including the headline — one surface, two jobs.
+   * The out-of-lives screen — four things on one centre line, and the only screen
+   * an attempt can end on other than the win receipt.
+   *
+   * What is *not* here is the design: no cause line ("the build stalled at
+   * Compliance" — the player just watched it), no lives readout (there are none),
+   * no itemised ledger (the same breakdown is on the closing receipt, and a table
+   * here competed with the one sentence that matters), and no two-column split.
+   * Everything is centred in one column and every element spans the same measure,
+   * so the screen is symmetrical about its own axis.
    *
    * `role="alertdialog"`: something happened *to* the player and they have to
-   * acknowledge it, which is exactly what that role is for. The primary button
-   * is always present and only its label changes, so focus always lands
-   * somewhere real whichever variant is showing.
+   * acknowledge it, which is exactly what that role is for.
    */
-  private buildLifeLost(): OverlayEntry {
-    const el = this.overlayShell(['scene', 'lifelost'], COPY.lifeLost.title);
+  private buildGameOver(): OverlayEntry {
+    const el = this.overlayShell(['scene', 'gameover'], COPY.gameOver.title);
     el.setAttribute('role', 'alertdialog');
     const brand = createBrandLockup(this.doc, { compact: true });
-    const stack = this.stack('receipt');
+    const stack = this.stack('gameover');
 
-    this.lostTitle = this.h('h2', 'beam-run__title');
-    this.lostCause = this.h('p', 'beam-run__subtitle');
+    const title = this.pixelTitle(COPY.gameOver.title, ['OUT OF', 'RUNWAY']);
+    // The one figure, and the one sentence it is evidence for.
     this.lostCost = this.h('div', 'beam-run__clock-strong');
-
-    this.lostLives = this.h('div', 'beam-run__lives');
-    this.lostLivesSr = this.h('span', 'beam-run__sr', '');
-    this.lostLivesArt = createLivesPips(this.doc, 0, 0, 'beam-run__lives-pips');
-    this.lostLives.append(this.lostLivesSr, this.lostLivesArt);
-
-    this.lostAdvice = this.h('p', 'beam-run__advice');
-    this.lostLedger = this.buildLedger(COPY.gameOver.ledgerTitle, COPY.gameOver.totalLabel);
-    this.lostLedger.root.hidden = true;
+    const advice = this.pixel('p', 'beam-run__advice', COPY.gameOver.advice, {
+      ...ADVICE,
+      ...MUTED_INK,
+    });
 
     const actions = this.h('div', 'beam-run__actions');
-    this.lostContinue = this.btn(COPY.lifeLost.cont, 'primary', () => this.cb.onContinue());
-    this.lostCta = this.btn(COPY.summary.cta, 'ghost', () => this.cb.onCta('summary'));
-    this.lostCta.hidden = true;
-    actions.append(this.lostContinue, this.lostCta);
+    const restart = this.btn(COPY.gameOver.restart, 'primary', () => this.cb.onContinue());
+    const cta = this.btn(COPY.gameOver.cta, 'ghost', () => this.cb.onCta('summary'));
+    actions.append(restart, cta);
 
-    stack.append(
-      this.lostTitle,
-      this.columns(
-        [this.lostCause, this.lostCost, this.lostLives],
-        [this.lostAdvice, this.lostLedger.root],
-      ),
-      actions,
-    );
+    stack.append(title, this.lostCost, advice, actions);
     el.append(brand, stack);
-    return { el, focusTarget: this.lostContinue };
+    return { el, focusTarget: restart };
   }
 
   /**
@@ -806,6 +717,14 @@ export class Overlays {
     return { el, focusTarget: start };
   }
 
+  /**
+   * The title card, plus the one line that replaced the life-lost screen.
+   *
+   * On a retry the card carries the instruction under the stage name, in the value
+   * orange: the player has just lost a life, the stage is starting again, and this
+   * is the only place left that says why the badge is there. It is hidden on a
+   * first attempt, so a clean run never sees an instruction it does not need.
+   */
   private buildTitleCard(): OverlayEntry {
     const el = this.overlayShell(['titlecard']);
     // Rebuilt per screen (the label changes), so it keeps its own sr + art nodes.
@@ -816,7 +735,9 @@ export class Overlays {
       ...TITLE_INK,
     });
     this.titleCardLabel.append(this.titleCardSr, this.titleCardArt);
-    el.append(this.titleCardLabel);
+    this.titleCardHint = this.h('p', 'beam-run__advice');
+    this.titleCardHint.hidden = true;
+    el.append(this.titleCardLabel, this.titleCardHint);
     return { el, focusTarget: el };
   }
 

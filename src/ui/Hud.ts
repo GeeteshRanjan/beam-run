@@ -4,9 +4,17 @@
  *
  * Two stacks of 8-bit plaques, hanging from the top corners of the frame:
  *
- *   top-left    current stage · lives remaining · the ANSR capability engaged
- *   top-right   TIME TO MARKET (the one number that matters, dominant)
- *               · the DELAY LOG, which grows downwards as the run goes wrong
+ *   top-left    current stage · the ANSR capability engaged
+ *   top-right   LIVES, as hearts · the DELAY LOG, which grows downwards as the
+ *               run goes wrong
+ *
+ * **The TIME TO MARKET plaque is gone** (owner call) and lives moved into the slot
+ * it held. The clock was the loudest thing on the frame and it was static for most
+ * of a run: the only thing that moves it is a booked delay, which the log below it
+ * already reports *with the reason attached*. Months are the argument the closing
+ * receipt makes; on the HUD they were a number with nothing to do. Lives are the
+ * opposite — they change, they are the stake of the next ten seconds, and they earn
+ * the loud corner.
  *
  * Both stacks are ordinary flex columns inside one absolutely-positioned wrapper
  * per corner, rather than four independently anchored plaques. That is a
@@ -26,8 +34,8 @@
  * span carrying the real prose, so `textContent` and assistive tech still read
  * ordinary sentences (with the casing and punctuation the bitmap font lacks).
  *
- * The lives readout uses shape, not colour: a life still held is a solid block,
- * a spent one a hollow outline, so it reads without relying on the dimming.
+ * The lives readout uses shape, not colour: a life still held is a solid heart,
+ * a spent one the same heart hollowed out, so it reads without relying on colour.
  */
 import { COPY } from '../data/copy';
 import type { LogPanelView } from '../core/setbackLog';
@@ -63,30 +71,33 @@ interface PixelSpec {
 }
 
 export const HUD_PX: Record<
-  'caption' | 'stage' | 'months' | 'unit' | 'chip' | 'chipSub' | 'lives' | 'logRow' | 'logTotal',
+  'caption' | 'stage' | 'chip' | 'chipSub' | 'lives' | 'logRow' | 'logTotal',
   PixelSpec
 > = {
   /**
-   * Small caps captions (STAGE, TIME TO MARKET) — ~14px glyphs at 1280.
+   * Small caps captions (STAGE, LIVES) — ~14px glyphs at 1280.
    *
    * The floors here are what keeps the two top plaques apart: on a 390px
    * portrait frame the ideal size is far below the floor, so the floor decides
-   * the width, and the stage plaque plus the clock plaque have to fit side by
+   * the width, and the stage plaque plus the lives plaque have to fit side by
    * side inside the frame (guarded by a test).
    */
   caption: { unit: 0.16, minPx: 1.6, maxPx: 2.6, maxShare: 33 },
   /** The stage name. */
   stage: { unit: 0.2, minPx: 1.8, maxPx: 3.4, maxShare: 40 },
-  /** The months figure: the loudest thing on the HUD (~34px glyphs at 1280). */
-  months: { unit: 0.38, minPx: 3.2, maxPx: 6, maxShare: 16 },
-  /** "MONTHS" after the figure. */
-  unit: { unit: 0.15, minPx: 1.7, maxPx: 2.4, maxShare: 16 },
   /** The engaged product name. */
   chip: { unit: 0.19, minPx: 2, maxPx: 3, maxShare: 30 },
   /** The capability's outcome line under the product ("Filings cleared"). */
   chipSub: { unit: 0.15, minPx: 1.7, maxPx: 2.4, maxShare: 45 },
-  /** The lives pips (hand-built art, sized by the same formula as text). */
-  lives: { unit: 0.26, minPx: 2.4, maxPx: 4, maxShare: 22 },
+  /**
+   * The lives hearts (hand-built art, sized by the same formula as text).
+   *
+   * One step up from the old pips: this readout inherited the top-right plaque
+   * from the clock, so it is now the loudest thing on the frame and is read from
+   * across a room. Three hearts is 25 cells, so `maxShare` still caps it well
+   * inside a quarter of the frame.
+   */
+  lives: { unit: 0.34, minPx: 2.6, maxPx: 5, maxShare: 26 },
   /**
    * One delay-log row ("OFFER DECLINED +2"). The longest tag in
    * `COPY.setback.tag` is 17 characters including the figure, so the cap is set
@@ -124,7 +135,6 @@ export interface PowerHud {
 
 export interface HudModel {
   levelLabel: string;
-  months: number;
   /** Lives still held this attempt. */
   lives: number;
   livesTotal: number;
@@ -150,12 +160,19 @@ function sizePixels(svg: SVGSVGElement, spec: PixelSpec): void {
 /**
  * The numeric twin of `sizePixels` — same formula, used to prove at test time
  * that the top-left and top-right plaques cannot overlap at any frame width.
+ *
+ * Takes authored *cells* rather than a string, so it also answers for the hand-built
+ * artwork (the lives hearts), which has a cell count but no text.
  */
-export function pixelWidthPx(text: string, spec: PixelSpec, frameWidth: number): number {
-  const cols = pixelCols(text);
+export function pixelArtWidthPx(cols: number, spec: PixelSpec, frameWidth: number): number {
   const u = frameWidth / 100;
   const clamped = Math.min(Math.max(cols * spec.minPx, cols * spec.unit * u), cols * spec.maxPx);
   return Math.min(clamped, spec.maxShare * u);
+}
+
+/** `pixelArtWidthPx` for a string set in the 5×7 font. */
+export function pixelWidthPx(text: string, spec: PixelSpec, frameWidth: number): number {
+  return pixelArtWidthPx(pixelCols(text), spec, frameWidth);
 }
 
 function paint(svg: SVGSVGElement, text: string, spec: PixelSpec, ink: PixelTextOptions): void {
@@ -176,10 +193,6 @@ export class Hud {
   private readonly level: HTMLDivElement;
   private readonly levelSr: HTMLSpanElement;
   private readonly levelArt: SVGSVGElement;
-  private readonly clock: HTMLDivElement;
-  private readonly clockValue: HTMLSpanElement;
-  private readonly clockValueSr: HTMLSpanElement;
-  private readonly clockValueArt: SVGSVGElement;
   private readonly lives: HTMLDivElement;
   private readonly livesSr: HTMLSpanElement;
   private readonly livesArt: SVGSVGElement;
@@ -195,9 +208,10 @@ export class Hud {
   private readonly powerProductSr: HTMLSpanElement;
   private readonly powerProductArt: SVGSVGElement;
   private readonly live: HTMLDivElement;
-  private lastMonths = -1;
+  /** Last painted life count, so a *spent* life can be told from a reset one. */
+  private lastLives = -1;
   /** Painted strings, so the bitmap art is only rebuilt when it changes. */
-  private drawn = { level: '', months: '', lives: '', log: '', product: '', name: '' };
+  private drawn = { level: '', lives: '', log: '', product: '', name: '' };
 
   constructor(parent: HTMLElement) {
     const doc = parent.ownerDocument;
@@ -222,31 +236,9 @@ export class Hud {
     this.levelArt = this.art('beam-run__hud-level-name');
     this.level.append(this.levelSr, this.levelArt);
 
-    // The journey clock — deliberately the loudest thing on the HUD.
-    this.clock = doc.createElement('div');
-    this.clock.className = 'beam-run__hud-row beam-run__hud-clock';
-    this.clock.append(
-      this.caption(
-        `${COPY.hud.monthsLabel}: `,
-        COPY.hud.monthsLabel,
-        'beam-run__hud-clock-label',
-      ),
-    );
-    const figure = doc.createElement('div');
-    figure.className = 'beam-run__hud-clock-figure';
-    this.clockValue = doc.createElement('span');
-    this.clockValue.className = 'beam-run__hud-clock-value';
-    this.clockValueSr = this.srSpan('');
-    this.clockValueArt = this.art();
-    this.clockValue.append(this.clockValueSr, this.clockValueArt);
-    const clockUnit = doc.createElement('span');
-    clockUnit.className = 'beam-run__hud-clock-unit';
-    clockUnit.append(this.srSpan(` ${COPY.hud.monthsUnit}`), this.staticArt(COPY.hud.monthsUnit, PX.unit, MUTED_INK));
-    figure.append(this.clockValue, clockUnit);
-    this.clock.append(figure);
-
-    // Lives: caption + pips. Under the stage, because it belongs with "where am
-    // I" rather than with "what has it cost" on the right.
+    // Lives: caption over the hearts, in the top-right plaque the clock used to
+    // hold. It sits above the delay log on purpose — the log is what a lost life
+    // *cost*, so the two read as cause and consequence down one column.
     this.lives = doc.createElement('div');
     this.lives.className = 'beam-run__hud-row beam-run__hud-lives';
     this.lives.append(
@@ -259,7 +251,7 @@ export class Hud {
     this.livesArt.setAttribute('class', 'beam-run__pixels beam-run__hud-lives-pips');
     this.lives.append(this.livesSr, this.livesArt);
 
-    // The delay log: hangs off the clock and grows downwards, one row per
+    // The delay log: hangs under the lives and grows downwards, one row per
     // obstacle. Hidden entirely until the first delay, so a clean run never sees
     // it and the frame stays quiet.
     this.log = doc.createElement('div');
@@ -293,8 +285,8 @@ export class Hud {
     this.live.setAttribute('role', 'status');
     this.live.setAttribute('aria-live', 'polite');
 
-    leftStack.append(this.level, this.lives, this.power);
-    rightStack.append(this.clock, this.log);
+    leftStack.append(this.level, this.power);
+    rightStack.append(this.lives, this.log);
     this.root.append(leftStack, rightStack, this.live);
     parent.appendChild(this.root);
   }
@@ -338,33 +330,26 @@ export class Hud {
       paint(this.levelArt, model.levelLabel, PX.stage, INK);
     }
 
-    // Zero-padded like an arcade counter, which also keeps the right-anchored
-    // plaque from resizing when the count crosses ten.
-    const monthsArt = `${model.months}`.padStart(2, '0');
-    if (monthsArt !== this.drawn.months) {
-      this.drawn.months = monthsArt;
-      this.clockValueSr.textContent = `${model.months}`;
-      paint(this.clockValueArt, monthsArt, PX.months, INK);
-    }
-    this.clock.setAttribute(
-      'aria-label',
-      `${COPY.hud.monthsLabel}: ${model.months} ${COPY.hud.monthsUnit}`,
-    );
-    // Nudge the clock when it moves so a booked delay is impossible to miss.
-    if (this.lastMonths >= 0 && model.months !== this.lastMonths) {
-      this.clock.classList.remove('beam-run__hud-clock--bump');
-      void this.clock.offsetWidth; // force reflow so the animation can retrigger
-      this.clock.classList.add('beam-run__hud-clock--bump');
-    }
-    this.lastMonths = model.months;
-
     const livesKey = `${model.lives}/${model.livesTotal}`;
     if (livesKey !== this.drawn.lives) {
+      const spent = this.lastLives >= 0 && model.lives < this.lastLives;
+      this.lastLives = model.lives;
       this.drawn.lives = livesKey;
       const value = COPY.hud.livesValue(model.lives, model.livesTotal);
       this.livesSr.textContent = value;
       paintLives(this.livesArt, model.lives, model.livesTotal);
       this.lives.setAttribute('aria-label', `${COPY.hud.livesLabel}: ${value}`);
+      // Nudge the plaque when a heart goes out. This is the beat the clock's bump
+      // used to carry — and it belongs here, because losing a life is the event
+      // and the months were only its price.
+      // Cleared unconditionally first: it retriggers the animation on a second
+      // loss, and it means the reset to a full complement at the start of the next
+      // attempt does not inherit the flash from the end of the last one.
+      this.lives.classList.remove('beam-run__hud-lives--spent');
+      if (spent) {
+        void this.lives.offsetWidth; // force reflow so the animation can retrigger
+        this.lives.classList.add('beam-run__hud-lives--spent');
+      }
     }
 
     this.updateLog(model.log);

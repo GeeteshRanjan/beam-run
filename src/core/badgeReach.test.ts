@@ -13,8 +13,9 @@
 import { describe, it, expect } from 'vitest';
 import { SCREENS } from '../data/levels';
 import { makeInput } from './Input';
-import { PLAYER, POWERUPS } from '../data/tuning.config';
+import { PLAYER, POWERUPS, RESOLUTION } from '../data/tuning.config';
 import { badgeLowestBox } from '../world/badgeFloat';
+import { dropColumnsOf, dropRestBox, isAirdropped } from '../world/badgeDrop';
 import { DT, driveToScreen, GROUND_FEET_Y, stepN } from '../test/helpers';
 import type { Simulation } from './Simulation';
 
@@ -51,8 +52,30 @@ function waitAndJump(sim: Simulation, cx: number): boolean {
   return false;
 }
 
+/*
+ * The AIR-DROPPED badge (Hire Under Fire) answers these questions somewhere else, and
+ * has to be excluded from the rail's versions of them.
+ *
+ * The rail tests are all phrased in terms of `badgeLowestBox` — the bottom of a float
+ * band this badge does not have. Applied to the drop screen they measure the *drone's
+ * flight row* (gy 5) as if the pickup hung there, which is 161px over a standing head
+ * and fails for being correct. What the drop screen actually has to prove — that the
+ * badge rests out of standing reach on its brick, and that a one-tap auto-run player
+ * can still jump it off — is proved against `dropRestBox` below and in
+ * `screen4.test.ts`, both of which know where the badge really is.
+ */
+/*
+ * And Reception carries NO badge at all now (owner call), so "every screen" has to
+ * mean "every screen that has one" — the same lesson as the rail/drop split, one
+ * step further: a rule phrased in terms of a badge must exclude the screen without
+ * one, or it fails for being correct.
+ */
+const badged = SCREENS.filter((s) => s.badge);
+const railScreens = badged.filter((s) => !isAirdropped(s.badge!));
+const dropScreens = badged.filter((s) => isAirdropped(s.badge!));
+
 describe('badge reachability', () => {
-  for (const screen of SCREENS) {
+  for (const screen of railScreens) {
     const badge = screen.badge!;
 
     describe(`screen ${screen.id} — ${screen.name}`, () => {
@@ -85,12 +108,54 @@ describe('badge reachability', () => {
 
   it('needs less than half a jump of lift, so the hop is small', () => {
     const jumpRise = (PLAYER.JUMP_VELOCITY * PLAYER.JUMP_VELOCITY) / (2 * PLAYER.GRAVITY);
-    for (const screen of SCREENS) {
+    for (const screen of railScreens) {
       const box = badgeLowestBox(screen.badge!);
       const standingHead = GROUND_FEET_Y - PLAYER.HEIGHT;
       const lift = standingHead - (box.y + box.h);
       expect(lift).toBeGreaterThan(0); // out of reach standing…
       expect(lift).toBeLessThan(jumpRise / 2); // …but a light hop reaches it
     }
+  });
+
+  describe('the air-dropped badge sits on a brick, so the same rule holds there', () => {
+    it('rests out of standing reach on every drop column', () => {
+      // The whole reason the brick exists (owner call): on the floor, an auto-running
+      // player collected the one pickup in the game with a clock on it *without leaving
+      // the ground*. Every column has to be a jump, not just the one the first delivery
+      // happens to use.
+      const jumpRise = (PLAYER.JUMP_VELOCITY * PLAYER.JUMP_VELOCITY) / (2 * PLAYER.GRAVITY);
+      const standingHead = GROUND_FEET_Y - PLAYER.HEIGHT;
+      expect(dropScreens.length).toBeGreaterThan(0);
+      for (const screen of dropScreens) {
+        const badge = screen.badge!;
+        dropColumnsOf(badge).forEach((gx, n) => {
+          const box = dropRestBox(badge, n);
+          const lift = standingHead - (box.y + box.h);
+          expect(lift, `drop at gx=${gx} is walkable`).toBeGreaterThan(0);
+          // A brick is a bigger hop than a float band's bottom, because a solid has to
+          // be *cleared* rather than touched — but it still has to be inside one jump
+          // with room, or the capability is gated on a perfect arc.
+          expect(lift, `drop at gx=${gx} is out of jump range`).toBeLessThan(jumpRise * 0.7);
+        });
+      }
+    });
+
+    it('has a brick under each column that leaves the corridor walkable', () => {
+      // The brick's underside is the trap: 4px lower and it is a wall across the only
+      // route on the screen rather than a platform over it.
+      for (const screen of dropScreens) {
+        const badge = screen.badge!;
+        const standingHead = GROUND_FEET_Y - PLAYER.HEIGHT;
+        for (const gx of dropColumnsOf(badge)) {
+          const brick = screen.solids.find((s) => s.role?.includes('pedestal') && s.gx === gx);
+          expect(brick, `no brick at gx=${gx}`).toBeTruthy();
+          expect((brick!.gy + brick!.h) * RESOLUTION.TILE).toBeLessThanOrEqual(standingHead);
+          // …and the badge rests on its top face, not somewhere near it.
+          expect(dropRestBox(badge, dropColumnsOf(badge).indexOf(gx)).y + RESOLUTION.TILE).toBe(
+            brick!.gy * RESOLUTION.TILE,
+          );
+        }
+      }
+    });
   });
 });

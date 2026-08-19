@@ -16,7 +16,11 @@
 import type { BadgeType } from './levels';
 
 /**
- * The four ANSR capabilities, in journey order. This is the closing receipt —
+ * The four ANSR capabilities, in journey order — setup, compliance, workplace,
+ * hiring (Compliance moved up behind Setup Delays, and the Workplace screen
+ * replaced Local Expertise outright). The order is asserted against the run itself (`core/golden.test.ts` walks every
+ * screen and expects the badges it collects to be exactly this list), so it can
+ * never drift from `levels.json`. This is the closing receipt —
  * the only place the product names are stated in full, and the thing a prospect
  * screenshots. `monthsSaved` sums to BASELINE_MONTHS − ANSR_BENCHMARK_MONTHS.
  */
@@ -47,6 +51,24 @@ export const CAPABILITIES: readonly CapabilityCopy[] = [
     tag: 'ANSR 1WRK',
   },
   {
+    badge: 'CLEAR_PATH',
+    product: 'GCC-BOT',
+    stage: 'Compliance',
+    effect: 'Entity, payroll, legal, tax and audit obligations handled',
+    monthsSaved: 3,
+    topic: 'compliance',
+    tag: 'GCC-BOT',
+  },
+  {
+    badge: 'UNWRAP',
+    product: '500Leaders',
+    stage: 'Workplace',
+    effect: 'On-ground leaders who unblock the team instead of adding process',
+    monthsSaved: 2,
+    topic: 'workplace',
+    tag: '500LEADERS',
+  },
+  {
     badge: 'EXTINGUISH',
     product: 'Talent500',
     stage: 'Hiring',
@@ -54,24 +76,6 @@ export const CAPABILITIES: readonly CapabilityCopy[] = [
     monthsSaved: 4,
     topic: 'talent',
     tag: 'TALENT500',
-  },
-  {
-    badge: 'CLEAR_PATH',
-    product: 'GCC-BOT',
-    stage: 'Compliance',
-    effect: 'Filings, tax and entity obligations handled',
-    monthsSaved: 3,
-    topic: 'compliance',
-    tag: 'GCC-BOT',
-  },
-  {
-    badge: 'FORESIGHT',
-    product: '500Leaders',
-    stage: 'Local expertise',
-    effect: 'On-ground leadership and market context from day one',
-    monthsSaved: 2,
-    topic: 'expertise',
-    tag: '500LEADERS',
   },
 ] as const;
 
@@ -121,8 +125,13 @@ export const COPY = {
 
   hud: {
     stageLabel: 'Stage',
-    monthsLabel: 'Time to market',
-    monthsUnit: 'months',
+    /*
+     * There is no TIME TO MARKET plaque on the HUD any more (owner call): the
+     * clock was the loudest thing on the frame, and the figure it showed only
+     * moves when a delay is booked — which the delay log already reports, with
+     * the reason attached. The months live where they are the argument: the
+     * closing receipt. Lives took the plaque's place in the top-right.
+     */
     powerLabel: 'ANSR engaged',
     livesLabel: 'Lives',
     /** Full sentence, for the life-lost screen and the plaque's label. */
@@ -171,7 +180,10 @@ export const COPY = {
     PLACE_TILE: 'Setup stood up',
     EXTINGUISH: 'Roles filled',
     CLEAR_PATH: 'Filings cleared',
-    FORESIGHT: 'Local context',
+    /* Ordering note: the receipt lists capabilities in journey order, which is
+     * setup → compliance → workplace → hiring. `CAPABILITIES` above is that
+     * order. */
+    UNWRAP: 'Team unblocked',
     /* The two screens with nothing to defend against still carry the mark. */
     SAFE_PASSAGE: 'Badge taken',
   } as Record<string, string>,
@@ -180,9 +192,9 @@ export const COPY = {
   onClear: {
     0: 'Approved on paper.',
     1: 'Setup accelerated.',
-    2: 'Talent secured.',
-    3: 'Compliance cleared.',
-    4: 'Local expertise onboarded.',
+    2: 'Compliance cleared.',
+    3: 'Workplace running.',
+    4: 'Talent secured.',
     5: 'Live.',
   } as Record<number, string>,
 
@@ -197,70 +209,72 @@ export const COPY = {
     tag: {
       stamp: 'SETUP DENIED',
       fire: 'OFFER DECLINED',
-      gate: 'FILING REJECTED',
-      spike: 'NO LOCAL CONTEXT',
+      /*
+       * The compliance monsters. The old 'gate' cause went with the separate
+       * barriers: each monster now IS the barrier, so there is one line for it.
+       */
+      monster: 'QUERY RAISED',
+      /*
+       * The Workplace figure. The line names the *room*, never the person wrapped
+       * up in it — he is the one who fixes the place two beats later, so calling
+       * him the obstacle would undercut the whole screen.
+       */
+      mummy: 'WORKPLACE BLOCKED',
       fall: 'GROUND GAVE WAY',
     } as Record<string, string>,
     /** Full sentence for the aria-live announcement. */
     reason: {
       stamp: 'Setup denied. The paperwork goes back to the start.',
       fire: 'An offer was declined. The hiring cycle restarts.',
-      gate: 'Approval refused. The filing is resubmitted.',
-      spike: 'No local context, so it was the wrong call.',
+      monster: 'A compliance query came back. The stage waits on an answer.',
+      mummy: 'The workplace is still taped off. Nobody can get to work.',
       fall: 'The ground gave way. Rebuilt from the last solid step.',
     } as Record<string, string>,
     months: (months: number) => `+${months} months`,
   },
 
   /**
-   * The life-lost screen. Two jobs, one surface.
+   * Losing a life no longer shows a screen at all (owner call): the stage simply
+   * starts again. What is left of the old coaching overlay is this one line,
+   * printed under the stage name on the title card of a retry — the teaching beat
+   * ("the badge is why this happened") without a dialog to dismiss.
    *
-   * With lives left it is coaching, and it has exactly one instruction: take the
-   * ANSR badge. That line is the reason the screen exists — a player who loses a
-   * life and is told only "try again" learns nothing about why the badge is
-   * there. It names the obstacle, shows what the obstacle cost, and sends them
-   * back into the same stage.
-   *
-   * Note the headline: the stage stalled, not the player. Same rule as the
-   * setback lines.
+   * Kept deliberately short: it is read in the second and a half a title card is
+   * on screen, and the full sentence still reaches assistive tech through the
+   * setback announcement (`a11y.setback` + `a11y.livesLeft`).
    */
   lifeLost: {
-    title: 'The stage stalled.',
-    /** Interpolated with the obstacle tag, e.g. "Red tape stopped the build." */
-    cause: (obstacle: string) => `${obstacle} stopped the build.`,
-    cost: (months: number) => `That is ${months} more months on the clock`,
-    livesLeft: (left: number) => (left === 1 ? '1 life left' : `${left} lives left`),
-    /**
-      * The instruction. This is the point of the screen. It is wrapped into
-      * bitmap lines at render time rather than authored twice — two copies of the
-      * same sentence is two places for it to drift.
-      */
-    advice: 'Take the floating ANSR badge and you clear the hurdles safely.',
-    cont: 'Keep going',
+    retryHint: 'Take the ANSR badge',
   },
 
   /**
-   * Out of lives. Not a wall and not a scolding — the closing ledger.
+   * Out of lives — the only end-of-attempt screen there is now, and a conversion
+   * surface rather than a wall.
    *
-   * Everything the run lost is itemised by obstacle, totalled, and followed by
-   * the one sentence the ledger is evidence for. Then the same two routes every
-   * other end screen offers: play again, or talk to us. An attempt that ends
-   * here still ends on a conversion surface.
+   * Deliberately four things and nothing else (owner call: less text, symmetrical,
+   * low cognitive load): the headline, the one figure that matters, the argument
+   * that figure is evidence for, and the two routes onward. The itemised ledger it
+   * used to carry is gone — the same breakdown is on the closing receipt, and here
+   * it was a table competing with the instruction.
    */
   gameOver: {
     title: 'Out of runway.',
-    reached: (name: string) => `The build stalled at ${name}.`,
-    ledgerTitle: 'Where the time went',
-    /**
-     * The headline cost. It names the delays rather than repeating the ledger's
-     * own total label, which is the same figure two inches lower.
-     */
+    /** The one fact: what the delays cost, in a single line. */
     cost: (delays: number, months: number) =>
       `${delays === 1 ? '1 delay' : `${delays} delays`} cost ${months} months`,
-    totalLabel: 'Months added by delays',
-    /** The argument the ledger is evidence for. */
-    advice: 'Take the ANSR badge at every stage and these months never happen.',
-    restart: 'Back to the start',
+    /** The argument that figure is evidence for. */
+    advice: 'Take the ANSR badge and these months never happen.',
+    restart: 'Start again',
+    /**
+     * The Navigator route, named rather than pitched.
+     *
+     * The other end screens use the sentence form ("See what closes the gap → GCC
+     * Opportunity Navigator"), which wraps onto two bitmap lines. Beside an
+     * eleven-character primary button that made the pair lopsided, and it is a
+     * second sentence on a screen whose whole revision was about having fewer of
+     * them. At 25 characters this still fits one line.
+     */
+    cta: 'GCC Opportunity Navigator',
   },
 
   win: {
@@ -328,6 +342,14 @@ export const COPY = {
     moveLeft: 'Move left',
     moveRight: 'Move right',
     jump: 'Jump',
+    /**
+     * The act button's label. Two badges arm a tool, and they arm two different
+     * ones, so the button says what it does rather than naming a generic "fire".
+     * `shoot` is the Workplace cutter and the default; `shootWater` is the hiring
+     * dragon's cannon. Sentences, not bitmap type — these are aria-labels.
+     */
+    shoot: 'Cut the tape',
+    shootWater: 'Spray water at the dragon',
   },
 
   fallback: {

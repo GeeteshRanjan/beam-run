@@ -27,7 +27,17 @@ export type SfxCue =
   /** A delay was booked. A dull thud, deliberately not a "death" sting. */
   | 'setback'
   | 'screenClear'
-  | 'win';
+  | 'win'
+  /** The hiring dragon's opening roar — the whole of its safe beat is audible. */
+  | 'roar'
+  /** The water cannon firing. */
+  | 'water'
+  /** Water meeting fire: the hiss that says the exchange was won. */
+  | 'steam'
+  /** A layer of the dragon's costume coming off. */
+  | 'strip'
+  /** Five candidates on the floor, hired. */
+  | 'hired';
 
 interface AudioParamLike {
   value: number;
@@ -74,7 +84,17 @@ function defaultFactory(): AudioContextLike | null {
   return Ctor ? new Ctor() : null;
 }
 
-const KEY_CUES: ReadonlySet<SfxCue> = new Set(['badge', 'setback', 'screenClear', 'win']);
+const KEY_CUES: ReadonlySet<SfxCue> = new Set([
+  'badge',
+  'setback',
+  'screenClear',
+  'win',
+  // The roar and the hire are the two beats on Hire Under Fire the player is meant
+  // to stop and listen to. `water` deliberately is not: it fires several times a
+  // second, and ducking the music on every jet would pump the whole mix.
+  'roar',
+  'hired',
+]);
 
 export class AudioEngine {
   private readonly createContext: () => AudioContextLike | null;
@@ -215,6 +235,38 @@ export class AudioEngine {
         this.tone(523, 523, 'triangle', 0.25, 0.45);
         this.tone(659, 659, 'triangle', 0.25, 0.45, 0.18);
         this.tone(784, 988, 'sine', 0.6, 0.4, 0.36);
+        break;
+      case 'roar':
+        // Two saws falling a long way, the second under the first: with no noise
+        // source and no filter, a growl has to be built out of low detuned ramps.
+        // Long on purpose — it plays over the dragon's whole safe beat.
+        this.tone(150, 62, 'sawtooth', 0.85, 0.5);
+        this.tone(97, 44, 'sawtooth', 1.05, 0.42, 0.05);
+        this.tone(320, 120, 'square', 0.35, 0.16, 0.02);
+        break;
+      case 'water':
+        // A short upward hiss. Rising, because it is leaving the barrel; quiet,
+        // because it can fire six times a second and must never tire the ear.
+        this.tone(880, 1560, 'sine', 0.1, 0.24);
+        this.tone(1320, 2100, 'triangle', 0.07, 0.12, 0.01);
+        break;
+      case 'steam':
+        // Water winning: high, falling, short. The mirror of the jet.
+        this.tone(2100, 900, 'sine', 0.18, 0.2);
+        this.tone(1500, 700, 'triangle', 0.14, 0.12, 0.02);
+        break;
+      case 'strip':
+        // Something coming off: a low pluck with a bright tick on top.
+        this.tone(420, 180, 'square', 0.14, 0.3);
+        this.tone(1180, 1180, 'triangle', 0.06, 0.18, 0.03);
+        break;
+      case 'hired':
+        // Celebratory, and pointedly the same major arpeggio as `win` a fifth up:
+        // this is the same kind of moment, one screen early.
+        this.tone(784, 784, 'triangle', 0.13, 0.42);
+        this.tone(988, 988, 'triangle', 0.13, 0.42, 0.11);
+        this.tone(1175, 1175, 'triangle', 0.13, 0.42, 0.22);
+        this.tone(1568, 1568, 'sine', 0.4, 0.36, 0.33);
         break;
     }
     if (KEY_CUES.has(cue)) this.duck();

@@ -21,15 +21,29 @@ function playToWin(opts: { engage?: boolean } = {}): Simulation {
   let guard = 0;
   while (sim.state !== 'WIN' && guard++ < 8000) {
     if (sim.state === 'PLAYING') {
-      if (opts.engage) {
+      // Reception carries no badge at all now (owner call), so "take the badge"
+      // has to ask the screen whether there is one before it waits for it —
+      // otherwise the run stalls on the tutorial screen waiting for a delivery
+      // that is never coming.
+      if (opts.engage && sim.screen.data.badge && !sim.powerups.collected) {
         // Read the badge box from the sim: it floats, so its anchor cell is only
         // where it started.
         const box = sim.badgeBox;
-        if (box) {
-          sim.player.box.x = box.x;
-          sim.player.box.y = box.y;
+        if (!box) {
+          /*
+           * Nothing to take *yet*. On five screens the badge is always there, so this
+           * never happens; on Hire Under Fire it is **delivered**, and there is no box
+           * at all until the drone has released it and the parcel has landed on its
+           * brick (~1.7s in). Walking to the exit meanwhile cleared the screen before
+           * the badge existed, and the receipt came back with three capabilities
+           * instead of four — which is exactly the kind of silent gap this run is for.
+           */
           sim.step(DT, makeInput());
+          continue;
         }
+        sim.player.box.x = box.x;
+        sim.player.box.y = box.y;
+        sim.step(DT, makeInput());
       }
       const target = sim.screen.winTriggerX ?? sim.screen.exitX;
       if (target !== undefined) sim.player.box.x = target;
@@ -52,9 +66,10 @@ describe('Golden playthrough', () => {
   it('engages every badge and reports the four capabilities on the receipt', () => {
     const sim = playToWin({ engage: true });
     const r = sim.receipt;
-    // Six badges are taken; the two SAFE_PASSAGE ones carry no capability, so the
-    // receipt lists the four real ones in journey order.
-    expect(r.engaged).toEqual(['SAFE_PASSAGE', ...CAPABILITIES.map((c) => c.badge)]);
+    // Five badges are taken — Reception has none — and the Tech Park's
+    // SAFE_PASSAGE carries no capability, so the receipt lists the four real ones
+    // in journey order, which is the order they are collected in.
+    expect(r.engaged).toEqual([...CAPABILITIES.map((c) => c.badge), 'SAFE_PASSAGE']);
     expect(r.engaged.filter((b) => b !== 'SAFE_PASSAGE')).toHaveLength(4);
     expect(r.matchedBenchmark).toBe(true);
     expect(r.benchmarkMonths).toBe(JOURNEY.ANSR_BENCHMARK_MONTHS);

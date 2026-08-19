@@ -8,9 +8,13 @@ This workspace builds **Beam Run: Market Entry** (an ANSR HTML5 Canvas platforme
 
 ## Do this at the start of every session
 1. Read `HANDOFF.md` (project root) — it is the source of truth for *current
-   state*: environment, status, architecture, invariants, open questions, next
-   task. Follow it. Full history of past passes lives in `docs/JOURNAL.md`; read
-   it only when you need the background on a specific past decision.
+   state* and the **router** to everything else. Follow it. It carries status,
+   environment, locked defaults and the model proper; the detail is split so a
+   session does not load all of it. Read **only** the companion doc your task
+   touches: `docs/INVARIANTS.md` (rules and traps — before editing anything) ·
+   `docs/SCREENS.md` (per-screen model) · `docs/ARCHITECTURE.md` (module map) ·
+   `docs/OPEN.md` (owner decisions). Full history is `docs/JOURNAL.md`; read it
+   only when you need the background on a specific past decision.
 2. The full spec docs live in the parent `ANSR Game/` folder
    (`01_Game_Design_Document.md` … `10_Project_Plan_and_Roadmap.md`,
    `tuning.config.ts`, `levels.json`, `analytics-events.json`) and are
@@ -40,10 +44,11 @@ This workspace builds **Beam Run: Market Entry** (an ANSR HTML5 Canvas platforme
 3. **Update `HANDOFF.md`**, keeping it lean:
    - add a one-line summary at the top of "Recent passes" and drop the oldest so
      the list stays at 3;
-   - refresh the status numbers (tests, gzip, budget gate) and the architecture
-     map / open questions if they changed;
-   - promote any permanent rule or trap the pass uncovered into the
-     "Invariants & traps" section — that is the only section meant to grow.
-   Do **not** paste the full narrative here. If HANDOFF.md passes ~400 lines or
-   ~25 KB, something belongs in the journal instead.
+   - refresh the status numbers (tests, gzip, budget gate).
+   Everything else goes to the doc that owns it, **never back into HANDOFF.md**:
+   permanent rules and traps → `docs/INVARIANTS.md` (the one meant to grow) ·
+   per-screen detail → `docs/SCREENS.md` · module changes →
+   `docs/ARCHITECTURE.md` · owner questions → `docs/OPEN.md`.
+   Do **not** paste the full narrative anywhere but the journal. If HANDOFF.md
+   passes ~250 lines or ~20 KB, something is in the wrong file.
 4. Only then start the next task.

@@ -2,6 +2,7 @@ import { defineConfig } from 'vite';
 // @ts-expect-error — plain-JS build helper, no types needed.
 import { cssMinifyPlugin } from './scripts/css-minify.mjs';
 import { notFoundPagePlugin } from './scripts/not-found-plugin';
+import { stripLevelNotesPlugin } from './scripts/strip-level-notes';
 
 /**
  * Standalone SITE build (for Vercel / static hosting).
@@ -16,7 +17,16 @@ import { notFoundPagePlugin } from './scripts/not-found-plugin';
 export default defineConfig(() => ({
   // `vite preview --config vite.config.site.ts` serves dist-site; without this
   // the history fallback would answer /gcc-opportunity-navigator with the game.
-  plugins: [notFoundPagePlugin(), cssMinifyPlugin()],
+  /*
+   * `stripLevelNotesPlugin` was missing here until this pass, and this is the build
+   * that gets deployed: every word of `levels.json`'s authoring prose — the meta
+   * notes, the conventions block, every screen, badge, solid and hazard note — was
+   * shipping to the live page, ~5 KB of it. The library build has stripped them
+   * since the plugin was written, and the budget gate only measures `dist/`, so
+   * nothing ever reported it. Caught by grepping this bundle for a sentence written
+   * three minutes earlier, which is exactly what that habit is for.
+   */
+  plugins: [notFoundPagePlugin(), stripLevelNotesPlugin(), cssMinifyPlugin()],
   base: './',
   build: {
     outDir: 'dist-site',

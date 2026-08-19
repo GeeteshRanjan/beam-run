@@ -166,3 +166,1334 @@ short enough to actually be read at the start of a session.
   Also gone with the old sprite: `drawBadgeDisc`, `BADGE_GRID`, `BADGE_GRID_W`, and the `createRadialGradient` + `arc()` glow in `Game.drawBadge` — the last non-8-bit drawing in the world layer. `render/badge.test.ts` guards that with a canvas stub whose `createRadialGradient` and `arc` **throw**.
 
   **Green:** typecheck + lint + **314 tests (38 files)** + build + build:site + validate:levels; ESM 44.94 KB / IIFE 45.21 KB gzip; budget gate **88.0 KB of 90 KB** (+0.9 KB — the new module net of the deleted disc; headroom is now 2 KB, which is worth knowing before the next visual pass). Files added: `src/render/badge.ts`(+test), `src/core/badgeReach.test.ts`. Changed: `src/core/{Game.ts,setbackLog.test.ts}`, `src/render/sprites.ts`, `src/world/badgeFloat.ts`, `src/data/{tuning.config.ts,levels.json}` + both root mirrors, `scripts/validate-levels.ts`. **Not verified:** the feel of the 0.40s one-tap window on a real phone — it is proved reachable and proved contiguous in the sim, but nobody has thumbed it.
+
+- **The powerup is now the actual ANSR logo, on every screen (owner call).** Owner feedback: "for the powerup in all screens you have not used the ANSR logo we have — please look at what we already have and use that; one of the places it is used is the first screen beside ANSRcade. If what you have built can be used, that's best; otherwise recreate an 8-bit version that looks the same." The mark beside "ANSRcade" is `ui/ansrMark.ts` — the real brand asset's sunburst path, generated from `ANSR Logo.svg` by `scripts/build-ansr-mark.mjs`, drawn in the DOM by `ui/BrandMark.ts` and on canvas by `render/ansrLogo.ts` (the Tech Park plaza and the attract-screen tower facade already use it). The badge, by contrast, was still the **authored 19×19 pixel reduction** added in the previous pass. The owner was right: it was not the logo. The real mark is a *hollow ring of ~32 fine rays*; a 19-cell grid can only carry 16 fat ones around a filled core, so the pickup read as a generic star, and nothing about it said ANSR.
+
+  **Which of the owner's two options to take, decided on the pixels rather than on the doc comment.** The previous pass's own comment in `render/badge.ts` asserted the vector path "turns to mush at badge size", which is what justified authoring a reduction in the first place. That claim was tested this pass with a contact sheet (`@napi-rs/canvas`, per HANDOFF §2): the real path drawn at 40px, 46px, and quantised to whole cells at 20/26/28/40 cells, each stamped on screens 1, 2 and 4's actual skies, viewed at 1× and 4×. Findings:
+  1. **The vector at 40px does not mush.** At the badge's true size it is legible and unmistakably the ANSR mark — thin rays, hollow ring, correct ray count. The earlier verdict appears to have been formed against the *idea* of it, not a rasterisation.
+  2. **Quantising it needs ~28 cells to survive.** At 20 cells (40px at 2px cells) the ray ring collapses into a lumpy blob — the same finding as the pass before, and the origin of the "pixel marks are authored, not quantised" invariant. It only holds together from 26–28 cells, which at 2px cells is 52–56px, i.e. 30–40% wider than the 40px pickup hitbox. Drawing a pickup larger than its own hitbox is the collectible version of the hazard rule ("a hazard sprite is its hitbox") and was rejected: it promises reach the rules do not give.
+  3. So the owner's *preferred* option — use what we already have — is also the correct one on the pixels. `drawAnsrBadgeMark` is now three lines that call `drawAnsrLogo` with `diameter = RESOLUTION.TILE`, and the 19-row grid, its two palettes and `BADGE_CELLS` are gone. It costs **negative bytes**: the path was already in the bundle for the plaza, so deleting the grid took the gate from 88.0 KB to **87.9 KB of 90**.
+
+  **One defect only the rasterisation showed: the hollow core is wrong on a small moving object.** The brand mark's centre is empty, which is right on a page and wrong here — on screen 1 a lit cyan office window sat inside the ring, and on screen 5 a whole column of warm windows did, so the pickup read as a *hole in the artwork* rather than as a mark. Fixed with a `CORE_CELLS` backing: 4×4 whole cells with the corners cut, `rgba(1, 28, 38, 0.86)`, sized `round(diameter * 0.12)` per cell, drawn *before* the path so the rays always sit on their own shadow. Measured against the rasterised mark, not guessed: at 0.10 (16px) the window edges still showed at 3 and 9 o'clock; 0.12 (20px) covers the void with a cell to spare, and at 0.62 alpha the window was still visible through it while 0.86 reads as a shadow without becoming a filled disc. This is the same lesson as the badge's failed dithered halo, from the other direction: at icon size, low alpha reads as grime, not as translucency.
+
+  **Kept unchanged:** the levitation shaft, the four-cell flare (ray tips reach exactly `BADGE_MARK_D / 2` = 20px, so the flare's r=26 still leaves a clean 6px gap), the ground chevron, the plaque below the mark, and the phase-driven purity of the whole thing. The shimmer changed shape: the old mark swapped ray *classes* between two tones, and one path cannot do that, so the whole sunburst now glints between `#f05722` and `#ff8a4d` on held frames — both brand orange, so it reads as light catching the mark. Position still comes only from `world/badgeFloat.ts`; nothing about the hitbox moved, so `badgeReach.test.ts`'s 0.40s one-tap window and the validator's clearance proofs are untouched (both re-run green).
+
+  **Tests rewritten** (`render/badge.test.ts`, 8 cases). The recorder canvas gained `save/restore/translate/scale/rotate/fill` and now records path fills alongside cells, and the file installs a `FakePath2D` stub that keeps its `d` string — jsdom has no `Path2D`, and `ansrMarkPath()` caches its answer on first call, so the stub has to be in place before the first draw. The assertions that matter: the badge fills **`ANSR_MARK_PATH` byte for byte** (a lookalike fails), in `LOGO_ORANGE` and never the `#FF5400` value accent; the transform sizes it to span exactly `RESOLUTION.TILE`; the core backing is whole equal cells, dark, centred, and between 30% and 60% of the hitbox; the shimmer changes colour but not geometry; and the pickup still draws >10 cells outside the mark's own box, so where `Path2D` is missing the badge is unbranded rather than invisible. Dropped: the eight-way symmetry test — the real mark's rays vary in length and angle, which is exactly why no generated ring reproduced it, so demanding cell symmetry would now be demanding the wrong thing.
+
+  **Green:** typecheck + lint + **316 tests (38 files)** + build + build:site + validate:levels; ESM 44.84 KB / IIFE 45.12 KB gzip; budget gate **87.9 KB of 90 KB**. Changed: `src/render/badge.ts`(+test). **Verified by rasterising** all six screens at the top, middle and bottom of the float band, cropped at 4–5× (`/tmp/brrender/shot.mts` + `crop.mts`). **Not verified:** how the mark's fine rays hold up on a physically small phone screen after the frame is downscaled — the internal 1280×720 raster is right, but a 360px-wide viewport scales it by 0.28 and nobody has looked at it on glass.
+- **Compliance rebuilt as a staircase maze of wandering monsters, and moved up behind Setup Delays (owner call, three rounds of feedback).** Owner brief: "The compliance screen will now come after the setup delays screen and the obstacles of Compliance stage are to be entirely changed now it's like — a staircase maze and it's not possible for the player to cross just by being on one level because there's no possible way to go directly and every step will have one or two small monsters. Monsters named after compliance headaches (Entity, Payroll, Legal, Tax, Audit) wander the corridors picking random directions at each junction, unpredictable rather than hunting the player and the movement can be sometimes slow sometimes fast. Touch one without the powerup = death. ANSR powerup makes the upset angry monster smile and open the toll gates it currently has and move fastly to the shown area", plus a reference sketch, plus "remove the files that are on top saying tax, gst, audit".
+  **Running order.** Compliance is screen **2** now and Hire Under Fire is **3**. The order is nothing but the numeric `id` (`Simulation.clearScreen` advances `_screenId + 1`), so the change is the two entries swapping ids — and then every id-keyed map with them: `render/scenery.ts`'s `TILE_MATERIALS` and `drawSceneBackground` switch, `COPY.onClear`, `CAPABILITIES` (which is journey order and is asserted against a real playthrough in `golden.test.ts`, so it *had* to be reordered — that test is the reason the receipt can never drift from the level file), and the `screenN.test.ts` filenames. `monthsBase` travels with the screen, so the six still sum to the benchmark.
+  **Three rounds on the geometry, because the first two were mine and not the owner's.** Round 1 was a single long ramp: right topology, wrong picture. Round 2 was the sketch's topology but built out of solid-to-the-ground masses, and the rasterisation showed why that was wrong — the right half of the frame was one grey slab. Round 3 is the sketch read as a *path*: floor corridor → stepped stair off the left corridor → the wide filings plateau (the block the sketch marks "monsters gather here") → a 120px jump back up-left onto the registers platform → two treads rising right → the approvals gallery → the statutory wall → step off onto the clearance lift → the far bay and the exit. The airy elements the sketch is actually made of — the mid-left platform, the upper treads, the gallery, the thin wall, the yellow lift — float over the mass with dark air between them, which is what makes it read as a maze rather than as terrain.
+  **The measured rule that shaped every version: 40px of headroom is not headroom.** A player standing on a tread has 44px of body and needs to *jump* 40px to the next one, so anything overhead must clear 84px, i.e. **three empty rows (120px)**, not two. At two rows the flood search stopped dead on the tread below — the player could rise 36px and needed 40. This one number invalidated four separate layouts (an overhead platform above a staircase, a mezzanine above the landing, a back-up step above a tread, and a wide upper tread above the last stair) and it is now in HANDOFF's invariants.
+  **Thin platforms make pockets, so the probe was extended to prove there are none.** A floor region enclosed by faces taller than a jump is a soft lock — worse than a slab, because the run cannot end. `/tmp`-style probing was not enough here: the probe now builds the whole reachability *graph* with the real `Player` physics, then floods it **backwards** from the exit states and reports every reachable state that cannot get back to the goal. Final geometry: **0 trapped states** out of 62,748, every authored surface reachable (600 → 560 → 520 → 480 → 440 → 400 → 320 → 280 → 240 → 200), and the control run — ground plus wall only — stops at x=960, the wall's face, which is the owner's "not possible to cross on one level" proved rather than asserted.
+  **The monsters are the screen's existing creature, not a new one.** My first attempt invented a small brown blob from the sketch's ovals; the owner sent two reference shots of what the screen already had — the pale approval head on its slate post with a dark visor and a set mouth, and the same head in mint green with a grin and its striped boom arm swung clear. That is the old `drawGates` art, which this pass had deleted. It is back as `render/maze.ts`'s 17×26 authored grid (exactly `MONSTER_W`×`MONSTER_H` at scale 2, test-guarded), **one grid with two palettes** — `v`/`m`/`t`/`x` are the cells that change meaning between moods, which keeps a second 442-cell grid out of a 90 KB budget. Two details the rasterisation decided: the arm is drawn **only as it rises** (both reference shots agree — scowling head, nothing in its hands; grinning head, barrier clear), and it stops at 68° rather than vertical, because at 90° the two arms collapse onto one line above the head instead of splaying into the sketch's V.
+  **A monster *is* its toll gate.** The owner's "makes the monster smile and open the toll gates it currently has" reads as one object, not two, so the separate cycling `tollGates` array I had built was deleted along with the `'gate'` setback cause: the creature holds the arm down, and the arm coming up *is* the gate opening. That removed a whole timing layer from a screen that already asks for route-finding, and it removed the temptation to make a gate solid — a solid barrier on the only route would make the screen impossible without the badge, which no screen in this game is.
+  **Wandering, proved not to be hunting.** Each monster owns a corridor (`from`/`to`/`gy`, plus `slope` so it walks a staircase's treads rather than an interpolated diagonal) and re-rolls **direction and speed** at every junction — a column boundary or either end — from its own mulberry32 seeded from level data. The player's position is not an input anywhere in the file, and a test proves it: two runs with the player parked in completely different places produce byte-identical paths. Speed re-rolls between 52 and 132 px/s, both ends well under the player's 260, so a corridor is always winnable; a constant-speed patrol is memorised in one attempt, which is why the re-roll is on speed as well as direction. A fairness test measures the worst continuous block of a crossing column over 60s and holds it under 3s — a monster sweeps at least a full tile between decisions, so it cannot dither in a doorway.
+  **"Follow the natural path" — the owner's third correction.** The gathering monsters originally moved straight to the landing at 420px/s, which meant drifting diagonally through the stone. They now walk an authored `route`: surface cells, corner by corner, so TAX climbs the four treads it has been standing next to, AUDIT comes back along the gallery and down both upper treads, LEGAL walks to the end of the registers platform and down. Authored rather than searched because a route is four corners and a pathfinder is a kilobyte of code plus a determinism risk, for the same picture. A monster with no route stops where it is, still harmless, so nothing is ever left mid-air.
+  **The floating platform is a lift, and it is not made of bricks.** Owner: "the floating platform should have a different color and not a brick style — that is supposed to bring the character down." It is the one moving solid in the game: `ComplianceMaze` owns it, hands the same box to the player's collision list and to the renderer (level data holds where it *parks*, never where it *is* — the lesson `world/badgeFloat.ts` taught), and it descends **only while the player is standing on it** and returns only while it is empty. That rule is not decoration: `moveAndCollide` is driven by the player's motion, so a platform rising into an occupied box would push the player through it. Painted as a machined yellow plate with a lit top edge, down-chevrons and a dashed guide rail showing its remaining travel — the rail is the same idea as the badge's float rail, signposting the motion before the player commits to it. It is deliberately not the only way down (walking off the wall also works), which is what lets the validator keep proving completability from static solids alone.
+  **The TAX/GST/AUDIT signboards are gone**, and the interesting half of that is *where the words went*: onto the monsters. The old backdrop hung five labelled boards across the middle of the frame at y=130, which the maze now fills, and those five words are the monsters' names. A label belongs on the thing that moves, where the player is looking.
+  **The budget broke, and the fix is worth more than the pass.** The gate went to **92.6 KB of 90** — and ~3 KB of that was *prose*: `levels.json` is imported by the engine, so the notes explaining the maze shipped to every host. Writing shorter notes would have been the wrong lesson, so `scripts/strip-level-notes.ts` (a `pre` Vite plugin, pure function + test) now drops everything only humans read: `meta.notes`/`structure`/`clock`/`conventions`, every `note`, `meaningTag`, `zone`, the `role` on any solid that is not `noncollide` (`Screen` branches on that one), and the `hint`/`onClear`/`win` mirrors of `COPY` inside each screen's `copy`. Dev and tests read the file as authored; the bundle gets the geometry. **89.3 KB of 90**, and level authoring prose is free from now on.
+  **Also probed and kept as tests:** the lift's ride time (travel ÷ speed between 1.5s and 4s), that the monsters huddle side by side (`GATHER_SPACING` had to go 30 → 40: at 30 the sprites overlapped and five name plates rendered as one unreadable word, so the plate is now dropped once a monster settles), and that every screen still passes `badgeReach` — TAX patrols the left corridor between the badge and the first stair, so its corridor was pushed to gx 7–8 to keep the badge's 0.40s one-tap window clear of it.
+  **Green:** typecheck + lint + **348 tests (40 files)** + build + build:site + validate:levels; ESM 45.67 KB / IIFE 45.91 KB gzip; budget gate **89.3 KB of 90 KB** (0.7 KB of headroom — thinner than it has ever been; the next pass that adds art should spend a moment on `npm run analyze` first). Files added: `src/world/Hazards/ComplianceMaze.ts`(+test), `src/render/maze.ts`(+test), `scripts/strip-level-notes.ts`(+test). Deleted: `src/world/Hazards/Gates.ts`(+test), `Game.drawGates`. Changed: `src/data/{levels.json,levels.ts,tuning.config.ts,copy.ts,data.test.ts}` + both root mirrors, `src/core/{Simulation.ts,Game.ts,screen2.test.ts,screen3.test.ts,setbackLog.test.ts}`, `src/world/{types.ts,Powerups.ts}`, `src/render/scenery.ts`, `src/ui/ui.test.ts`, `scripts/validate-levels.ts`, `vite.config.ts`. **Verified by rasterising** the screen unassisted and assisted (`/tmp/brmaze/shot.mts`). **Not verified:** how the maze plays with a controller in hand — the route is proved climbable and trap-free by search, and the corridors are proved crossable by measurement, but nobody has played it; and the 120px jump from the top tread up to the registers platform is the tightest single move in the game (140px of lift available), so it is the first thing to soften if playtesting says the screen is hard.
+- **Local Expertise deleted; the Workplace screen built in its place, at slot 3 (owner call, two rounds of art feedback).** Owner brief: "Add a workplace screen after Compliance — this is a replacement screen for Local Expertise, now we won't have local expertise screen. The screen looks like a broken office. Flickering lights, wet floor signs, and yellow caution tape everywhere. A mummy wrapped in three layers of that same caution tape trudges steadily in one direction only, looping back to his starting point when he reaches the far wall rather than turning around, so his path is a predictable metronome rather than a chase. The player spawns behind a short wall that keeps him safely out of the mummy's path from the very first frame, and that wall doubles as this level's simple jump obstacle. Touch mummy = death. The ANSR badge grants a shooting power… Three hits strip all three tape layers and the mummy unravels and the mummy doesn't die, the human in mummy wears a shirt and rolled up sleeves and runs to a nearby sparking computer terminal and starts working frantically and that's what restores everything… so the same mummy who was a blocker is someone who makes things right for the character upon use of the powerup."
+  **Running order and the month model.** "After Compliance" was taken literally: Workplace is id **3** and Hire Under Fire moved to **4**. Screen count stays six and the new screen inherits Local Expertise's `monthsBase` of 2, so the bases still sum to `ANSR_BENCHMARK_MONTHS`. Every id-keyed map moved with it — `TILE_MATERIALS`, `drawSceneBackground`'s switch, `COPY.onClear`, the `screenN.test.ts` files — and `CAPABILITIES` was reordered to setup → compliance → **workplace** → hiring, which `golden.test.ts` asserts against a real playthrough, so the receipt cannot drift from the level file.
+  **The capability.** `FORESIGHT` is gone and `UNWRAP` replaces it, still carrying **500Leaders** (`monthsSaved` 2, so the four still account for the whole 24 → 11 gap) with the stage renamed Workplace and the effect reworded to "On-ground leaders who unblock the team instead of adding process". **Worth the owner's confirmation:** ANSR's actual workplace product is 1Wrk, which already owns screen 1 ("entity, office and systems stood up"), and a capability may appear on exactly one screen. So the pillar that got dropped is *local expertise*, and 500Leaders was re-pointed at the man tied up in the room rather than at market context. That reading works, but it is my reading, not a brief.
+  **Spikes deleted with the screen.** `Spikes.ts` (+test), `Game.drawSpikes`, `HAZARDS.SPIKES`, `SpikeColumn`, the `'spike'` setback cause and `drawIndiaMap` are all gone — ~5 KB of raw source that nothing could reach any more, and against 0.7 KB of headroom it was not optional.
+  **The obstacle is a metronome, and that is the whole design.** `Workplace.ts` walks him one way at one constant speed and loops him back to `from` instead of turning him around. Deliberately the opposite of the compliance monsters, which re-roll direction and speed to be unreadable: here the player is meant to stand behind the partition, watch one sweep, and know when to move. Nothing random, nothing that reads the player. Unassisted the screen is still winnable — wait until he is at the far end and run, because he loops back *behind* you and closes at 150 px/s against your 260, so he can never catch you from there.
+  **The loop needed a fairness beat nobody asked for.** Snapping a lethal 60×78 body back to the start column would put it on top of any player standing there, which is the unfair-not-hard failure the DENIED stamps already cost a pass to learn. There is now a `returning` phase: `RETURN_TIME` 0.6s during which he is **harmless** and drawn fading in at the column he is about to walk from — 156px of escape at walk speed, and the ramp *is* the telegraph. A test asserts `lethal === false` for every frame of it.
+  **A new verb needed a new input, and it is an edge.** `InputAction` gains `shoot` (KeyF / KeyJ — not Ctrl/Shift, which are browser and screen-reader shortcuts, and not Enter, which activates whatever overlay button has focus), `InputState` gains `shootPressed`, and `HazardContext` gains an optional `shoot`. Optional because exactly one hazard has a verb of its own and the other three would carry a field they ignore. It is passed straight through from `input.shootPressed`, so a hazard can never auto-fire from a held button — three deliberate shots is the beat the screen is built on. Touch gets a fourth button, and it is the one control in the game that appears conditionally: `setShootVisible` shows it only once the badge has armed the cutter, because a thumb target that does nothing on five of six screens is one the player learns to ignore.
+  **The cutter refuses to fire at a freed colleague**, and that is a rule rather than a nicety: once the last layer is off, the only figure on the floor is a man fixing the room, and letting the player shoot him would inverate the point of the screen. Guarded by a test.
+  **No `shieldsPlayer`.** Taking the badge does not make contact safe, it makes the figure *solvable* — until the last layer is off, walking into him still stalls the stage. So there is no ANSR bubble here: it would promise protection the rules do not give (the invariant that killed `drawZoneRead`'s floor cap).
+  **Pulses ignore static geometry, and the level answers for it rather than the code.** The figure's corridor starts at gx 9, two columns clear of the partition at gx 6, so the step you stand on to cut the tape already has a clear line to him. Giving the pulse its own collision pass would have bought nothing except the ability to make the screen's one safe spot the one place you cannot act from.
+  **Then the art, which took a second round because the first one rasterised badly.** Owner: "the screen can change the background to something that suits — we need not keep the building background, show an inside of an office setup… the mummy needs to look human figure and visually this is not looking good, this is very basic… the gun needs to be more prominent and better… the person also doesn't look like a mummy, it needs to be like a mummy/a human silhouette… use various obstacles like an under-construction kind of barricade and other caution also… and when the mummy touches our character there should be some visual change in the character while dying." Every one of those was visible in the PNG and invisible in the code, which is the fifth pass in a row that has been true.
+  1. **Indoors, so no sky.** This is the only screen that opens on an interior. Every other backdrop says "the market you are entering"; a city skyline behind an office is the wrong picture, so the market went *outside the window* where it belongs — a glazed wall on the right third with the existing `drawSkyline` clipped into it. Plus the suspended ceiling grid with **two tiles out and the wiring hanging through**, a cable tray running the length of the floor, cubicle dividers with dead monitors, a whiteboard, a server rack and a wall clock. The ceiling gap and the tray exist because the first rasterisation had 340px of empty wall between the sign and the furniture.
+  2. **The figure was 34×52 and looked like a child next to the hero.** Hazard sizes in this game are measured against the *drawn* player (48×60), not his 28×44 hitbox. It is now **60×78** — the tallest thing on the floor, authored 20×26 at scale 3, hitbox exactly the sprite.
+  3. **One silhouette, two palettes, and that is a design decision not an economy.** The same grid is the mummy and the colleague, so stripping a layer reveals more of *the same man*; two sprites would have made the unwrap a substitution (monster becomes human) when the point of the screen is that it never was one. Row 3 carries the trick: `e` paints as a continuous dark slit in the wrap (the single most recognisable thing about a mummy) and as skin in the human, with two `E` cells that are eyes in both.
+  4. **The bandage had to go near-white.** At `#DCD6C2` — roughly the caution yellow's own value — the figure rasterised as a *yellow striped pillar*: wrap and tape merged into one shape. Cloth has to be the lightest thing on a dark floor for the silhouette to carry, and the tape has to sit on it as accent rather than as camouflage. Same class of error as the badge's dithered halo: value relationships decide legibility, and they are invisible in source.
+  5. **Nine bands, thinned and inset.** The first layout covered 70% of his height and hid the body; bands are now 1–2 cells, inset from the outline, and the arm band stops at the elbow so the wrapped hand at the end of the reach stays white and the outstretched arm reads as an arm rather than as one more strip of tape sticking out of him. Three hits peel him in three legible steps (9 bands → 5 → 2 → none).
+  6. **Trailing ends: three attempts.** Three long horizontal strips rasterised as *a small yellow ladder standing next to him*; two stepped ends with a white curl rasterised as a floating white square. It is now one short end off the hip, three steps, tucked against the body.
+  7. **The gun was tried at scale 3 first and was worse.** At 54×39 it was as wide as the hero and read as a plank across his chest. At **36×26** (18×13 at scale 2) it lands as a substantial object beside a 48×60 figure with his silhouette intact — a receiver with a dark shade line, a tape reel on top, an orange muzzle housing and a light bore, held at *barrel* height so it sits on the pulse's own line. Recoil kick and a three-step starburst both read off `Workplace.sinceShot`, so the flash can never disagree with the pulse that left the barrel. The idle muzzle glow started as a low-alpha orange field and rasterised as **a dirty grey-brown box** over the dark room — the dithered-halo trap for the third time — so it is now two full-alpha pilot cells.
+  8. **Barricades: the diagonal is the whole thing.** The first pass reused the tape's vertical ticks and every barricade rasterised as a yellow plank. `stripedRail` now steps the stripes diagonally in whole pixels (4 across per 4 down), and the trestles are 96×84 with crossed legs and an amber hazard lamp. Plus cones, wet floor signs with puddles, tape stands, and abandoned step ladders — the ladders are there for *height* as much as for meaning, because every other prop tops out at knee level.
+  9. **Tape strung post to post drew one unbroken yellow line from wall to wall.** It is now strung within authored *pairs* of posts, two runs per pair with sag, and both runs sit above the figure's crown — the first version lined the lower run up exactly with the tape on his outstretched arm and the two became one unreadable bar across the picture.
+  10. **The props are held at 0.78 alpha and the figure is not.** The dressing and the hazard are the same caution yellow, and at full alpha the one thing on the floor that can cost a life was just one more yellow shape among nine. The props are the set; he is the actor. Columns 9–13 are also left deliberately empty in `clutter`, because that is where he starts every sweep and a ladder plus a tape run standing there made him unreadable in the one place the player has to read him from.
+  11. **The gloom came down from 0.4 to 0.28.** At 0.4 the room went so flat that the barricades and the figure lost their own shading and the whole screen rasterised as one dark smear. Gloom has to be readable gloom.
+  12. **Dying now reads on the player.** `drawTangled` tapes him up where he stands — three bindings, loose ends whipping off both sides, a shred settling on the floor — the same job the flattened stamp pose does on Setup Delays, plus a burst of caution-yellow shreds off his chest on the impact frame (the only setback in the game that throws debris, because it is the only one where something visibly grabs him). First version wrapped him from the crown down and rasterised as a stack of yellow bricks with a person somewhere inside it; **the head stays clear now** — you have to be able to see whose day this is.
+  **The room comes good only because somebody makes it come good.** `restore` is one 0..1 dial and it only moves once the freed man reaches `working` and the terminal chimes: then the tape, barricades, cones, signs and puddles clear, all four strip lights strike steady, the floor gets its lit edge, and the screen shows `OK`. Nothing on this screen fades on a timer.
+  **Budget: the gate fails and the reason is a measurement artefact, so it is left for the owner.** `check-budget.mjs` sums **every** `.js` in `dist/`, which means it adds the ESM and IIFE builds together even though a host loads exactly one — doc 09 lists them as alternative outputs. Real download is **49.3 KB gzipped, 55% of the 90 KB budget**; the summed figure is **98.3 KB of 90**. This pass added ~4.5 KB gz per payload (the office interior, the props, the 60×78 figure with its two palettes and nine bands, the cutter, the terminal, the tangled frame) against ~2 KB recovered by deleting Spikes. Trimming was explored and abandoned: hoisting every repeated hex literal in the two new render modules recovers ~0.5 KB of the ~4.2 KB per payload that the summed gate needs, so closing it means deleting most of the art that was just asked for. HANDOFF §7 now carries the choice — fix the gate to measure the largest single payload (recommended: it still bites at 90 KB, and it is what the Ops doc's "JS (gzipped) ≤ 90 KB" means), or cut art back.
+  **Green:** typecheck + lint + **347 tests (39 files)** + build + build:site + validate:levels. Budget gate **red at 98.3 KB of 90 on the summed measure, 49.3 KB on the real one** (see above). Files added: `src/world/Hazards/Workplace.ts`, `src/render/workplace.ts`. Deleted: `src/world/Hazards/Spikes.ts`(+test), `Game.drawSpikes`, `drawIndiaMap`. Changed: `src/data/{levels.json,levels.ts,tuning.config.ts,copy.ts,data.test.ts}` + both root mirrors, `src/core/{Simulation.ts,Game.ts,Input.ts,screen3.test.ts,screen4.test.ts,setbackLog.test.ts}`, `src/world/{types.ts,Powerups.ts}`, `src/render/scenery.ts`, `src/ui/{TouchControls.ts,styles.ts}`, `scripts/{validate-levels.ts,strip-level-notes.ts}`. **Verified by rasterising** eight states — found, armed, one hit, muzzle flash, one layer left, unravelling, working, restored, plus the tangled death frame and a scale sheet against the hero (`/tmp/brrender/work.mts`, `mummy.mts`, `zoom.mts`). **Not verified:** nobody has played it. Three specific unknowns — whether the 4.8s sweep is a beat or a wait when you are actually standing behind the partition; whether three shots at a 0.22s cooldown feels like a mechanic or like a chore; and whether the shoot button appearing mid-run is discoverable on a phone without a prompt, since the only place the cutter is explained is the badge's own note.
+- **Hire Under Fire rebuilt as a boss fight: a dragon in a tie and glasses, and a water cannon (owner call).** Owner brief: "The obstacles of Hire under Fire stage are to be entirely changed now it's like — so the obstacle will be a big dragon wearing a tie and glasses and the Dragon gives a brief roar and telegraph for a second or two before it starts moving or shooting anything, so there is always a guaranteed safe beat at the start of the level. Once active, the dragon roams the screen and spits fire and one or two more kinds of fire attack maybe like fireball labeled with things like 'Candidate Declined' or 'Pool Too Narrow'… fire touch the character = death and +2 months in the log. The ANSR powerup when collected, a teal halo effect circle kindof appears around the player making the character invincible and the character also gets a big water weapon which would throw water in a projectile at the Dragon and the fire from the dragon vs water should be nice and water should overpower the fire from the dragon a bit and when the fire stops the the water would damage the dragon (proper sound should also be there when getting used), and it serves two purposes at once: it makes him immune to fireballs or other attacks and the dragon when attaked with water the costume would start to come off and from inside 5 candidates fall on ground and a text overlay on them saying hired, it can lool celebratory?"
+  **What went, and what the family is now.** `Fire.ts` (+test), `HAZARDS.FIRE`, `FireLane`, `fireLanes` and the `'fire'` hazard kind are deleted; `Dragon.ts` (+test), `HAZARDS.DRAGON`, `DragonSpec`, `dragons` and the `'dragon'` kind replace them. The `'fire'` **setback cause** deliberately stays — the tag is still `OFFER DECLINED` and the reason still names the hiring cycle, so `setbackLog`, `ui` and `analytics` tests and the receipt are untouched. `EXTINGUISH`/Talent500 stays on the screen, so `golden.test.ts`'s capability-order assertion is untouched too. The screen also lost the last inline hazard painting in the game: `Game.drawFire` was 70 lines that could not be rasterised or tested without a browser, and it went with the lanes into a pure `render/dragon.ts`.
+  **The badge does two things at once, which no other badge does.** Every other capability is a single verb — `PLACE_TILE` shields, `CLEAR_PATH` clears, `UNWRAP` arms. `EXTINGUISH` now both protects (`shieldsPlayer` → the halo, and `update()` returns no cause at all when assisted) *and* arms (a water cannon on the existing `shoot` edge). That is not a shortcut: the immunity is what buys the player the time to stand still and aim, so the two halves are one mechanic. It also means `HazardContext.shoot` now has two consumers rather than one, which is the first time that optional field has earned being on the interface.
+  **The dragon's body is not a hitbox, and that is the screen's central rule.** It hovers, never lands, and touching it costs nothing; the only lethal things it owns are a breath column with 0.7s of floor telegraph and a labelled fireball with the better part of a second of flight. So nothing on this screen can cost a life without a warning in front of it — which is what licenses a boss that is *faster than the player* (see below) and what licenses art that sprawls past its own box (wing tips, tail, dangling feet), the exact opposite of the rule every other creature here follows. `Dragon.test.ts` audits it rather than asserting it: park the player inside the body for 60s and every single delay booked has to be explainable by a flame that the hazard's own snapshots say was on him. 0 unexplained, and not vacuous — he does get burnt in there.
+  **Three tuning passes, all driven by a probe, and the first two were wrong.** `/tmp/brcheck/probe4.mts` drives the real `Simulation` with eight reactive policies. Round 1 (`ROAM_SPEED` 96, `ATTACK_INTERVAL` 2.6, footprint committed at the player's current position): **8/8 policies cleared with zero delays, blind sprint included** — the whole 1,200px stage fits inside the roar plus one interval, so nothing ever happened. Round 2 (speed 150, interval 0.9, leading the target): still 8/8 and 0 delays, because the dragon *lost the race* — the player walks 1,200px in 4.6s, the dragon fell behind, `near` never held so it only ever lobbed fireballs at a back it could not hit, and at a 0.55 lead those landed ~130px short every time. Round 3 is what shipped: `ROAM_SPEED` **300** (faster than the player's 260), holding a derived `STANDOFF`, full-flight lead solved in two passes, and the first attack after the roar scripted to be the breath. Result: **7/8 clear with zero delays in 6.1–6.6s, and the blind sprint loses the stage.** That is the shape the screen needed — crossing costs ~1.5s of dodging over a straight walk, and ignoring the floor costs lives.
+  **`ROAM_SPEED` > the player's walk is fine here and nowhere else.** It is only defensible because of the no-hitbox rule: "you cannot outrun it" costs the player nothing except the option of ignoring it. The compliance monsters' "never take the player as an input" rule was deliberately *not* carried over — an unpredictable monster says "you cannot plan around compliance", which is the argument on that screen, but a dragon that ignores you is scenery. The roll that picks *which* attack is still seeded and still has no player input; position only decides which of two telegraphed attacks is the legible one at that range.
+  **`STANDOFF` is derived, not authored, and getting that wrong would have been invisible.** It is `BODY_W × MOUTH_X_FRACTION + BREATH_REACH` = 166px: exactly the range from which the committed footprint lands on the player's own column. The obvious reading of "it comes at you" — close to zero — puts the dragon directly overhead, from where its own `BREATH_REACH` throws every flame 166px clear of the player. A boss that hunts you and then systematically cannot hit you is worse than one that ignores you.
+  **The breath leads the player, and that is what makes it answerable rather than free.** Committed where they are, the mark lands 0.7s behind anyone moving. Led by `player.vx × BREATH_WINDUP`, the mark appears *in front of* them and the answer is to break stride — a decision made with the full 0.7s of warning, in the place they are already looking. Clamped to `BREATH_MIN_REACH` 110 (clear of its own 200px torso) and `BREATH_MAX_REACH` 320 (a local threat, not a screen-wide snipe), then **frozen**: `breath.x` is never re-read, so a mark on the floor cannot follow the player. A telegraph that tracks is a telegraph that lies. The fireball leads by the *whole* flight time, solved in two passes because the flight time depends on the lead and the lead depends on the flight time — one pass is short every throw.
+  **It can only be hit while roaming, and finding that took two more probe rounds.** Guarding only the burn left the wind-up open and a probe took the entire suit apart inside four successive wind-ups: four hits, 2.0s, **not one jet ever meeting a flame** — the water-versus-fire exchange the owner asked for never happened once. Guarding attacks but not the opening roar let the player kill it during its own introduction, for the same 2.0s. So: vulnerable while roaming and at no other time, and water that arrives at any other moment boils off as steam with a `quenches` tick, which is the player's feedback for "not now". Plus every landed hit sets `nextAttack = 0` so it retaliates immediately. The loop is now land a hit → it commits → its charge or its column eats what you send → put the column out → the gap is your next shot. Measured: **6.85s and 23 jets (19 spent on flame) spamming the button, 8.67s and 9 jets played patiently.** That is the mechanic, expressed as a rhythm instead of a sentence.
+  **The pose is the art decision that mattered, and the first version threw away both things the owner asked for.** Round 1 was a long horizontal beast at 220×140 — with the chest turned away there was nowhere for a tie to hang, so the jacket rasterised as **two filing cabinets either side of a white block**, and the 72×56 head was too small for glasses to exist at all. It is now **upright at 200×190: frontal torso, head in profile.** That gives a shirt front with a tie down the middle of it and a 90×70 head that can wear a lens. Composed from small grids (head 18×14 @5, glasses on the same registration, wing 16×13 @6) plus `pxRect` runs for torso, neck, tail and legs, the way the Workplace *props* are built — a single 44×28 grid would have been 1,232 hand-placed cells in a file where a mistyped row is invisible until it rasterises.
+  **The costume is the health bar.** Four jets take off glasses → tie → jacket → shirt, drawn by handing `drawPixels` a palette that omits whatever is already gone, so it skips those cells with no per-piece branching. No bar, no number: the state of the fight is legible from what the dragon is still wearing, which is also the joke — what blocks the hire is the office dress. Glasses go first because they are the fastest read of "office" and therefore the most legible hit. Tests assert each piece's palette entry appears at its layer count and is absent one hit later.
+  **Six art defects that were invisible in source and obvious in a PNG.** (1) The jacket was 148px wide on a **100px torso**, so it overhung the body on both sides — now nothing but the sleeves may leave ±50 of the centre line, and a test enforces it on the torso band. (2) The breath ran straight down through the dragon's own suit; `BREATH_REACH` throws the footprint 120px forward so the jet leans away and standing underneath is a real option. (3) The wind-up telegraph was orange on this screen's scorched terracotta ground — two warm colours at 0.4 alpha over a third, which rasterised as **a muddy brown smudge on a brown floor**. It is cream now, the only warm value here lighter than both the ground and the sky, plus a marching sight line from snout to mark. (4) The teal halo was a colour swap where a *brightness* swap was needed: teal at orange's alphas is nearly the deep-teal sky, so `BubbleTint` gained `boost` (2.6) and `spread` (1.22) — the owner asked for a halo *around* the player, and a ring that clears the figure is a different picture from one that crosses it. (5) Fireballs as three nested squares rasterised as a box inside a box; they are stepped profile rows now, and the ground burst is uneven tongues rather than a slab that read as a crate on fire. (6) Candidates at scale 3 were 24×42 and stood next to the hero like children — scale 4, and spread 1.6× the body width because five of them across a 200px costume overlap into one crowd with colliding HIRED plaques.
+  **Teal on the player, on this screen only.** Orange is the value accent and one of its two legitimate homes is the bubble — but this screen is full of orange fire, and an orange shell put the one thing the player needs to see (himself, unharmed, inside a field) in the same colour as the thing it protects him from. Teal is the brand, the water's colour and the correct read anyway: the halo and the cannon arrive together and do the same job. The reserved orange keeps the badge burst, the ANSR ENGAGED label and the HUD chip here, so it still says "ANSR is with you" — it just is not painted on top of the fire.
+  **Sound, without the hazard knowing an AudioEngine exists.** Five cues added (`roar`, `water`, `steam`, `strip`, `hired`); `roar` and `hired` duck the music, `water` deliberately does not because it fires six times a second and ducking on every jet would pump the whole mix. With no noise source and no filter, a growl is two detuned sawtooths falling a long way; `hired` is the same major arpeggio as `win` a fifth up, because it is the same kind of moment one screen early. The hazard exposes monotonic counters (`shotsFired`, `quenches`, `hits`) and `isRoaring`/`isBeaten`, and `Game.syncDragonAudio` plays a cue per increment it has not seen — so the cue is tied to the event the *simulation* booked, and a jet fired inside a hit-stop still gets its hiss.
+  **The touch button now has two masters.** Two badges arm a tool and they arm different ones, so `setShootVisible(visible, label)` takes the label and `COPY.controls.shootWater` joins `shoot`. It is the button's only affordance — the glyph is an abstract arrow and nothing on the canvas explains either weapon — so the aria-label is the whole explanation for a screen-reader user.
+  **A stripper hole, found by grepping the built bundle rather than by trusting it.** `strip-level-notes.ts` dropped `note` from screens, badges and the lift, but not from entries *inside* a hazard array — so the dragon's 700-character design note shipped to every host. Fixed (`zone` and `note` both go from every hazard entry) with two tests: one that proves prose inside the arrays is gone, and one that proves the dragon's `taunts` **survive**, because they are painted on the fireballs and a stripper that cannot tell content from commentary silently blanks the screen's argument.
+  **A TypeScript trap worth remembering.** `tuning.config.ts` is `as const`, so `D.HITS_TO_STRIP` has the literal type `4` and `D.ATTACK_INTERVAL` the literal `0.9`. TypeScript only widens *fresh* literals, so a field initialised from one of those keeps the literal type and every later assignment fails — `private nextAttack: number = D.ATTACK_INTERVAL` needs the annotation. Vitest passed for several rounds while `tsc` did not, and a related bug (`beginAttack` reading an `extraTelegraph` that was never in its signature) survived three probe runs purely because the seed kept choosing the other branch. Run `typecheck` before believing a probe.
+  **Budget: the summed gate is further into the red and it is still §7.1's decision, so nothing was cut unilaterally.** Real download is **56.49 KB gzipped, 63% of the 90 KB budget** (was 49.3 KB); the summed figure is **110.6 KB of 90**, because `check-budget.mjs` adds the ESM and IIFE builds together even though a host loads exactly one. This pass is ~+7.2 KB per payload: a 200×190 composed dragon with four costume pieces, the aimed breath with its cream telegraph, labelled fireballs, the cannon and its jets, steam, and five candidates with confetti — against ~2 KB recovered by deleting `Fire.ts`, the inline `drawFire` and four of the five lane entries in `levels.json`. The choice in HANDOFF §7.1 is unchanged and is now worth more: measure the largest single payload (still bites at 90 KB, still 33 KB of real headroom) or cut art.
+  **Green:** typecheck + lint + **402 tests (40 files)** + build + build:site + validate:levels. Budget gate **red at 110.6 KB of 90 on the summed measure, 56.49 KB on the real one**. Files added: `src/world/Hazards/Dragon.ts`(+test), `src/render/dragon.ts`(+test). Deleted: `src/world/Hazards/Fire.ts`(+test), `Game.drawFire`. Changed: `src/data/{levels.json,levels.ts,tuning.config.ts,copy.ts}` + both root mirrors, `src/core/{Simulation.ts,Game.ts,screen4.test.ts}`, `src/world/{types.ts,Powerups.ts}`, `src/render/{sprites.ts,scenery.ts}`, `src/audio/AudioEngine.ts`, `src/ui/TouchControls.ts`, `scripts/{validate-levels.ts,strip-level-notes.ts}`(+test). **Verified by rasterising** six states — the roar with the hero for scale, the breath wind-up, the burn with a labelled ball in the air and a burst on the floor, the assisted frame (halo + cannon + jets + steam + two layers gone), the suit coming apart, and the five hires landed with confetti (`/tmp/brrender/dragonshot.mts`); grid row widths checked mechanically (`/tmp/brcheck/rows.mjs`) after a mistyped `CANNON` row. **Not verified:** nobody has played it. Three specific unknowns — whether a 7–9s boss fight is the right length inside a ~90 second game; whether the aimed breath reads as fair *in the hand* (the probe says a 160px back-off clears it, but a probe has perfect information about a mark a person has to notice); and whether the dragon's `HIRING AT SCALE` plate plus a taunt plaque plus the HUD is too much type on one screen at phone size.
+
+---
+
+## Pass 18 — Compliance art: brown brick, the archive wall, and a monster that is actually a monster
+
+**Owner brief**, given as an annotated view of the Compliance screen plus three lines: *"this is the
+kind of view I am looking for … if you feel it can be made to look better you can do it, the brick
+has to be coloured brownish, and if you could pull the monster we have in github … locally I guess
+you have deleted, but it's there on github."* The annotations on the reference marked the floating
+platform, the point where all monsters gather, and the GCC-BOT chip — all three of which already
+existed and behaved correctly. What the reference had that the build did not was a **row of labelled
+filing cabinets across the upper frame**, and brown architecture instead of slate.
+
+**The monster does not exist on GitHub, and proving that was the first job.** Searched every ref, not
+just `main`: `git log --all -S monster -i` returns nothing, `git grep -i monster` over every commit
+returns nothing, and the repository has held **120 files across its whole history with not one binary
+asset** — no PNG, no SVG, no sprite sheet has ever been committed. `main` is identical to
+`origin/main` (`4c9461d`), and there is no second repo (the parent `ANSR Game/` folder is not a git
+work tree). So "the monster on GitHub" cannot be an asset. What *is* in history is three creature
+designs that have stood on this screen:
+
+| | where | what it is |
+|---|---|---|
+| A | `render/maze.ts` (current, uncommitted) | pale head on a slate post, 17×26 @2 |
+| B | `Game.drawGates`, on `origin/main` — i.e. **the deployed build the owner has been looking at** | squat filing-cabinet post + striped barrier arm + a 6×5 stamp head @5px |
+| C | `Game.drawPlants`, at `85279ad^` | a leaning stalk with leaves and a 6×5 "compliance weed" pod |
+
+Rather than argue about it in prose, all three were transcribed verbatim out of `git show` and
+rasterised side by side at game scale on the new brown ground, with the hero for scale
+(`/tmp/brrender/cast.mts` → `cast.png`). The picture settles it: **B and C are the same 6×5 pale pod
+with a dark slot across it, and A is that pod enlarged.** None of them is a monster; the largest
+reads as a *skull*, which is the wrong word entirely for a screen about paperwork. There was nothing
+to pull, so the creature was designed — keeping the two things the old sprite got right and changing
+everything else.
+
+**The creature.** Still exactly 17×26 cells at scale 2 = `MONSTER_W`×`MONSTER_H`, so the
+sprite-is-its-hitbox rule holds untouched and its test passes unchanged. Rows 0–4 horns, 5–15 head,
+16–22 torso and arms, 23–25 legs and boots. The proportions are the whole trick: a head at nearly the
+full 34px width over an 18px torso reads as a creature, where an evenly-proportioned little man at
+34×52 reads as a distant NPC — the same lesson the Workplace figure taught at the other end (too
+small reads as a child), applied to proportion rather than to size.
+
+**One grid, two moods, and the mouth CURVES.** This is the part worth keeping. The old sprite swapped
+colours on a straight three-row bar, so "angry" and "cleared" were the same mouth in two palettes.
+Two new characters fix it for free: `u` is the mouth's top corner pair and `w` its bottom pair.
+Scowling, `u` is dark and `w` is hide — the mouth is 26px wide at the top and 14px at the bottom, a
+frown. Cleared, they swap and the same cells widen downwards into a grin. A second 442-cell grid would
+have cost bytes the gate does not have; two palette entries cost nothing. Added `e`, a single
+catchlight cell per eye, after the first rasterisation: an 8px block of flat dark reads as a dead
+socket, and one pale cell in it reads as alive. A test measures the **span of the darkest non-outline
+fill on rows 11 and 13** and asserts top > bottom while scowling and bottom > top once cleared, so a
+future edit cannot quietly make both palettes identical and lose the expression.
+
+**The brick.** `TILE_MATERIALS[2]` slate → `#7A5A3C` face / `#A2794F` highlight / `#2A1B10` mortar /
+`#C29A66` edge. The risk here is screen 1, which is *also* brown (`#6E4C3A`) and sits immediately
+before this one. They are separated by **material, not hue**: this one is lighter and more golden
+(kraft/manila — filed paper stacked into architecture, which is the read the screen wants) on a clean
+20×20 course at 0.1 speckle, where screen 1 is a rough 24×16 at 0.22. The unplanned win is that the
+maze now silhouettes against the teal skyline instead of dissolving into it — the whole climb used to
+be one blue-grey mass against a blue-grey sky, which is a legibility bug nobody had named.
+
+**The archive wall, and why it is allowed back.** Pass 15 deleted a row of five suspended TAX/GST/…
+boards from this backdrop on the grounds that signage was hanging *inside* the climb as noise, and
+that the five words were the monsters' names. The owner has now asked for the row back, so the
+reasoning had to change rather than be ignored: it is a **bounded band**, y 134–214, and the only
+geometry crossing it is the top gallery (surface y=200) and the statutory wall — which paint *over*
+it and give the screen the layered depth the reference has. Three numbers are load-bearing and are
+written into the source:
+
+- **bottom at 214** — 14px behind the gallery. Raise it and the wall stops reading as being behind
+  the architecture; lower it and it starts covering the gallery's walkable edge.
+- **labels stop at 130** — 8px clear of y=138, which is where the AUDIT monster's name plate sits
+  when it is standing on that gallery (`box.y − 10` at `gy 5`). The two label layers must not touch,
+  because a label on a thing that *moves* has to win against a label on the wall behind it. The
+  cabinet labels are therefore also smaller, dimmer and cool grey.
+- **first unit at x=200, seven units at a 150px pitch** — not eight from 128. The HUD's left column
+  is opaque and reaches x≈194, so a first cabinet at 128 was 54px of art plus a label drawn entirely
+  underneath it: invisible in game and invisible in the rasteriser, because the rasteriser has no HUD.
+  The last unit lands at 1100, directly over where the clearance lift parks, which is what the
+  reference shows. **A backdrop rasterised without the HUD will happily hide art behind it — check
+  the DOM chrome's extents by hand.**
+
+The names repeat (TAX, GST, AUDIT, LEGAL, ENTITY, GST, AUDIT) and that is the argument, not an
+oversight: the same handful of filings, over and over, all the way across the frame.
+
+**Two rasterisation defects that were invisible in the code.**
+
+1. **The lift's travel cue was a 4px dashed hairline down a 400px shaft**, which read as a wire
+   rather than as "this goes down" — the owner's reference draws a big arrow there. It is chunky
+   descending chevrons now. The affordance has to be the size of the thing it is describing. Note the
+   bound that came with it: a chevron is 24px deep, so the loop must fit the **whole glyph** inside
+   `remaining` or the rail paints past where the plate can actually travel (a test pins that, and the
+   first version failed it).
+2. **A diagonal stepped at 4px and snapped to a 4px grid rasterises as a broken ladder.** The boom
+   arm rises at 68°, so its vertical advance per 4px step is 3.7px — which `pxRect` rounded either
+   on top of the previous cell or 8px below it, leaving gaps. Stride 3, snap 2: **the snap has to be
+   finer than the stride for any diagonal drawn this way.** While in there, the arm was moved to grow
+   from the creature's *hands* (cols 2/14, row 19 → ±13px, +38px) instead of from a point near its
+   head; springing out of its face was survivable on a head-on-a-post and reads as a floating object
+   on an animal with arms.
+
+**Not changed, deliberately.** No gameplay number, no level geometry, no hitbox, no tuning value and
+no level data — the maze plays exactly as it did, and `validate:levels` (structural + physics-aware
++ meaning) passes untouched. The `arm > 0.02` rule still means a scowling monster shows no barrier at
+all, which is pass 15's owner call from their two reference shots and was left alone.
+
+**Budget.** Real download **56.88 KB gzipped** (was 56.49) — this pass is ~+0.4 KB per payload for
+seven filing units, the chevron trail and the new grid. The summed gate reads **110.7 KB of 90** and
+fails, unchanged in nature: `check-budget.mjs` adds the ESM and IIFE builds together even though a
+host loads exactly one. Still HANDOFF §7.1, still the owner's decision, nothing cut unilaterally.
+Grepped the built bundle for every phrase written in this pass's comments (`archive brick`, `kraft`,
+`catchlight`, `gremlin`, `filing`…): zero hits, while the seven cabinet labels and the five monster
+names do ship, because they are drawn.
+
+**Green:** typecheck + lint + **403 tests (40 files)** + build + build:site + validate:levels. Budget
+gate **red at 110.7 KB of 90 summed, 56.88 KB real**. Changed: `src/render/scenery.ts`,
+`src/render/maze.ts`, `src/render/maze.test.ts`. **Verified by rasterising** the full screen before
+and after the badge (`/tmp/brrender/maze.mts`), the creature at 6× in both moods with the hero for
+scale (`mon.mts`), and the three historical candidates side by side (`cast.mts`); grid row widths and
+horizontal symmetry checked mechanically inside `mon.mts` — every one of the 26 rows is 17 wide and
+mirrors itself, which is the check that makes a hand-authored grid trustworthy. **Not verified:**
+nobody has played it, and the HUD's real extents over the archive wall have only been reasoned about
+from `Hud.ts`'s layout, not seen in a browser.
+
+---
+
+## Pass 19 — Compliance, second attempt: the sketch's staircase, the GitHub creature, and signage off the sky
+
+**Owner rejected all three parts of pass 18.** Verbatim: *"You still haven't used the staircase design
+I wanted from the photo and the monster also you haven't pulled from github. I don't want these eyes
+and mouth in the monster, see what we already had in github. I don't want the tax, audit and other
+overlays in the sky rather on top of monsters."* Same reference view attached again. All three
+corrections were right, and two of them were mine to have got right the first time.
+
+### 1. The monster: it WAS on GitHub, and I looked past it
+
+Pass 18 concluded there was "no monster on GitHub", which was true about *assets* and wrong about the
+question. `Game.drawGates` on `origin/main` — the **deployed build the owner has been looking at** —
+draws exactly what the reference view shows: a squat filing cabinet with drawer seams and, standing on
+it, a pale rounded approval plate with **one dark bar straight through the middle**. Pass 18 saw that,
+called it "a 6×5 pale pod with a dark slot", judged it not to read as a monster, and designed a horned
+fanged animal instead. The owner's second note is the correction: the featurelessness *is* the design.
+A rubber stamp on a cabinet is a colder and more accurate picture of compliance than a creature with
+teeth, and "monster" was a name for the obstacle, not an art brief.
+
+Rebuilt from `git show main:src/core/Game.ts`, scaled from that version's 5px cells to this one's
+17×26 grid at scale 2 so the sprite-is-its-hitbox rule holds untouched: rows 0–13 the plate (rounded
+corners, one `c` band through the centre), rows 14–25 the cabinet with three drawer seams. Only `H`
+(plate) and `c` (slot) change between states — pale + dark red pending, mint + dark green filed. The
+horns, brows, eyes, catchlights, fangs and the frown-inverting mouth corners are all deleted, and with
+them pass 18's whole "one grid, two faces" argument.
+
+**Guarded by a structural test, because this sprite has now been wrong once.** It measures the grid
+rather than the pixels: no row of the plate may contain more than one run of `c` (a pair of eyes is two
+runs on one row), the rows that contain `c` must form one contiguous band (an eye band plus a mouth
+band is two), and the plate is built from `.KHc` and nothing else. That fails the moment somebody draws
+a face on it again.
+
+The boom arm moved with it — from the horned version's "hands" (±13px, +38px) back to the cabinet's top
+corners (±11px, +28px), which is where `drawGates` hung it (`armY = topY + PX * 2`) and the only place
+on this silhouette where a barrier *can* be held.
+
+### 2. The signage: rejected in the sky twice, so it is on the monsters
+
+Two passes have now put TAX / GST / AUDIT / LEGAL / ENTITY into the upper frame — pass 15 as five
+suspended boards (removed), pass 18 as a wall of seven labelled filing cabinets (removed now) — and
+the owner has rejected both. The reason is the same one pass 15 wrote down and pass 18 overrode: those
+five words are the *monsters'* names, so a copy of them hanging behind the climb is a second, duller
+label layer competing with the one that matters. **`drawFilingWall` and `drawFilingUnit` are deleted
+and there is a comment in `drawSceneBackground` saying not to put them back.**
+
+They live on the monsters instead, and got promoted while moving: the name plate was scale-1 text with
+an outline, and is now the **framed plaque** the cabinets were carrying (scale 2, solid dark ground,
+cool grey pending / mint cleared). It is the only signage on the screen besides the stage sign, so it
+can afford to be legible. `PAYROLL` was renamed `GST` so the five plaques read as the five words in the
+owner's reference.
+
+### 3. The staircase: this is what "the staircase design from the photo" means
+
+The gap pass 18 missed entirely. The sketch's flights are **long, thin, shallow diagonals with open
+sky under them**. The build's were four single columns each filled solid to the ground (`h` 1/2/3/4),
+which rasterises as a stack of blocks, and they sat against an 11×8 filings slab — between them the
+bottom-right two thirds of the frame was one unbroken mass of stone. Re-cut:
+
+- both flights are **one tile thick**, so the skyline shows through underneath;
+- the lower flight's treads are **two columns wide**, so it rises 40px per 80px and reads as the long
+  shallow diagonal the sketch draws rather than as a 1:1 zigzag;
+- the filings slab is **7×5** instead of 11×8;
+- the upper flight is contiguous (gx16–19) into the gallery, so it reads as a flight rather than as
+  stepping stones.
+
+**Two-column treads needed a data change.** A monster walking that flight has to step up every
+*second* column. `slope` alone cannot say that — `slope: -0.5` puts the surface on half-rows, i.e.
+stands the monster 20px inside the stone, which is the same class of defect the `badgeFloat` rule
+exists to prevent. Added `slopeRun` (columns per tread, default 1): `surfaceTop` divides by
+`T * slopeRun`, so the row stays a whole number.
+
+**Three geometry failures, found by machine, in order.**
+
+1. **`validate:levels` refused the first cut: "exit not reachable".** The upper flight's first step had
+   been placed at gx15 gy7, directly above the gx15 tread the player jumps *up-left* from to reach the
+   registers platform. Rising to feet-320 there puts the player's head at 276 and the step's underside
+   is at 320 — the one move the whole switchback depends on was walled off by a step 160px above it.
+   **A step over a tread is not just a headroom question: it can block a jump that starts on that tread
+   and lands somewhere else entirely.** Moved to gx16.
+2. **The pocket probe found a soft lock: 1,488 trapped states.** This is the price of thin treads and
+   it is worth stating as a rule. Thinning the flight opened a strip of *ground* underneath it
+   (x520–680), bounded on the left by the underside of the second tread — 40px of clearance against a
+   44px player, so not walkable — and on the right by the block's 200px face. The player could only
+   enter it by falling off the flight, and could not get out: every upward escape was blocked by the
+   treads themselves. From the strip's ground the best available jump reached feet-460 against a top
+   tread at 440, 20px short. Fixed with **one 40×40 step at the block's foot** (`step-resubmit`,
+   gx16 gy13): ground → 520 → the top tread at 440, two 80px hops. It is not a shortcut, because the
+   strip cannot be walked into in the first place — the flight's lowest tread is solid to the ground.
+   Re-probed: **0 trapped of 60,001 in-frame states.**
+   The probe also had to learn a distinction pass 18's did not: states off the left/right end of the
+   ground are **falls**, not pockets — no floor, so they leave the world and `forceSetback('fall')`
+   books them. 586 of those, correctly ignored. Counting them as pockets is what made the first run
+   report 2,069 "trapped" states at gx −0.8.
+3. **The headroom sweep caught an 80px ceiling** over the block's left column, where a two-wide upper
+   step overhung it. Fixed by moving the step, then deliberately re-introduced when the upper flight
+   was made contiguous — it is the same 80px the shipped build has always had at that corner, the
+   player only ever *walks* there, and the probe reports 0 trapped states with it in place.
+
+The probe (`/tmp/brrender/pocket.mts`) now answers all three questions in one run: trapped states by
+grid cell with a grounded/airborne split, the no-ground-route control run (reaches x=652 of an exit at
+1240 — the block's left face, exactly), and headroom per tread against the 84px rule.
+
+**Also re-cut:** every monster corridor and every route, because every surface moved. TAX on the ground
+(gx7–8), GST up the lower flight (gx9–15, `slope -1`, `slopeRun 2`), LEGAL on the registers platform
+(gx9–14), ENTITY on the block (gx17–22), AUDIT on the gallery (gx20–23); gather moved to gx20 gy10.
+Routes were re-authored corner by corner so each monster still walks the player's own stairs home.
+
+**Budget.** Real download **56.55 KB gzipped, down from 56.88** — deleting the archive wall paid for
+the new grid, the plaques and `slopeRun` with change to spare. Summed gate **110.1 KB of 90**, still
+red for the same measurement reason, still §7.1. Grepped the bundle for this pass's prose (`re-cut`,
+`soft lock`, `resubmit`, `pocket`, `PENDING`): zero hits; the `step-resubmit` role is stripped, and the
+five drawn names ship as they must.
+
+**Green:** typecheck + lint + **403 tests (40 files)** + build + build:site + validate:levels.
+Changed: `src/data/{levels.json,levels.ts}` + the root `levels.json` mirror,
+`src/world/Hazards/ComplianceMaze.ts`, `src/render/{maze.ts,maze.test.ts,scenery.ts}`,
+`src/core/screen2.test.ts`, `src/data/tuning.config.ts` (+ root mirror, comment only).
+**Verified by rasterising** the full screen before and after the badge and the creature at 6× in both
+states with the hero for scale; grid row widths and symmetry checked mechanically (all 26 rows 17 wide
+and self-mirroring). **Not verified:** nobody has played it, and the re-cut changed every jump on the
+screen — the switchback's tightest move is still the 120px up-left jump onto the registers platform,
+now taken from gx15 rather than gx12.
+
+**The lesson worth carrying, and it cost two passes:** when the owner says "use the thing we already
+have", the job is to *find and reuse* it, not to evaluate it. Pass 18 found the right artefact, judged
+it, and replaced it — and then wrote 40 lines of comment explaining why the replacement was better.
+The owner had already answered that question by asking.
+
+---
+
+## Pass 20 — Hire Under Fire, third build: a Godzilla on the ground, one cone of fire, and the badge on a brick
+
+Seven owner instructions, all on screen 4, and every one of them removes something:
+
+1. **"Bring the dragon on feet and on ground, two feet on ground — don't show wings, more like a
+   Godzilla that throws fire."**
+2. **"Remove the fireball concept; instead a straight growing slightly diverging throw of fire."**
+3. **"The labels of the fires can change and those labels don't move forward, they are there"** — one
+   taunt per burst, pinned over the lane, replaced by the next burst's.
+4. **"The ANSR badge can fall on a square brick which is floating and the player has to jump to grab
+   that."**
+5. **"When the costume of the dragon goes off there should be no dragon structure visible, just the
+   disintegrated costume on floor."**
+6. **"The dragon would just wear glasses, no jacket and tie."**
+7. **"Remove the small glowing particles floating on the screen"** and **"remove the small hurdle in
+   the middle of the screen."**
+
+Mid-pass the owner attached a **reference image**: a Perler-bead Godzilla — upright, no wings, thick
+legs, small arms, an enormous tail lying along the floor, dorsal fins down the spine. That image
+changed the *method*, not just the shape (see "the grid decision" below).
+
+### The beast: one grid, against the standing invariant
+
+§6 says "a big creature is composed, not authored as one grid", and the previous build obeyed it: a
+22×16 head grid plus a 16×13 wing grid plus `pxRect` runs for torso, neck, tail and legs, with a
+`mirror()` helper threaded through every horizontal placement because stepped runs cannot be flipped.
+
+Rasterised standing up, it was a **hunched lizard**. Three rounds of moving the runs around (pulling
+the head back over the hips, splitting the legs, thinning the tail) improved it and never fixed it,
+because the problem was not the parts, it was that a composer cannot see a silhouette.
+
+So the rule was amended rather than followed. The beast is now **one 30×24 grid at scale 10**
+(300×240px), and the four reasons the rule exists do not apply to it:
+
+- the creature **is** a silhouette — no clothing to register against it, so a composer buys nothing;
+- 720 cells, not 1,520, and every row is a handful of runs;
+- a row of the wrong width is caught **mechanically** (a test measures the grid), so the
+  "invisible until it rasterises" failure cannot happen;
+- and one grid **mirrors for free**, which deletes the entire `mirror()` apparatus and the class of
+  bug it existed to prevent.
+
+The grid itself was produced by a throwaway **block-model generator** in `/tmp` (fill rectangles for
+head/neck/torso/arms/hips/legs/feet/tail, then derive the outline by a boundary pass, then the
+values, then the fins), and its *output* was pasted in as literal strings. That is the part worth
+keeping as a technique: authoring a 720-cell silhouette by hand is a day of counting; authoring the
+twelve rectangles it is made of, and iterating on the numbers against a PNG, took three rounds.
+
+**It also had to get much bigger.** At the old 200×190 the upright pose had no room for legible legs,
+arms, fins *and* tail — the lower half rasterised as one mass. It is **260×240** now: five drawn
+heroes wide, four tall.
+
+### Three art defects the rasteriser caught and the code could not
+
+- **The crag had to go.** `scenery.ts` drew a scorched outcrop at x≈1080 — authored when the dragon
+  *hovered* over that end. The beast now stands in exactly those columns, and two dark warm masses in
+  the same place are one mass: the animal lost its silhouette completely and its head read as a hole
+  in the rock. Deleting the crag put it back against the sky. **A backdrop that framed a flying boss
+  will swallow a standing one.**
+- **The glasses were a welding mask.** Sized to the *head* (8 cells wide, lower bar on the jaw row)
+  they rasterised at scale 10 as an 80px band strapped across the whole muzzle, hiding the teeth as
+  well as the eye. Sized to the **eye** (3 cells of lens, bars above and below) they are glasses.
+- **The fire covered the face.** With the cone's apex at `MOUTH_X_FRACTION` 0.23 — inside the head —
+  the near end of the flame painted over the skull. The apex is at the **snout tip** (0.44) now, so
+  the beam leaves the jaw instead of engulfing it.
+
+### The fire: a cone, and the arithmetic that sizes it
+
+Gone: `Stream` (a poured column), `Wave` (rolling labelled flame fronts), `WAVE_INTERVAL/SPEED/W/H/
+RANGE/FADE`, `STREAM_W`, `STREAM_REACH`, `drawFireWaves`. **Nothing on this screen travels any more.**
+
+What replaced them is one `FireState`: an apex at the jaw, a target on the floor `CONE_REACH` in
+front of it, an `extent` that grows over `CONE_GROW`, and a divergence from `CONE_NEAR_H` to
+`CONE_FAR_H`. `Dragon.coneBoxes()` cuts that into `CONE_SEGMENTS` stepped AABBs, and **the simulation
+collides against exactly the boxes the renderer paints** — the `badgeFloat` rule applied to a hazard.
+A cone is not an AABB and both dishonest ways round that cost the player: one box over the whole
+thing is lethal where there is no flame, a box round the axis alone is flame that cannot hurt anybody.
+
+Four numbers had to be solved together, and the chain is worth writing down because it is not
+obvious in either direction:
+
+- The jaw is **high** (a Godzilla's skull is the top of the silhouette), so the flame takes a long
+  while to come down to head height. **A high jaw makes the lethal lane *shorter*, not longer.** At
+  `MOUTH_Y_FRACTION` 0.21 the cone only reaches a standing head about 37% of the way out.
+- So the lethal strip is `CONE_REACH × 0.63`. At the first guess (480px) that was 300px ≈ 1.25s to
+  walk clear of, against 1.75s of safe floor per cycle — comfortable for a blind sprint.
+- Raising the reach to **560** and the near thickness to **72** gives ~350px ≈ 1.45s.
+- The safe floor is `BURST_GAP + BURST_WINDUP`, and `BURST_GAP` came down 1.1 → **0.95** to make it
+  1.60s. The crossing has to be *possible* and *not free*: 1.45 against 1.60.
+- And the cone's **growth is the slack that makes it fair**: the far end — the end the player is
+  standing at — ignites 0.3s after the near end, so the real window at the outer end is ~1.9s.
+
+**The blind sprint still walked it, and the fix was a timing one.** `ROAR_TIME` (1.8s) plus
+`BURST_WINDUP` (0.65s) is 2.45s of guaranteed safety = 637px, further than the whole lethal strip; add
+`BURST_GAP` on top and a player who holds "right" from the spawn is past the lane before anything is
+alight. **The roar is now the gap before the first burst** (`this.t = D.BURST_GAP` on leaving `roar`),
+which puts the first flame down while a sprinter is still inside the lane and costs a reading player
+nothing — a roar *is* 1.8s of warning. With that, the blind-sprint probe books a delay and the
+reading probe crosses clean.
+
+The reach still varies per burst, but **one-sided now** (`0.88 + 0.12 × roll`, never above the
+nominal). `CONE_REACH` is measured against what must stay *out* of the fire — the spawn, and the drop
+column behind the player — so a roll that could overshoot it would put flame on a brick the player is
+standing under about one burst in two, which the telegraph never promised.
+
+**The crossing policy is the claim, so the test states it:** wait just outside the far end of the
+lane, and commit the moment a burst ends. A player who only ever walks during the *gaps* oscillates
+and never crosses (0.95s ≈ 247px against a 350px strip). Gap **plus** wind-up plus growth clears it.
+So the wind-up, which reads as the moment to freeze, is in fact the safest part of the run.
+
+### The label: a caption, not a passenger
+
+One taunt per burst, fixed at commit time, drawn at `labelAt` and never moving (owner call). Its
+height is **derived**, and the first derivation was wrong: taken from the far end of the cone it
+rasterised 4px inside the flame near the jaw, because the cone's top edge is highest *at the jaw*
+(the axis starts there and only falls). `mouth.y − CONE_NEAR_H/2 − 44` is the top of the whole shape
+plus clearance.
+
+### The badge on a floating brick, and the one-tap cost
+
+`badge.restGy` (12) plus three solids with `role: "pedestal"` at the drop columns. `badgeDrop.ts`
+rests the badge on that row's top face instead of on the ground; `Screen.propRects` now collects
+`pedestal` instead of the deleted `hurdle`; `drawFloatingBrick` paints them (stone, cyan studs, a
+shadow on the floor so they read as floating); the stripper keeps the new role; and the validator
+gained a rule — **every drop must have something directly under it**, or it is a badge hanging in
+mid-air on a screen that deliberately has no such mechanic.
+
+Row 12 is the only row that works, and both bounds are tight:
+- **underside** at y=520 against a standing head at y=556 — 36px of clearance. One row lower and the
+  brick is a **wall across the only route on the screen**;
+- **top** at y=480 puts the badge's box 76px over that head: a jump of 76 against 140 available.
+
+**The brick's left face is the trap, and it cost a debugging round.** The badge box is exactly the
+40px above the brick, so to overlap it the player's box must sit in 440–480 — and any box bottom in
+480–520 is *inside the brick's side*, where the horizontal move is blocked. A running player whose
+jump is cut short arrives with his feet 5px below the brick's top and is stopped **one pixel short of
+a badge box he is already level with**. Clearing the brick needs ~76px of rise *before* reaching it,
+which needs most of the arc. The one-tap test therefore holds the button 20 frames (0.33s) where the
+rail screens' equivalent holds 12 — that is a measurement the geometry forces, not a fudge.
+
+**The touch cost is real and is now the screen's biggest open question.** On the floor, an auto-run
+player collected this badge by walking into it. On the brick he has to jump — and he gets **one
+chance**, because by the time the second delivery arrives (4.8s later) an auto-runner has left the
+frame. The swept-tap gate says the window is one contiguous ≥0.3s band inside the first delivery's
+life, so it is makeable; whether it is *discoverable* on a phone is §7 material.
+
+### The costume, and what is left when it is gone
+
+Four garments became **one pair of glasses**. `HITS_TO_STRIP` stays 4, so the hits now read as
+progressive damage to the same object: clean → one crack → two → three, then the frame fogs, slides
+down the snout and goes. The pips over the beast are unchanged.
+
+And **the beast goes with it** (owner call). The previous build held the undressed animal at 0.32
+alpha, which read as a defeated lizard standing behind the five people who are the actual payoff.
+`beaten` now paints *only* `drawCostumeWreck` — a bent frame, a cracked lens, the puddle the cannon
+left — and `stripping` cross-fades the animal out as the heap builds, so one becomes the other rather
+than one being swapped for it.
+
+### The two deletions
+
+- **The rising embers are gone.** Fourteen small glowing cells drifting up the frame read as specks
+  of dirt on the screen, and on a screen whose only hazard is fire, loose warm dots in the sky are
+  also fourteen things that look like they might hurt you. The ground shimmer stays — it is *on* the
+  floor rather than floating over it.
+- **The mid-screen hurdle is gone**, with `drawPaperDrift` and the `hurdle` role. A boss screen did
+  not need a paper heap to hop.
+
+### Five test-suite failures that were about the *tests*, not the game
+
+Worth recording, because four of them were the same mistake: a rule phrased in terms of the rail,
+applied to the one screen that has no rail.
+
+- `badgeReach.test.ts` and `setbackLog.test.ts` both measured **every** screen's badge with
+  `badgeLowestBox`. On the drop screen that reads `gy` — the *drone's flight row* — as if the pickup
+  hung there: 161px over a standing head, failing for being correct. Both now split rail from drop,
+  and the drop screen gets its own clearance test against `dropRestBox`, on **every** column.
+- `golden.test.ts` teleported to the exit while `sim.badgeBox` was still null, so it cleared screen 4
+  before the badge had been delivered and reported three capabilities instead of four. It now waits
+  for the delivery.
+- `badgeDrop.test.ts` expected a `gone` phase inside one cycle. It cannot always be there: the
+  release time grows with the column's distance across the frame, so `release + FALL + LIFETIME` can
+  land past the end of the cycle and the next drone takes over while the old badge is notionally
+  live. Harmless, now pinned deliberately on a column released early enough.
+- The cone's "never paints outside its hitbox" test caught the **taunt plaque's glyphs**, which are
+  painted in the same cream as the flame core and are 2px wide. Filter by cell size, not by colour.
+
+### Result
+
+**441 tests (41 files) green.** typecheck, lint, `validate:levels`, `build`, `build:site` all green.
+Real download **57.5 KB** gzipped (up 0.9 KB from 56.6 — the grid and the brick cost a little more
+than the deleted waves and wings saved). The summed budget gate reads **112.0 KB of 90 and fails**,
+which is the same §7.1 measurement question as the last three passes, unchanged and still the owner's
+to answer. No prose shipped: the bundle was grepped for every phrase written into `levels.json` this
+pass, and the drawn `taunts` and the `pedestal` role both survive the stripper as they must.
+
+- **Four owner notes in one pass: the clock plaque off the HUD, no badge on Reception, Reception rebuilt as an office lobby, and a lost life that shows no screen at all.** Every one of the four is a *deletion* — a plaque, a pickup, a sky, a dialog — which is the same shape as the last three passes. Notes worth keeping below.
+
+  **(1) The TIME TO MARKET plaque is gone; lives took its slot, as hearts.** The clock was the loudest readout on the frame and it was static for most of a run: the only thing that moves it is a booked delay, which the delay log hanging directly under it already reports *with the reason attached*. Months are the argument the closing receipt makes; on the HUD they were a number with nothing to do. Lives are the opposite — they change, they are the stake of the next ten seconds — so they moved from the left stack into the right one, and the plaque now composes like the stage plaque opposite it (caption over content, mirrored). Deleted with the clock: `HudModel.months`, `HUD_PX.months`/`HUD_PX.unit`, the `clock*` DOM and CSS, `beam-run-bump`, and `COPY.hud.monthsLabel`/`monthsUnit`. The bump *behaviour* was kept and re-pointed: `beam-run-spent` flashes the lives plaque when a heart goes out, which is the event — the months were only its price. It is cleared unconditionally before it is re-added, because otherwise the reset to a full complement at the start of the next attempt inherited the flash from the end of the last one. The readout itself is hearts now (owner: "give a different look to life"): 7×6 cells, a *solid* heart for a life held and the **same silhouette hollowed out** for one spent, so the rule the old square pips existed for is untouched — shape carries the state, it survives greyscale, and the plaque cannot change width as lives are spent (a right-anchored readout that narrows slides the whole stack). Kept white, not the value orange: what you have left is what the obstacles have taken, which is the opposite of value. `pixelWidthPx` was split so its numeric twin `pixelArtWidthPx(cols, …)` can measure hand-built art too — the phone-frame overlap proof needed the hearts' 25 cells, and there is no string that is 25 cells wide.
+
+  **(2) Reception carries no badge.** It held a `SAFE_PASSAGE` mark whose effect is deliberately unassigned, presented as the tutorial for "the levitating ANSR mark is always worth taking". Read the other way round, that is the first ANSR badge a player ever sees teaching them that taking one changes nothing — one screen before 1Wrk, where taking it is the difference between walking through the DENIED stamps and being flattened. The first mark in the run is now the one that saves them, and the three labelled steps are the tutorial (they teach the jump, which is all this screen has to teach). **This broke five things, and all five were the same mistake**: a rule phrased in terms of *every screen* having a badge. `validate-levels`' structural layer ("every screen, not just the hazard ones"), `badgeReach.test.ts` and `setbackLog.test.ts`'s `s.badge!` sweeps, `golden.test.ts` (which waits for a badge to arrive before clearing a screen — on a screen with none it waited 8000 frames and reported the run as unfinished), `screen4.test.ts`'s "every other screen has a box" list, and two `Simulation.test.ts` badge tests that happened to use screen 0's because `toPlaying()` starts there. This is the *third* time this class of failure has been paid for (the rail/drop split was the second): a rule about badges must exclude the screens that do not have one, or it fails for being correct. The validator's rule is now "every screen **with an obstacle** carries a badge", which is the thing that actually matters and is what the model has always argued.
+
+  **(3) Reception is an office lobby, seen from inside** (owner: "an in-office kind of a setup… make it look like it is the inside of an office", and refined). It used to be a sky, a city skyline and a 120px desk standing in front of them, which is a street with a desk on it. It is now a room: coffered soffit with recessed downlights, full-height entrance glazing on the left with *daylight* and the market behind it, a lit feature bay carrying the real ANSR mark, a counter, wall panels, lounge seating, a two-car lift bank and planters. It has to stay distinct from the Workplace interior two screens later, and it separates on four things, none of them hue: a solid maintained ceiling vs a suspended grid with tiles missing; an entrance wall on the left vs a window band on the right; hospitality furniture vs workstations; and a value lighter throughout, because this room is lit and looked after. That contrast *is* the argument — the same building, before and after — which is why the screen is now the most finished-looking one in the game and why the "MARKET ENTRY: ON PAPER" sign still hangs over it.
+
+  **Rasterising it caught six defects, five of them invisible in the code.** (a) The feature wall was authored *darker* than the room so the mark would be the lightest thing on it; that put a dark slab in the middle of the frame and left the desk — also dark — with nothing to read against. Lighter wall, dark desk: the counter gets a silhouette, which is the only reliable way to make a prop read at this size. (b) The wall was ruled every 44px and rasterised as a roller shutter; two panels do the job. (c) The downlights hung *below* the soffit and read as eight pendant blobs; recessed into the ceiling they read as lit holes, which is what says "maintained". (d) Their stepped light cones — three low-alpha rectangles each, chosen because hard steps are more 8-bit than a gradient — rasterised as eight grey *objects* suspended in the room. **Deleted: light in this idiom has to be a surface, not a beam** (the cove behind the desk and the daylight in the glazing do the lighting now). (e) The polished floor material had speckle, and every dot of it read as litter on a floor whose whole job is to look swept; it is the only material in the game with `speckle: 0`. (f) **Everything was at three times human scale.** The wall above the ground band is 600px, so furniture sized to fill it comes out enormous: the first counter was 88px against a 60px drawn hero — a reception desk half again the height of the person being served at it — and the sofa back was taller than a person could sit against. Anything a person *touches* is now measured against the drawn hero (counter at his eye line, seat at his knee); only the architecture (the 170px lift openings) is oversized, deliberately, because a 75px door in a 600px wall reads as a hatch. Also: the first counter ran under the tutorial steps at gx 9 and gx 16, so a step you have to jump merged into the furniture, and the left planter was authored in the 24px of free floor between the entrance frame and the first step, i.e. drawn entirely behind it and invisible.
+
+  **(4) A lost life shows nothing; only the last one does.** `LIFE_LOST` still exists and still books the delay, but with lives left the host now paints **no overlay at all** — the state is the beat the impact is drawn on (the hero flat under the DENIED stamp, or wrapped in the Workplace tape), `LIVES.LOST_HOLD` came down 2.6s → **0.9s**, and the stage restarts from its own title card. The HUD deliberately stays up through it, because the heart going out *is* the feedback and hiding the plaque on the one frame it changes would be hiding the news. The one thing the deleted screen said that mattered — take the ANSR badge — is now a single orange line under the stage name on the retry's title card, driven by a new `Simulation.retrying` flag that `loadScreen` clears (so a stage reached by *playing* never inherits it). Nothing is lost for a screen-reader user: the delay was always announced through `onSetback` → `hud.announce`, which is a live region rather than a dialog.
+
+  **The out-of-lives screen is now four things on one axis** (owner: less text, symmetrical, less cognitive load): the headline, one figure ("3 delays cost 6 months"), the argument that figure is evidence for, and two routes onward. Deleted from it: the cause line ("the build stalled at Compliance" — the player just watched it), the lives readout (there are none left, so it was three empty hearts saying nothing), the **itemised ledger** (the same breakdown is on the closing receipt, where it is read rather than skipped, and here it was a table competing with the instruction), and the two-column split. `buildLedger`/`fillLedger`/`LedgerView`, the ledger CSS, `createLivesPips`, and `COPY.gameOver.reached`/`ledgerTitle`/`totalLabel` plus the whole coaching half of `COPY.lifeLost` went with them. The overlay was renamed `lifelost` → `gameover`, which is what it is now. One composition note found by dumping the composed `textContent` rather than by reading the code: the ghost CTA was the other end screens' sentence form ("See what closes the gap → GCC Opportunity Navigator"), which wraps onto two bitmap lines beside an eleven-character primary button and made the pair lopsided — it is the Navigator's *name* here, 25 characters, one line.
+
+  **A pre-existing leak, caught by the habit rather than by the change.** Grepping the built bundles for a sentence written three minutes earlier found the new Reception note absent from `dist/` (the stripper works) and **present in `dist-site/`** — and so was every other note in the file, including the compliance maze's. `vite.config.site.ts` never had `stripLevelNotesPlugin`, and *that* is the build that gets deployed; the budget gate only measures `dist/`, so nothing ever reported it. One line to fix, **~5 KB gzipped off the live page** (site payload 64.1 → 58.1 KB).
+
+  **Green:** typecheck + lint + **440 tests (41 files)** + build + build:site + validate:levels. Real download **57.6 KB** gzipped (up 0.1: the lobby's ~1.4 KB of art, less the clock plaque, the ledger and their CSS). Summed gate still red at **112.1 KB of 90** — unchanged §7.1, and the deleted code is why it did not go up. Files: `src/data/{tuning.config,copy,levels.json}` (+ both root mirrors), `src/ui/{Hud,LivesPips,Overlays,styles}.ts`, `src/core/{Simulation,Game}.ts`, `src/render/scenery.ts`, `scripts/validate-levels.ts`, `vite.config.site.ts`, and seven test files. **Not verified:** the game in a browser — the lobby was checked as a PNG at 1280×720 with two drawn heroes in it for scale, and both changed DOM surfaces were checked by composing their prose in jsdom, but nobody has played a lost life to see whether 0.9s reads as a beat or as a stutter. That is the one number in this pass that wants a hand.
+
+---
+
+## Pass 22 — Setup Delays refined: a stamp you can see, brick that looks laid, a hop between each pair, a badge that rises, and the delay flying to the log
+
+Four owner notes, and unusually for this build only one of them is a deletion. Three are
+*refinements* of things that already worked mechanically and did not work in the eye, and the fourth
+adds the piece of connective tissue the lives model has been missing since it was built.
+
+### (1) "The stamp is almost the same colour as the background"
+
+Correct, and the raster says why. The stamps were painted in `#33505C` (body), `#25404A` (shade),
+`#1E353E` (die) and `#2A3F49` (handle) — against a `#00212B`→`#05303a` sky and a skyline of `#042A33`
+towers whose **lit windows were `#7FC4D2`, i.e. lighter than the hazard itself**. So the only part of
+a rubber stamp that read at all was its white label panel: the frame, the turned handle and the rubber
+die all dissolved into the city behind them, and what the player actually saw was a floating white
+card with DENIED on it. This is the wrapped-figure-in-beige failure again — an object at a *different
+point on the same end* of the value scale as its background is an invisible object — and the fix is
+the same one: put the tool at the opposite end.
+
+The whole stamp is light now: a pale machined frame (`#93B2BC`/`#6F919D`) round a near-white plate,
+a near-black keyline (`#07121A`) round the outside, and the die at `#12181C`, the darkest value on
+the screen. That buys three separate things, and they matter in different places: it is the lightest
+field in the upper half of the frame (so it reads against the sky where it parks), it has a hard
+outline against *both* the sky and the clay ground (so it still reads at the bottom of its stroke),
+and the darkest value in the picture is the business end — the part that can cost a life. Nothing
+warm was used; slate and graphite only, orange still reserved for value.
+
+The other half of the same problem was the background rather than the stamp, so both were changed:
+screen 1's skyline windows drop from `#7FC4D2` to `#3E7280` and its towers from `#042A33` to
+`#032027`. `drawSkyline` is shared by four screens, so this is per-call and nothing else moved.
+
+### (2) Cognitive load: two props and one sign, where there were four things to read
+
+The middle column of this screen carried the floor sign, a wall clock, a framed PERMITS board **and**
+that board's caption — stacked in the one strip of sky the player looks through while four stamps are
+moving. The PERMITS board and its label are **deleted**: a form saying PERMITS behind four stamps
+saying DENIED is the same sentence twice, and it is the duller copy of it.
+
+Also deleted: the ghost `DENIED` printed on each ink pad at **scale 1**. Five pixels tall is below the
+size anything in this game is legible at, so it never said the word to anybody — it read as a grey
+smudge on the clay, four times over, on a floor that is already the roughest material in the build.
+The pad itself (dark impression, bright print line, two flecks) marks the column, and now that the
+stamps are visible the column is marked by the stamp too. Same reasoning trimmed the wind-up's floor
+tell from four closing marks per side to two, and its print line from 8px of near-white to 4px: at
+88px wide and 0.9 alpha it had stopped being a line and become a pale lump on the ground.
+
+The clock was the opposite call — it is the one prop that says what the level is *about*, so it was
+rebuilt rather than cut. It was a 32px box whose hands were drawn with `ctx.stroke()` at 2px, the only
+vector strokes left in any backdrop, and at that size they were a grey fuzz inside a dark square: the
+prop rasterised as a small window. It is now an 80px case on a bracket with a pale dial, twelve hour
+ticks (the quarters heavier), and hands stepped out of whole `pxRect` cells — same idiom as everything
+else on the frame, and unmistakably a clock in the PNG.
+
+### (3) "Make the brick a bit more refined"
+
+`drawBricks` had exactly one source of variation — per-pixel speckle — which is why every surface in
+this game reads as one flat slab with dirt on it. Real brickwork varies **brick to brick**, and at
+8-bit scale that variation is what says "laid by hand" rather than "tiled". Two opt-in options were
+added (`faces`, a set of per-brick tones picked stably from `hash2`; and `bevel`, the shadow each
+course casts on the one below), and screen 1 takes both. Opt-in matters: five other materials read
+through the same function and none of them changed.
+
+Screen 1's material then moved three ways, all in the same direction: a calmer, larger course
+(40×20 rather than 24×16, which also puts the new hurdle blocks at exactly one brick wide and two
+courses tall), speckle from **0.22 → 0.08** with the variation moved brick-to-brick, and the bevel on.
+Noise directly under four slamming hazards is the last place it belongs.
+
+### (4) A small brick wall between each pair of stamps
+
+The stamps are authored in pairs (gx 7 + 12, gx 20 + 25) and crossing a pair was purely a timing
+test. There is now one course of brick in the middle of each pair, one tile square: 40px against a
+140px jump, i.e. a hop taken in stride, so the pair is a jump *and* a piece of timing.
+
+**The column is the whole design, and it is not the obvious one.** A player who runs into the block
+is pinned against its left face, and that resting place must not be inside a stamp's press — which is
+96px wide, centred on the stamp column. At gx 9 the pinned player sits at x 332–360 and the gx 7
+stamp presses 252–348: sixteen pixels of overlap, i.e. a wall that holds you under a stamp, which is
+the unfair-not-hard failure this screen has already paid for once. The midpoint gx 10 puts him at
+372–400 with presses at 252–348 and 460–556 either side, clear of both. The second pair needed the
+same check and came out *off* its midpoint: gx 22 would pin him at 852–880 against the gx 20 stamp's
+772–868, so it is gx 23.
+
+The existing `wall-paperwork` block at gx 15 was left alone and the new ones are `hurdle-filing`, so
+`screen1.test.ts`'s "two stamps, a wall, then two more" layout rule still finds the right solid.
+
+### (5) The badge rises first, and does it slower
+
+`badgeFloatOffset` was a **sine**, which means the mark entered every screen at the *middle* of its
+band travelling **down**, and only reached the bottom of the swing three quarters of a cycle later.
+The owner asked for up-then-down; it is a **cosine** now, so the badge starts at `+FLOAT_AMPLITUDE`
+(the bottom of the band) and rises. `FLOAT_PERIOD` went 4.8s → **6.4s** — ~129 px/s down to ~97 px/s
+over the same 310px band.
+
+The band itself is untouched by both changes, which is what kept the cost at zero: `badgeLowestBox`
+is still `anchor + amplitude`, so the validator's reachability proof and the "41px over a standing
+head" clearance did not have to be re-measured. And the direction change is the *generous* one on
+touch, not the harsh one: with a cosine the badge is at its most reachable on the frame the screen
+starts, which is precisely when a one-tap auto-run player is walking towards it.
+`badgeReach.test.ts` re-proves the window on all four rail screens and it still passes untouched.
+
+One test had to move with it, and it is the right one to have: `setbackLog.test.ts` asserted
+`badgeFloatOffset(0) === 0`. It now asserts the badge starts at the bottom of the band, is higher
+0.4s later, and tops out at exactly half a period — three statements about the *shape* of the motion
+rather than one about the phase, which is what the owner actually specified.
+
+### (6) The delay flies from the place of death to the log
+
+The gap this closes: a setback books two months, spends a heart and writes a row into a panel in the
+top-right of the frame — and all three of those happen where the player is not looking, because the
+player is looking at the hero who just got flattened. The cost was being *reported* rather than
+*shown*.
+
+So the obstacle's name and the figure are now written on the frame **over the body**, held there long
+enough to be read, and then carried up into the delay log. The geometry is a new pure module,
+`core/delayFlight.ts` (start, end, progress → position and alpha), which is why it can be tested
+without a canvas and why the host only chooses colours. Three decisions inside it:
+
+- **It holds before it travels.** `HOLD` is 30% of the flight. Without it the label starts moving on
+  the frame it appears, and at 22 characters that is a thing you notice rather than a thing you read.
+- **It arcs.** A label sliding diagonally across a level reads as UI drifting; a quadratic bezier
+  lifted 90px above the straight line reads as something being carried.
+- **It does not move under `prefers-reduced-motion`.** The label holds over the player and fades —
+  the information is the message, the journey is the juice.
+
+`DELAY_FLIGHT_TIME` is **0.8s**, and that number is bounded by something else entirely: `LOST_HOLD`
+is 0.9s, after which the stage restarts and its title card covers the canvas, so anything still in
+the air is thrown away unseen. A test states that relationship rather than the constant, so changing
+either one fails loudly.
+
+The plaque is cool, never orange, for the same reason orange is kept off the log itself: a ledger of
+avoidable months is the opposite of value. And the string is the *same* one the log row uses
+(`causeLabel(cause)` + the figure) with the unit spelled out — the whole point is that the player
+recognises it when it lands. `DELAY_LOG_ANCHOR` is an approximation of a CSS-laid DOM position, which
+is allowed here because the label fades as it arrives rather than snapping into the row; it flies
+under the HUD plaque, which is exactly the read we want.
+
+### Findings worth keeping
+
+- **The raster caught the whole of (1) and (2).** Every one of those defects — the dissolved stamp,
+  the illegible ghost word, the pale lump on the clay, the clock that read as a window — is correct
+  in source and obvious in a PNG. This is the sixth pass in a row where that has been true.
+- **A backdrop can outshine the hazard in front of it.** The skyline's lit windows were lighter than
+  the stamps. Whenever a hazard is repainted, check the *values* of what is behind it, not just its
+  own palette — and remember the shared generator (`drawSkyline`) takes its colours per call.
+- **A wall's column is decided by where a player STOPS at it, not by where it looks tidy.** Both new
+  hurdles were placed by measuring the pinned player's box against the neighbouring stamps' press
+  boxes, and one of the two came out off its midpoint because of it.
+- **Changing the phase of a motion can change its fairness even when the band does not move.** A sine
+  and a cosine cover the same 310px; only one of them has the pickup at its lowest point when the
+  player arrives.
+
+### Result
+
+**447 tests (42 files) green.** typecheck, lint, `validate:levels`, `build`, `build:site` all green.
+Real download **58.2 KB** gzipped (up 0.6 from 57.5 — the brick options, the clock, the flight module
+and one new plaque, less the deleted board and ghost text). Site payload **58.8 KB**. The summed
+budget gate reads **113.2 KB of 90 and fails**, which is the same §7.1 measurement question as the
+last four passes, unchanged and still the owner's to answer. No prose shipped: both bundles were
+grepped for every phrase written into `levels.json` this pass and the new `hurdle-filing` notes are
+absent from each.
+
+**Not verified:** nobody has played this. The hop between a pair of stamps is proved to be a hop by
+arithmetic and the screen is proved completable by the physics validator, but whether jumping a wall
+*while* reading a stamp's wind-up is a beat or a scramble is a hand question — and it lands on the
+screen §7.9 already calls deliberately punishing. The delay flight was checked as a PNG at seven
+points along its arc; the 0.8s of it, and whether it lands where the log row actually appears at a
+phone frame width, are both untested by anything but that image.
+
+---
+
+## Pass 23 — The stamps slam 27% more often, and the stroke paid for it
+
+One owner note: *"make the stamps more frequent, it's too slow and the user can easily pass."* The
+naive reading is one number — cut `CYCLE` — and it is wrong, because cutting `CYCLE` alone takes the
+*safe* part of the cycle down with it faster than it takes the busy part down, and the screen stops
+being crossable. So the pass is really: how much frequency can this geometry carry, and what has to
+give to buy it?
+
+### What was measured
+
+A probe (`/tmp`, not shipped) drives screen 1 unassisted with **60 reactive policies**: five stand-off
+distances × twelve start delays. Two things about its construction matter, and the first version of it
+got both wrong:
+
+- **The policy has to be able to retreat.** Stopping is not enough — a player who stops the instant a
+  column becomes dangerous can already be standing *in* it, and standing still there is death. The
+  policy now backs out to the left when a live column overlaps it, and only waits when it is short of
+  one.
+- **The phase has to be sampled.** Everything here is deterministic, so one run per policy measures
+  whether that single alignment of player against stamp cycle happens to work. The twelve start delays
+  are what turn "did this one run survive" into a rate. Before they were added, the current tuning
+  scored 0/18 and a *faster* cycle scored 6/18, which is noise wearing a difficulty costume.
+
+Also worth recording: my first probe reported 0/18 everywhere because clearing the screen leaves
+`PLAYING` for the next stage's **title card**, and the loop treated "not PLAYING" as death. A probe
+that cannot tell winning from losing will happily rank tunings for you.
+
+```
+cycle 1.80, safe 0.86s (1.80x crossing) -> cleared 22/60 (37%), fastest 6.7s
+cycle 1.50, safe 0.70s (1.47x)          -> cleared 11/60 (18%), fastest 5.8s
+cycle 1.45, safe 0.65s (1.36x)          -> cleared  6/60 (10%)
+cycle 1.40, safe 0.60s (1.26x)          -> cleared 11/60 (18%), fastest 5.5s   <- committed
+cycle 1.38, safe 0.66s (1.38x)          -> cleared  8/60 (13%)
+cycle 1.32, safe 0.60s (1.26x)          -> cleared  0/60          IMPOSSIBLE
+cycle 1.30, safe 0.58s (1.22x)          -> cleared  0/60          IMPOSSIBLE
+cycle 1.40 with the stroke NOT shortened -> cleared 0/60          IMPOSSIBLE
+```
+
+**The clear rate in the 1.40–1.50 band is noisy (6–18%) and the cliff below ~1.38 is not.** That is the
+finding. Between 1.50 and 1.40 the rate wobbles rather than declining, because which policies survive
+depends on where the pair's alternation happens to sit relative to the walk; below 1.38 *nothing*
+survives, at any ratio. So the honest reading is "1.40 is the fastest setting still inside the
+clearable band", not "1.40 is 18% hard".
+
+The other half of that: **at 1.32 the safe/crossing ratio is exactly the same 1.26× as the committed
+1.40, and it clears 0/60.** The ratio is necessary and not sufficient, because the actual test on this
+screen is not one column — it is **stamp → hurdle → stamp**, a ~0.8s traverse (200px plus a jump)
+against a cycle that must hand you a window at both ends of it. Which is why the note in tuning now
+says: anything faster than this needs the geometry to change, not the clock.
+
+### What shipped
+
+- `CYCLE` **1.8 → 1.4** — a **27% higher slam rate** (0.56 → 0.71 slams/s per stamp).
+- `HOLD_TIME` **0.34 → 0.24** and `LIFT_TIME` **0.24 → 0.20**, i.e. the busy part of the stroke
+  0.72 → 0.58. **This is what paid for the frequency.** A straight cut to 1.4 leaves a 0.46s safe
+  window against a 0.48s crossing — under 1.0×, and 0/60. Compressing the stroke keeps it at 0.60s.
+- `WARN_TIME` **unchanged at 0.22**, deliberately. It is the fairness half of the mechanism and it is
+  now a *larger* share of a shorter cycle, which is the right direction: faster stamps need the same
+  warning, not less. Probed at 0.26 for completeness — it eats the safe window and drops the rate to
+  1/60.
+- `ASSIST_TIME_SCALE` **0.26 → 0.18**, which is not a difficulty change but a *derivation*. What 1Wrk
+  has to deliver is a window wide enough to stroll through, and that window is `safe ÷ scale`: leaving
+  0.26 alone while the gap fell to 0.60s would have quietly cut the assisted window from 3.3s to 2.3s.
+  0.18 restores it to **3.3s**, so the unassisted screen got harder while the capability stayed exactly
+  as generous — the contrast between the two is the argument this screen makes, and it widened.
+- Two new arithmetic guards in `screen1.test.ts`: the safe/crossing ratio may not fall below 1.25 and
+  `CYCLE` may not go below 1.38; and the assisted window must stay over 3s and over 6× the crossing
+  time. The probe is the real proof, but these stop the floor being cut by accident.
+
+### The three test failures, and why two of them were luck
+
+**`reset()` clears aborted strokes** failed for a mundane reason: it ran the assisted stroke for a
+hardcoded **40 frames**, and the die has to fall ~84% of its travel (most of `DROP_TIME`) to touch a
+standing head. At the old 0.26 scale 40 frames was 0.17s of hazard time — enough. At 0.18 it is 0.12s,
+three frames short of contact, so a test about `reset()` failed on a number that had nothing to do with
+`reset()`. It derives the count from `DROP_TIME / ASSIST_TIME_SCALE` now.
+
+The other two are the interesting ones, and they were **passing on floating-point luck**:
+
+- "winds up before it slams" required the press on the very next frame after the wind-up ended.
+- "alternates rapid-fire" required that *no* frame has both stamps idle.
+
+`CYCLE / DT` at 1.4 is a whole **84**, and half of it a whole **42**. So the clock lands exactly on its
+own wrap, and at `e === 0` the press is 0 *by definition* — that is the instant the drop begins, not a
+moment during it. One frame at the top of the cycle therefore reads as neither warning nor pressing.
+At the old 1.8 the same arithmetic gives a whole 108 and 54 — but accumulating `e += 1/60` 108 times
+lands on **1.7999999999999985**, which never reaches the wrap, so the frame never existed and both
+tests passed for four passes without anybody knowing why.
+
+I could have dodged this by picking 1.42 (85.2 frames, not a whole number) and both tests would have
+gone green untouched. That is the wrong fix: it encodes "CYCLE must not be an exact multiple of the
+timestep" as a hidden constraint nobody would ever find. The tests now state the properties in a way
+that survives the wrap — the wind-up must run into the drop *with no idle gap*, tolerating the single
+wrap frame, and "both idle" is capped at one frame of 84 — with the reason written down in both.
+
+### Findings worth keeping
+
+- **A tuning number and its stroke are one decision.** `CYCLE` is `busy + warn + safe`; changing it
+  without deciding which of the three absorbs the change is how a hazard becomes impossible.
+- **A safe/crossing ratio is necessary and not sufficient.** Two tunings at 1.26× differ by
+  everything, because what the player crosses is the whole *pattern*, not one hazard.
+- **A probe that cannot tell winning from losing will still rank your options.** Check the exit
+  condition before believing a sweep, and sample the phase or you are measuring one alignment.
+- **A test that passes on float drift is a test that has not been run.** Whenever a period becomes an
+  exact multiple of the timestep, expect the wrap frame to exist for the first time.
+
+### Result
+
+**449 tests (42 files) green** (two added). typecheck, lint, `validate:levels`, `build`, `build:site`
+all green. Real download **58.2 KB** gzipped, unchanged — this pass is five numbers and a lot of
+comment, and comments do not ship. Summed gate still red at 113.2 KB of 90: unchanged §7.1.
+
+**Not verified:** nobody has played it. What the probe can say is that the stage is still clearable
+unassisted and that the fastest clear got *quicker* (6.7s → 5.5s), i.e. a competent player is not
+slowed down by this, they just have less slack. What it cannot say is whether 0.71 slams per second per
+stamp reads as "rapid fire" or as "unfair" in the hand, and the honest risk is that this screen was
+already flagged as deliberately punishing (§7.9) before it got 27% faster. If it is too much, the first
+thing to move back is `CYCLE` toward 1.5 (safe 0.70s, 18% on the same probe) — not `WARN_TIME`, and not
+the gaps between the columns.
+
+---
+
+## Pass: the compliance creature, pulled from GitHub for real this time
+
+**The note.** "For the small moving creatures of compliance screen we had made a version which is on
+github and the local one is a new one I don't like this — I want the variant of the creature that we
+have on github." Two things in that sentence had to be taken literally and one of them had been
+missed twice: **"small"**, and **"the variant that is on github"** — meaning the artefact, not a
+description of it.
+
+**Where it was.** `origin/main` is `4c9461d`, the same commit as local `HEAD`; the entire compliance
+rebuild is in the *working tree*, uncommitted. So the deployed creature is not in history behind a
+branch — it is `Game.drawGates` plus `world/Hazards/Gates.ts` at `HEAD`, both of which the working
+tree deletes. `git show HEAD:src/core/Game.ts` had it in ~50 lines.
+
+**Why the last pass was wrong even though it thought it had done this.** The previous pass had already
+been told "pull the monster we have in github" and had written a module docstring saying it was
+"transcribed from `git show main:src/core/Game.ts` rather than remembered". What it actually
+transcribed was the *palette* and a *description*: `#CFE6EC` plate, `#3A1414` slot, `#4E7280`
+cabinet, "a rounded pale plate with one dark slot, on a filing cabinet, no face" — all correct — and
+then it re-authored the shape as a 17×26 grid at scale 2 (34×52 px) because that was the hitbox it
+had already chosen. The deployed creature is **30×30**. A squat 30×30 stamp stretched to 34×52 is a
+parking meter with a stamp on it; the owner's word for the difference was "small".
+
+**What the deployed build actually draws**, in its own 5px cells: a 20×30 cabinet post standing on the
+ground with a lit top course and two drawer seams; a 30×25 plate over it
+(`' HHHH '`/`'HHHHHH'`/`'HccccH'`/`'HHHHHH'`/`' HHHH '`); and a 35×10 striped boom arm at
+`armY = topY + PX*2 - open*PX*7`, each segment lifted a further `open*seg*0.55`. Two things only a
+raster tells you about that code:
+
+1. **The plate covers the whole post except its top course.** The drawer seams are painted and then
+   completely hidden. So the visible creature is a plate with a blue-grey cap — which is why the new
+   grid is 6 rows: one row of cabinet cap and the five plate rows, verbatim. Reproducing the seams
+   would have been reproducing dead pixels.
+2. **The boom is painted *before* the plate**, so at rest it is hidden behind its own head and only
+   its end cell shows as a nub at the shoulder. That is the single detail that makes the pending
+   creature read as a rubber stamp. My first attempt at this pass drew the arm on **top** (reasoning
+   that "a barrier invisible while it blocks is a bug"), rastered it, and got a plate with a white bar
+   across it — a different object, and visibly not the one on GitHub. Draw order reverted to the
+   deployed order; the reasoning was sound and the picture was wrong, and the picture is what was
+   asked for.
+
+**What shipped.** `render/maze.ts`'s monster is now `MONSTER_SCALE 5` and a 6×6 grid
+(`.LLLL.` / `.HHHH.` / `HHHHHH` / `HccccH` / `HHHHHH` / `.HHHH.`), `HAZARDS.MAZE.MONSTER_W/H` are
+**30/30** in both `tuning.config.ts` mirrors, and the boom is drawn in both states behind the plate,
+sized to exactly the hitbox width and ending flush with the feet. Two deliberate departures from the
+deployed code, both about fairness rather than looks: the deployed arm was **35px wide on a 26px
+hitbox and hung 4px below the feet**, i.e. a blocking obstacle painting lethal-looking pixels outside
+its own collision box and into the floor. Inside the box it is 30px and stops at the feet. Raised it
+leaves the box, which stays legal because a friendly monster cannot cost anything.
+
+**The defect the raster caught in my own version.** With the creature 22px shorter, the raised boom
+(21–32px above the plate) landed exactly where the name plaque sits, and the first screen-2 raster
+showed five booms hidden behind five name plates. The plaque now steps up with the arm
+(`box.y - 26 - arm*34`), which also reads as "something changed" on the frame where the badge lands.
+
+**Tests.** 450 (was 449). `maze.test.ts`'s "the sprite is the hitbox" test passes unchanged and now
+means something different, which is the point of writing it against the constants. Three tests were
+restated rather than deleted: the "no face" structural test measures the whole grid instead of a
+14-row slice (still: at most one run of slot cells per row, and the slot rows are one contiguous
+band); "shows no barrier while it scowls" became **"hides the boom behind the plate while it
+blocks"**, and it asserts the draw *order* — every stripe cell is painted before the first plate cell
+— because order is the thing that is easy to lose in a refactor and impossible to see in a diff. One
+test was added, and it is the one that should have existed two passes ago: **`MONSTER_H` must be less
+than `PLAYER.HEIGHT`**, plus square. "Small" is now a number.
+
+**Gameplay consequences, checked not assumed.** The hitbox is derived from the same constants
+everywhere, so the corridor ends (`m.from*T + MONSTER_W/2`), the settle spacing and the physics-aware
+validator all followed automatically: `validate:levels` is green on all six screens, and screen 2's
+nine tests (including "touching a monster costs months and a life", which relies on a standing player
+overlapping a monster's box on the same floor) pass with a box that is 22px shorter. A smaller lethal
+box is strictly more permissive, so nothing on this screen got harder. `GATHER_SPACING` stays 40,
+which is still wider than the new `MONSTER_W`; only its comment's arithmetic changed.
+
+**Green.** typecheck · lint · 450 tests · build · build:site · validate:levels. Real download **58.1
+KB** gzip (was 58.2 — the 6×6 grid is 20 rows shorter than the one it replaced), site payload **58.7
+KB**, summed budget gate still red at **113.1 KB of 90** — unchanged and still §7.1, the measurement
+question, not a regression.
+
+**Open.** Nobody has played this screen by hand (§7.8 stands), and now the thing to look at is
+whether a 30px creature is *too* small to notice on a phone at the far end of a corridor — the
+opposite risk to the one that was just fixed. The name plaque is wider than the creature it labels,
+which was already true and is more obvious now; if that reads as a sign with a toy under it, the
+cheaper fix is the plaque (scale, or drop it once the player is close) than the creature, because the
+creature is now the owner-approved artefact and the plaque is ours.
+
+---
+
+## Pass: the compliance creature, WHOLE this time — a floating head over a cabinet
+
+**The note.** "Still you haven't brought the full version, I want exactly those creatures in the both
+the states — which is on the github." The fourth rejection of this creature, and the previous pass had
+transcribed the deployed drawing code cell for cell. It was still the wrong object, and the reason is
+worth writing down carefully because nothing in the code review of either version could have caught
+it.
+
+**What was wrong.** `drawGates` positions its pieces from **two different anchors**:
+
+- the cabinet post from `groundY = 15 * RESOLUTION.TILE` — the *screen floor*, hard-coded;
+- the head and the boom arm from `g.topY`, which comes from the gate's **authored `gy`**.
+
+And `git show HEAD:src/data/levels.json` authors all seven Compliance gates at **`gy 14`**, one row
+above the floor. So on the deployed screen the pieces land at: head 535–560, boom 555–565, **a 5px
+gap**, cabinet 570–600, feet at 600. The creature is a **filing cabinet standing on the floor with a
+pale approval head floating above it** — 35×65 — which is exactly the "head on its slate post" the
+owner described two passes ago. The previous pass rendered the same code with `groundY` and `baseY`
+set to the same row, which stacks the head onto the cabinet and hides all of the cabinet but its top
+course. That rasterised as a tidy 30×30 stamp, the raster was self-consistent, and it was 35px of the
+creature short. **"Full version" meant: there is a body, and you only brought the head.**
+
+**The lesson, promoted to `docs/INVARIANTS.md`.** Transcribing drawing code is not enough — render it
+against the `levels.json` rows it was authored for. A sprite's identity lives in its code *and* its
+data, and a raster is only evidence if the inputs are the shipped ones. Corollary worth keeping in
+mind for any future port out of `Game.ts`: **a draw function that reads more than one anchor encodes a
+layout decision in the gap between them.**
+
+**What shipped.** `render/maze.ts`'s `MONSTER` is now a **7×13 grid at scale 5 = 35×65**, and every
+piece is at the deployed build's own offset relative to the monster's feet:
+
+```
+rows 0–4   the head, verbatim: ' HHHH ' / 'HHHHHH' / 'HccccH' / 'HHHHHH' / ' HHHH '
+row  5     where the boom lies while it blocks (drawn separately — it moves)
+row  6     THE GAP — not padding; the head floats
+rows 7–12  the cabinet: lit top course, face, and the two drawer seams at their own rows
+```
+
+The drawer seams are back, and they are visible now for the first time — in the 30×30 version they
+were behind the head, which is why that version did not author them. The head is 6 cells wide against
+the cabinet's 4, so it reads as wider than the body it rides on. Column 6 is used by nothing but the
+boom, which is 7 cells (35px) wide: the grid is 7 rather than 6 **precisely so the deployed arm fits
+inside the hitbox**, since the original drew a 35px arm on a 26px box. `MONSTER_W/H` are **35/65** in
+both `tuning.config.ts` mirrors.
+
+**Both states, which is the other half of the note.** Pending: pale head `#CFE6EC`, dark-red slot
+`#3A1414`, boom down and tucked under the jaw with its ends showing either side. Cleared: mint head
+`#9FE6C4`, dark-green slot `#0A3A2A`, boom swung up on the diagonal (`open * PX * 7` of lift plus
+`open * seg * 0.55` per segment, so it pivots rather than slides). **The cabinet is the same slate in
+both** — only the head changes, which is what makes the change read at a glance. Verified by rendering
+mine and the verbatim original side by side at 4× in all three phases (pending, mid-lift, cleared):
+identical to within one pixel of snapping on the raised boom.
+
+**Kept from the previous pass** (both still right): the boom is painted **behind** the head, because
+painted on top the pending creature is a head with a white bar across it; and the name plaque steps up
+as the boom rises, since raised it reaches into the plaque's band.
+
+**Tests.** 450, unchanged in count. `maze.test.ts`'s "is small — shorter than the hero" test was
+**wrong about the thing it was pinning** and has been replaced: the full creature is 65px, taller than
+the player's 44px hitbox, and "small" was only ever true of the head. What now guards it is the
+structure that keeps getting lost — off the grid, so it cannot be lost silently again: a head block, at
+least one **completely empty row**, then a cabinet block, with no cabinet cells up in the head and no
+head cells down in the cabinet, the head wider than the cabinet, and the head alone under the hero's
+height. That is the assertion I wish had existed two passes ago. The "no face" test's material set
+grew to `.HcLPd`.
+
+**Gameplay.** The hitbox went 30×30 → 35×65, so the lethal box is bigger than either recent version
+(and 1px wider than the 34×52 it replaced two passes ago). Everything derived followed automatically:
+corridor ends inset by `MONSTER_W/2`, gather spacing (40, still wider than 35), and the physics-aware
+validator — **green on all six screens**, and screen 2's nine tests pass unchanged. Worth stating
+plainly: a 65px-tall lethal box in a maze of 40px corridors is the tallest hazard body on the screen,
+and it has never been played by hand (§7.8). If contact starts feeling unfair, the honest fix is **not**
+shrinking the creature again — it is the corridor rows, because the creature is now the
+owner-approved artefact.
+
+**Green.** typecheck · lint · 450 tests · build · build:site · validate:levels. Download **58.1 KB**
+gzip, site **58.7 KB**, summed budget gate still red at **113.1 KB of 90** — unchanged, still §7.1.
+
+---
+
+## Pass: the exodus is a walk now, and descents drop instead of floating
+
+**The note.** "Make the movement of the creatures to the resting space a bit slow, right now it's too
+fast and not natural."
+
+**Why it was unnatural, in one number.** `HAZARDS.MAZE.GATHER_SPEED` was **420 px/s**. The player walks
+at **260**. So the moment the badge was taken, five obstacles left the screen at **1.6× the speed of the
+fastest thing in the game** — and at 2.4× their own top wander speed (`SPEED_MAX` 132). Nothing about
+that reads as five creatures going home; it reads as them being deleted. The whole exodus was over in
+**1.77s**.
+
+**What it is now.** `GATHER_SPEED: 160`. That number is not a taste call — it is bracketed on both
+sides by things already on the screen:
+
+- **above `SPEED_MAX` (132)**, so it is faster than their aimless patrol: they are leaving with
+  purpose, not dawdling;
+- **well under `PLAYER.WALK_SPEED` (260)**, so the player can outpace them, which is what makes them
+  read as bodies rather than as effects.
+
+A probe over the real level data (five monsters, their authored routes, sampled after a beat of
+wandering so the start positions are realistic) gives per-monster arrival times of **0.5 / 2.3 / 2.4 /
+2.5 / 4.1s**, i.e. the whole exodus lands in ~4s instead of 1.8s. The far gallery (AUDIT) is the long
+one, which is right: it has the furthest to come.
+
+**The defect the slowdown exposed.** `walkHome` moved both axes at the same speed, and the comment
+justifying that said a level change should read as "walking down a flight rather than sliding through
+it" — true for legs that move a column per row (the staircase ones), and false for the two legs that
+don't. LEGAL's `(14,8) → (15,11)` and AUDIT's `(16,7) → (15,11)` are one column across and three or
+four rows **down**: the horizontal part finishes early and the rest is a pure vertical descent. At
+420 px/s that was a 0.2s blur nobody could see. At 160 it is a creature **floating down a stair well**
+for most of a second. So the leftover vertical part of a *descent* now falls, at a new
+`GATHER_DROP_SPEED: 420` — which is the old walk speed, reused where it was always right.
+
+Rules, kept deliberately narrow so the staircase read is untouched:
+
+- while a leg still has horizontal ground to cover, both axes move at the walk → 45°, i.e. walking a
+  flight, exactly as before;
+- once the horizontal part is spent, a **downward** remainder drops;
+- an **upward** remainder still walks, because a climb is a climb.
+
+Traced off the frames: horizontal peaks at 160 (175 with the half-pixel end-of-leg snap), climbs at
+160, and the two descents run at exactly 420 for 12 and 18 frames — 0.2s and 0.3s, a hop down a level.
+
+**Tests.** 451 (was 450). One new, in `ComplianceMaze.test.ts`, and it measures the *frames* rather
+than reading the constants back: nothing moves horizontally faster than the player walks, nothing moves
+slower than the creature's own top wander speed, and a leg that ends in a pure descent falls faster
+than it walks — with the fixture shaped like LEGAL's real route (one column across, four rows down),
+because the existing `STAIR` fixture's legs cover more ground horizontally than vertically and so never
+produce a pure drop. That is the whole point of the fixture: **a test for "it should not float" needs a
+route that could float.** Two `screen2.test.ts` windows went from 300 to 420 frames — the exodus now
+takes 4.1s and those assertions are about *arriving*, not about pace, so they had no business sitting
+0.9s from the boundary. Pace is pinned in one place now.
+
+**Green.** typecheck · lint · 451 tests · build · build:site · validate:levels. Download **58.1 KB**
+gzip, site **58.7 KB**, summed gate red at 113.1 KB of 90 — still §7.1.
+
+**Open.** 4.1s is now the longest single "watch this happen" beat on the screen, and nobody has played
+it. If it feels slow *in the hand* rather than slow *on paper*, the number to move is `GATHER_SPEED`
+alone (180 puts the exodus at 3.7s, 200 at 3.3s) — not `GATHER_DROP_SPEED`, which is what stops the
+descents floating, and not the routes.
+
+---
+
+## Pass: docs audit — the handoff became a router, and what the repo hygiene sweep actually found
+
+**Asked:** are there stale/dirty files anywhere; is the HANDOFF/JOURNAL system eating credit; is
+there a better structure — and *don't* build one if it would cost more than it saves.
+
+### The hygiene sweep — mostly clean, three real things
+
+Measured rather than assumed. `find`/`git ls-files`/an orphan-module scan over `src` and `scripts`:
+
+- **No orphaned source modules.** Every non-test `.ts` in `src/` is imported by something except
+  `src/main.ts`, which is the Vite entry — a false positive. 116 tracked files, no dead code.
+- **No stale build output tracked.** `dist/` (2.3 MB) and `dist-site/` (228 KB) are both correctly
+  in `.gitignore`; `git ls-files | grep ^dist` returns 0.
+- **`scripts/budget.mjs` vs `check-budget.mjs` is not duplication** — the first is the shared policy
+  (`BUDGETS`, `evaluateBudget`), imported by both the gate and `budget.test.mjs`. Correct as it is.
+- **The root `index.html` is NOT stale** — it was the first thing that looked it (dated Jul 25, while
+  the rest of the tree is Aug 19). It is the production host-embed demo: it loads
+  `./beam-run/dist/beam-run.iife.js` and calls `window.BeamRun.mount`. Leave it. Worth writing down
+  because it will look stale to the next sweep too.
+
+The three that are real:
+
+1. **45 files uncommitted** — 32 modified, 6 deleted (`Hazards/{Fire,Gates,Spikes}.{ts,test.ts}`),
+   and untracked new work including **`docs/INVARIANTS.md` itself**. `HEAD` is
+   `4c9461d` "badge levitates as ANSR sunburst". So the maze rebuild, the dragon, the Workplace,
+   the lives model and the invariants doc are **all** unversioned. This is the one genuine risk in
+   the repo, and it also explains a note in an earlier entry ("`origin/main` is the same commit as
+   `HEAD` — the whole maze rebuild is uncommitted") which has now been true for many passes.
+   Not committed on this pass: not asked for, and 45 files is the owner's call to stage.
+2. **`tuning.config.ts` and `levels.json` exist twice** — root and `src/data/` — and are
+   **byte-identical today** (`cmp` clean). Nothing enforces that. The handoff says "update both",
+   which is a human promise, not a check. A guard is possible but the parent folder is not always
+   in the workspace (`beam-run/.kiro`'s own steering says to ask the user to open it), so a hard
+   check would fail in a legitimate configuration. Left as a flagged hazard.
+3. **The steering file exists twice** — `.kiro/steering/beam-run.md` (workspace root) and
+   `beam-run/.kiro/steering/beam-run.md` — and they differ *by design*: one assumes the parent
+   folder is the workspace root, the other assumes `beam-run/` is. That is deliberate and correct,
+   but it means **every steering edit must be made twice**. Both were updated on this pass.
+
+`.DS_Store` at the workspace root is untracked-and-unignorable (the root is not the repo) —
+cosmetic, left alone.
+
+### The credit question, with numbers
+
+- `HANDOFF.md` was **48.6 KB / 592 lines ≈ 12,100 tokens**, and the steering makes it a
+  **mandatory read at the start of every session** (and again after each context compaction).
+  That is the single largest fixed cost in the project.
+- It was also **2.4× its own stated cap** (~400 lines / ~25 KB), and §9 had already diagnosed why:
+  every pass adds a per-screen entry to §4. §9 even named the fix — "move §4.9–§4.14 to a
+  `docs/SCREENS.md` … do that before adding a seventh screen entry" — and it had been deferred.
+- `docs/JOURNAL.md` is **248 KB ≈ 62,000 tokens**, but it is **not** a per-session cost: it is
+  appended to, never read whole. The append-only design was already right. **Do not "clean up" the
+  journal to save credit — it is not what costs.**
+
+**Verdict: the system is worth keeping, and the answer was not to write less but to split it.** The
+alternative to a handoff is re-deriving the architecture from ~110 source files every session, which
+is far more expensive than 12k tokens and gets the owner's settled calls wrong. The waste was that
+a session pays for *all* of the state to do *any* task.
+
+### What was built: a router, not a dump
+
+`HANDOFF.md` **592 → 241 lines (48.6 → 17.0 KB)**, and it now opens with a
+"where things are, read only what the task needs" table. Three new docs, content moved **verbatim**:
+
+- **`docs/SCREENS.md`** (122 lines) — §4.9–§4.14, the per-screen model, with a screen→hazard
+  module→capability table at the top. This is the section that was doing the growing.
+- **`docs/ARCHITECTURE.md`** (133 lines) — §5, the module map, with a "task touches X → read Y"
+  table.
+- **`docs/OPEN.md`** (109 lines) — §7's sixteen owner decisions plus §8, with the top three named.
+
+`HANDOFF.md` keeps §1 status, §2 environment, §3 locked defaults, **§4.1–§4.8 — the model proper**,
+and §10's three recent passes, which were also cut from ~20 narrative lines each to ~6 (the full
+entries are here, which is the point of here). §5/§6/§7 remain as **numbered stubs pointing at the
+new files**, so every "§5"/"§7" cross-reference in this journal still resolves.
+
+Per-session read cost: **~12,100 tokens → ~4,300** for the router, plus ~2,700 for the one
+companion doc a task actually needs. Roughly **7,000 tokens saved per session**, and the
+end-of-pass update now edits a 241-line file instead of a 592-line one. The pass paid for itself
+immediately: reading the old handoff once (12k) is the only cost, and it had to be read anyway.
+
+Also: `docs/INVARIANTS.md` got a **five-group index** at the top (Bundle · DOM bitmap type ·
+Layout · Gameplay · Testing) so a session can read one group instead of 52 KB. It is now the
+largest mandatory-ish read in the docs and **Gameplay alone is ~70% of it** (lines 71–482).
+Deliberately **not** split further on this pass — it is the highest-value content in the repo and
+the next split should be per-screen, which is a judgement call better made when it next blocks
+someone. Named as the next candidate inside the file itself.
+
+Both steering files were rewritten to teach the router: "read HANDOFF.md, then **only** the
+companion doc your task touches", and the after-each-task rule now routes new content to the doc
+that owns it (rules → INVARIANTS, per-screen → SCREENS, modules → ARCHITECTURE, questions → OPEN)
+with the cap tightened to ~250 lines / ~20 KB.
+
+### What was deliberately NOT built
+
+The brief said don't build something that costs more than it saves. Rejected:
+
+- **An auto-generated symbol/API index.** `grep` over 110 files is already cheap and an index goes
+  stale silently — it would cost a maintenance step every pass to save a search that costs nothing.
+- **A `docs/MAP.md`.** `docs/ARCHITECTURE.md` already is one; a second would drift from the first.
+- **A mirror-file consistency check** (see hazard 2 above) — it would fail in a legitimate
+  workspace configuration.
+- **Pruning the journal.** It is not a per-session cost, and the findings are the asset.
+
+### Verification
+
+Docs-only change, but the full gate was run: **typecheck · lint · 451 tests (42 files) · build ·
+build:site · validate:levels all green.** Content preservation was checked by grepping 20
+distinctive phrases from across the moved sections against the new four-file set — all present
+(one apparent miss was the grep not accounting for `**bold**` markers). Numbers in §1 were
+re-measured and are accurate: **IIFE 58.1 KB, ESM 57.7 KB, site payload 58.7 KB** (60,135 bytes
+gzipped, i.e. KiB not KB — Vite prints 60.66 kB for the same file, which is where the apparent
+discrepancy comes from), summed gate **red at 113.2 KB of 90 — still `docs/OPEN.md` §1.**
+
+---
+
+## Pass: the Workplace, refined — an office that is broken *and lit*, and a mummy made of cloth rather than of tape
+
+**Brief (owner):** "the Workplace screen works fine but doesn't look that good. See every element and
+see if it can be made visually better — the mummy/human figure, the environment. No compulsion to
+match the other screens' colour design for the environment, just keep it 8-bit. The room can look
+even more clumsy and haywired, and after the mummy is killed everything restores and lights look
+good and everything."
+
+### What the raster actually showed (before touching anything)
+
+Rasterised both states first (`@napi-rs/canvas` + the project's own `tsx`, per §2 of the handoff), and
+the images said something the code did not. Two failures dominated and they were the same failure:
+
+1. **The room had one value.** Back wall `#0D3540`, dado `#0D3540`, cubicle dividers `#123F4A`,
+   monitors `#10505E` — every piece of furniture within two values of the wall it stood against and of
+   every other piece. The whole bottom third of the frame was an indistinct dark field with the
+   player, the one lethal figure and nine props standing in it.
+2. **"Restored" looked almost exactly like "broken."** The only difference was four slightly brighter
+   grey bars at the ceiling. The payoff — the entire argument of the screen — did not land.
+
+Plus, in order of how obvious they were in the PNG and how invisible in the source: the light was four
+low-alpha **gradient wedges** thrown from the fittings to the floor, i.e. precisely the defect
+Reception's downlights were deleted for (they rasterise as grey objects hanging in the room, never as
+light) · the ceiling was a **34px strip of hairlines** at the very top of the frame, so "the ceiling is
+out" — the first thing this screen has to say — said nothing · the ground band was a **large pale grey
+slab** at 0.16 speckle that dominated the frame and read as concrete with litter on it · the wall clock
+was **46px** and rasterised as a small window (the same defect screen 1's clock was rebuilt at 80px to
+fix) · the whiteboard was ruled every 8px across its full width and read as a **blind** · the terminal —
+the object the freed colleague runs to and the only readout of the win — was a dark box the same size
+and value as the workstations, with a cone and a ladder authored on top of it in `levels.json` · and the
+figure himself rasterised as a **yellow striped pillar with a dark visor**: a man in protective kit.
+
+### The room: one shell, two layers, and the restored room underneath
+
+The structural move of the pass. `scenery.ts`'s `drawOfficeInterior` now paints the room **as the fix
+leaves it** — a sound shell, an intact suspended ceiling, glazing, workstations, storage, whiteboard,
+clock — and `render/workplace.ts` lays the *damage* over the top of it, driven by `restore`. That keeps
+the existing architectural boundary intact (a backdrop function still knows nothing about whether the
+room has been fixed) and it is what makes the payoff a real change rather than a fade: **the good room
+already exists underneath, and the fix only has to stop covering it.**
+
+Geometry the two halves share is **exported** rather than written twice — `CEILING`, `WORK_PODS`,
+`POD_SCREEN`, `CABINETS`, `WINDOW`. A lamp that misses its own aperture, or a lit screen that misses
+its own monitor, is the `badgeFloat` defect in a different costume.
+
+**The shell.** Three value registers instead of two (upper wall · a lighter mid register the furniture
+reads against · a darker band at the floor), a dado rail at y=330 because 300px of one value is a
+painted flat whatever stands in front of it, and panel joints every 160px.
+
+**The ceiling** is 96px of tile grid: four courses receding upwards (darkest at the top), T-bars on an
+80px pitch, and four fitting apertures cut into it. `FIT_W` is **160, exactly two tiles**, which is a
+correctness constraint and not tidiness — see the test finding below.
+
+**The furniture is DARKER than the wall, with one lit edge each.** This is the inversion that fixed
+the mush. The first attempt painted it a value *up* from the wall on the reasoning that lighter reads
+better; dark mass plus a bright rail is what actually reads as furniture at this size, and it leaves
+the light values on this screen to the three things that have earned them: the wrapped figure's cloth,
+the whiteboard, and the light itself. The divider also came down from 62px to **50px** — 62 is the drawn
+hero's full height, so it hid both the monitor on the desk and anybody standing at it, and the pod had
+nothing in it but a wall.
+
+**The light is surfaces, three of them.** The fitting is one lit diffuser panel with two ribs (drawn as
+two thin tubes it rasterised as a *vent*, and there is a duct on this screen to compare it with); a
+stepped **pool on the floor**, seven steps so it slopes; and the **up-facing edges** under each
+fitting — the top of the services duct, the dado rail, a band of wall under the ceiling. No wedges
+anywhere. Two fittings hold and two strike and drop out, so a broken office is a *half-lit* one rather
+than a dark one — painting all four dim left the floor lit by nothing, which meant fixing the room had
+nothing to change.
+
+**The clumsy half** (all of it in the damage layer, all of it gone at `restore = 1`): two ceiling tiles
+missing, with a joist, a duct, four cables to different lengths and **one tile hanging out of the grid
+by a corner** · a ceiling stain and a bucket under it · a task chair on its side · two filing drawers
+hanging open with paper over the lip · four **A4 notices taped straight to the wall**, one curling off
+(somebody printed the problem out instead of fixing it, and it puts the tape on the wall as well as the
+floor) · a knocked-over stack of archive boxes past the terminal · and the pre-existing barricades,
+cones, signs, tape runs and floor debris.
+
+**The payoff** is the four fittings at full, four floor pools, the monitors awake, **two colleagues back
+at their desks**, daylight up in the glazing, a clean floor — and a full-frame pale wash that is the
+exact inverse of the gloom. Un-gloomed is a *neutral* room; "the lights come good" has to be visible
+across the whole frame.
+
+### The figure: cloth first, tape as accent
+
+Re-authored at the same 20×26 / scale 3 (the hitbox is the sprite, so the size could not move):
+- **Seams every other row, two alternating tones.** This, not the tape, is what makes him a mummy.
+- **Nine bands cut to one cell tall each.** At two and three rows they covered ~40% of the body, which
+  is the point at which tape stops being an accent on wound cloth and becomes the material he is made
+  of. The arm band went from w4 to w2 so the forearm and the pale fist show.
+- **A fist (`H`) at the end of the reach** and the body moved into columns 1–13, so only 3px of the
+  60px hitbox is empty — it was 9px, mirrored to the other side when he turned round, i.e. a strip of
+  box that hits the player from nothing.
+- **The seam pass now holds the eye cells out.** Row 3 is odd and every odd row gets a seam, so the
+  first version painted a bandage straight over the slit and closed it — the head's only feature, gone.
+
+Rasterised at 2× he now reads as pale wound cloth with a dark slit and yellow tape at brow, chest,
+waist and shin; the unravel (hair and skin showing through, tape falling) and the freed colleague at
+the keyboard both read on their own.
+
+### Level data
+
+`clutter` rewritten: `cone 7 · post 14 · sign 15 · post 17 · barricade 19 · ladder 21 · post 22 ·
+sign 26 · post 27 · barricade 30`. Two ladders side by side at 18 and 21 read as a duplicated prop and
+one went; **columns 23–25 are now kept clear for the terminal** (a cone at 24 and a ladder at 25 buried
+it), with the tape run from post 22 to post 27 crossing in front of it at head height instead — which
+is the better picture anyway: the fix itself taped off. The `meta.conventions.clutter` note records all
+three protected stretches and why. The terminal itself is bigger (124px desk, 88×62 monitor, a lit
+bezel and a stand) and the floor material was refined the way screen 1's clay was: speckle 0.16 → 0.03,
+variation moved tile-to-tile via `faces`, `bevel` on, and the whole thing two values darker.
+
+### A formatting trap worth writing down
+
+Editing `levels.json` with `json.dump(indent=2)` **reformatted the entire file** — 52 compact leaf
+objects (`{ "gx": 0, "gy": 15, ... }` on one line, which is Prettier's JSON output at printWidth 100)
+expanded to five lines each, turning a 12-line change into +543/−89. `npx prettier --write` does *not*
+put them back: Prettier keeps an object expanded if the source had a newline after `{`, so the damage
+is one-way. Recovered by writing a formatter that reproduces the rule (collapse any object/array whose
+one-line form fits in 100 columns at its indent, plus the blank line before `"screens"` and between
+screen objects) and **proving it byte-for-byte against `git show HEAD:src/data/levels.json`** before
+using it. Diff came back to +192/−54, which is the real content. Kept at `/tmp/jsonfmt.py`; if it is
+needed again it is 30 lines and the test is that round-tripping HEAD is a no-op.
+
+### Tests
+
+New `src/render/workplace.test.ts`, 11 tests, and two of them **failed on real defects** the PNGs had
+not shown:
+
+- **"puts every missing ceiling tile in the gap BETWEEN two fittings"** failed. A 168px aperture
+  centred on 800 covers 716–884, and the missing tile at 640 ends at 720 — 4px inside it. `FIT_W` is
+  160 now (exactly two tiles), so apertures are 120–280, 420–580, 720–880, 1020–1180 and the two holes
+  at 320 and 640 abut them without overlapping. The test states the *relationship*, not the numbers.
+- **"holds the dressing back from the wrapped figure"** failed at max alpha 1.0. The ceiling cables'
+  ferrules were painted in the tape's own caution yellow at full alpha, inside the one layer the fix
+  does not reach — putting the screen's one reserved-meaning colour somewhere it means nothing. They
+  are cable colours now.
+
+The rest pin: sprite = hitbox · at most 3px of empty hitbox · tape covers under half the rows and never
+the slit · the slit is dark while wrapped and gone when freed · tape and name plate drop the moment he
+stops being the obstacle · **nothing in the light value between ceiling and floor is taller than 20px**
+(the anti-beam guard) · no pool spans half the frame · `restore = 1` paints zero caution yellow and
+strictly more light · each lit screen lands on `POD_SCREEN` for every pod.
+
+`drawBoard` was deleted with its last caller.
+
+### Verification
+
+**typecheck · lint · 462 tests (43 files) · build · build:site · validate:levels all green.**
+Bundle **IIFE 60.4 KB / ESM 60.0 KB gzip**, site payload **63.2 KB** (was 58.1 / 58.7) — 67% of the
+90 KB budget; the summed `analyze` gate is still red for the reason in `docs/OPEN.md` §1. The new
+`levels.json` prose is stripped from `dist-site` (grepped). Seven rasters were used across the pass
+(broken · restored · 1 layer with the cutter · working · unravelling · the figure at his start column ·
+plus ceiling/figure/terminal crops at 2×) and every single change above was made because of one of
+them, not because of a code review.

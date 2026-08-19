@@ -24,21 +24,21 @@ function entry(cause: SetbackCause, index: number, screenId = 2): SetbackLogEntr
 
 describe('delay log', () => {
   it('names every obstacle from the copy deck, never from a raw cause', () => {
-    for (const cause of ['stamp', 'fire', 'gate', 'spike', 'fall'] as const) {
+    for (const cause of ['stamp', 'fire', 'monster', 'mummy', 'fall'] as const) {
       expect(causeLabel(cause)).toBe(COPY.setback.tag[cause]);
     }
   });
 
   it('totals the months the delays booked', () => {
-    const log = [entry('fire', 1), entry('gate', 2), entry('fire', 3)];
+    const log = [entry('fire', 1), entry('monster', 2), entry('fire', 3)];
     expect(loggedMonths(log)).toBe(3 * JOURNEY.SETBACK_MONTHS);
     expect(loggedMonths([])).toBe(0);
   });
 
   it('groups repeats by obstacle, in first-encountered order', () => {
     // "RED TAPE x2, +4 months" is a finding; four identical rows is noise.
-    const rows = ledgerRows([entry('fire', 1), entry('gate', 2), entry('fire', 3)]);
-    expect(rows.map((r) => r.cause)).toEqual(['fire', 'gate']);
+    const rows = ledgerRows([entry('fire', 1), entry('monster', 2), entry('fire', 3)]);
+    expect(rows.map((r) => r.cause)).toEqual(['fire', 'monster']);
     expect(rows[0]).toMatchObject({ count: 2, months: 2 * JOURNEY.SETBACK_MONTHS });
     expect(rows[1]).toMatchObject({ count: 1, months: JOURNEY.SETBACK_MONTHS });
     expect(ledgerRows([])).toEqual([]);
@@ -97,8 +97,22 @@ describe('badge float', () => {
     expect(lo).toBeGreaterThanOrEqual(anchorY - POWERUPS.FLOAT_AMPLITUDE - 0.001);
     expect(hi).toBeLessThanOrEqual(anchorY + POWERUPS.FLOAT_AMPLITUDE + 0.001);
     // One full period brings it back to where it started.
-    expect(badgeCenter(badge, POWERUPS.FLOAT_PERIOD).y).toBeCloseTo(anchorY, 6);
-    expect(badgeFloatOffset(0)).toBeCloseTo(0, 10);
+    expect(badgeCenter(badge, POWERUPS.FLOAT_PERIOD).y).toBeCloseTo(
+      badgeCenter(badge, 0).y,
+      6,
+    );
+    /*
+     * It starts at the BOTTOM of the band and goes UP (owner call: "the powerup goes
+     * first up then comes down"). That is a cosine, not a sine, and it is the reason
+     * the change did not cost the one-tap window: the badge is at its most reachable
+     * on the frame the screen starts rather than three quarters of a cycle later.
+     */
+    expect(badgeFloatOffset(0)).toBeCloseTo(POWERUPS.FLOAT_AMPLITUDE, 10);
+    expect(badgeCenter(badge, 0.4).y).toBeLessThan(badgeCenter(badge, 0).y);
+    expect(badgeCenter(badge, POWERUPS.FLOAT_PERIOD / 2).y).toBeCloseTo(
+      anchorY - POWERUPS.FLOAT_AMPLITUDE,
+      6,
+    );
   });
 
   it('is a pure function of time — the same clock gives the same box', () => {
@@ -125,11 +139,20 @@ describe('badge float', () => {
    * player). Asserted against every authored anchor, not just a fixture, because
    * the numbers only work as a set: tuning, level data and player physics.
    */
-  describe('is out of reach standing and in reach jumping, on every screen', () => {
+  describe('is out of reach standing and in reach jumping, on every RAIL screen', () => {
     const standingTop = 15 * T - PLAYER.HEIGHT; // feet on the ground band
     const jumpRise = (PLAYER.JUMP_VELOCITY * PLAYER.JUMP_VELOCITY) / (2 * PLAYER.GRAVITY);
 
-    for (const screen of SCREENS) {
+    /*
+     * Hire Under Fire is excluded, because it has no float band: its badge is
+     * **delivered** onto a floating brick and its `gy` is the *drone's flight row*, not
+     * an anchor. Measured as a band, that row is 161px over a standing head and fails
+     * for being correct — the same trap `badgeReach.test.ts` had to be pulled out of.
+     * The drop screen's own clearances are proved there, against `dropRestBox`.
+     */
+    // Reception is excluded too, for the simpler reason that it has no badge at
+    // all any more (owner call).
+    for (const screen of SCREENS.filter((s) => s.badge && s.badge.delivery !== 'airdrop')) {
       const b = screen.badge!;
       it(`screen ${screen.id} (${screen.name})`, () => {
         const lowest = badgeLowestBox(b);

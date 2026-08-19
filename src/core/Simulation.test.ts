@@ -3,7 +3,7 @@ import { Simulation } from './Simulation';
 import { Game } from './Game';
 import { makeInput } from './Input';
 import { JOURNEY, RESOLUTION, LIVES } from '../data/tuning.config';
-import { DT, stepN, recoverFromLifeLost } from '../test/helpers';
+import { DT, stepN, recoverFromLifeLost, driveToScreen } from '../test/helpers';
 
 /** Drive a fresh sim to PLAYING on Reception. */
 function toPlaying(): Simulation {
@@ -65,8 +65,11 @@ describe('Simulation progression & the journey clock', () => {
   });
 
   it('collects the floating badge where it actually is, not at its anchor', () => {
-    const sim = toPlaying();
+    // Setup Delays, because Reception carries no badge any more (owner call): the
+    // first ANSR mark in the run is now the one that actually does something.
+    const sim = driveToScreen(1);
     const badge = sim.screen.data.badge!;
+    const monthsBefore = sim.months;
     const anchorY = badge.gy * RESOLUTION.TILE + RESOLUTION.TILE / 2;
 
     // Wait for a phase where the badge is far enough from its anchor that a
@@ -94,12 +97,12 @@ describe('Simulation progression & the journey clock', () => {
     expect(sim.powerups.collected).toBe(true);
     expect(sim.badgeBox).toBeNull();
     // The badge costs nothing on the clock.
-    expect(sim.months).toBe(0);
+    expect(sim.months).toBe(monthsBefore);
   });
 
   it('the badge float is a pure function of the sim clock (replayable)', () => {
-    const a = toPlaying();
-    const b = toPlaying();
+    const a = driveToScreen(1);
+    const b = driveToScreen(1);
     stepN(a, 37);
     stepN(b, 37);
     expect(a.clock).toBeCloseTo(b.clock, 10);
@@ -133,7 +136,7 @@ describe('Simulation setbacks: months, a life and a log line', () => {
     ]);
   });
 
-  it('the life-lost screen restarts the SAME stage, at its spawn', () => {
+  it('a lost life restarts the SAME stage, at its spawn', () => {
     const sim = toPlaying();
     stepN(sim, 55);
     for (let i = 0; i < 90; i += 1) sim.step(DT, makeInput({ right: true }));
@@ -147,12 +150,34 @@ describe('Simulation setbacks: months, a life and a log line', () => {
     expect(sim.state).toBe('PLAYING');
     expect(sim.screenId).toBe(0); // same stage, never the next one
     expect(sim.player.box.x).toBeLessThan(advanced);
-    // The badge is available again on the retry.
-    expect(sim.powerups.collected).toBe(false);
-    expect(sim.badgeBox).not.toBeNull();
     // ...but the months and the log line are not refunded.
     expect(sim.months).toBe(JOURNEY.SETBACK_MONTHS);
     expect(sim.log).toHaveLength(1);
+  });
+
+  it('flags the retry so its title card can carry the badge instruction', () => {
+    // There is no life-lost screen any more (owner call): the stage simply starts
+    // again, so the one thing that screen said which mattered — take the ANSR badge
+    // — is printed on the retry's title card instead. This flag is how the host
+    // knows to print it, and it must not survive into a stage reached by playing.
+    const sim = driveToScreen(1);
+    expect(sim.retrying).toBe(false);
+    stepN(sim, 55);
+    sim.player.box.y = RESOLUTION.HEIGHT + 200;
+    sim.step(DT, makeInput());
+    recoverFromLifeLost(sim);
+
+    expect(sim.screenId).toBe(1);
+    expect(sim.retrying).toBe(true);
+    // The badge is available again on the retry, which is the point of the hint.
+    expect(sim.powerups.collected).toBe(false);
+    expect(sim.badgeBox).not.toBeNull();
+
+    // Clearing the stage moves on with a clean slate.
+    sim.player.box.x = sim.screen.exitX!;
+    sim.step(DT, makeInput());
+    expect(sim.screenId).toBe(2);
+    expect(sim.retrying).toBe(false);
   });
 
   it('it auto-advances after the hold, without any input', () => {

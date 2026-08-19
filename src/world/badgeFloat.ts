@@ -37,10 +37,24 @@ export function badgeAnchor(badge: BadgeSpec): Point {
   return { x: badge.gx * T + T / 2, y: badge.gy * T + T / 2 };
 }
 
-/** Vertical offset from the anchor at simulation time `t` (s). */
+/**
+ * Vertical offset from the anchor at simulation time `t` (s).
+ *
+ * **Cosine, not sine, and that is the owner's "it goes up first" (do not flip it
+ * back).** A sine started the badge at the *middle* of the band moving DOWN, so
+ * the first thing the mark did on entering a screen was sink — and it only
+ * reached the bottom of the swing three quarters of a cycle later, which on a
+ * one-tap auto-run pass is long after the player has walked past the column.
+ *
+ * Cosine starts it at `+FLOAT_AMPLITUDE`, i.e. at the **bottom** of the band, and
+ * sends it up. So the badge rises first, comes back down, and — the part that
+ * matters for fairness — it is at its most reachable on the frame the screen
+ * starts, which is the generous end of the change rather than the harsh one
+ * (`badgeReach.test.ts` re-proves the one-tap window either way).
+ */
 export function badgeFloatOffset(t: number): number {
   const phase = (2 * Math.PI * t) / POWERUPS.FLOAT_PERIOD;
-  return POWERUPS.FLOAT_AMPLITUDE * Math.sin(phase);
+  return POWERUPS.FLOAT_AMPLITUDE * Math.cos(phase);
 }
 
 /** The badge's centre at simulation time `t` (s). */

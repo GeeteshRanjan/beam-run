@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Hud, HUD_PX, HUD_PLAQUE_CHROME, pixelWidthPx } from './Hud';
+import { pixelArtWidthPx } from './Hud';
+import { pipCells, PIP_W, PIP_H } from './LivesPips';
 import { Overlays, type LifeLostModel, type ReceiptModel } from './Overlays';
 import { injectStyles, STYLE_ELEMENT_ID, CSS } from './styles';
 import { COPY, CAPABILITIES } from '../data/copy';
@@ -38,7 +40,7 @@ function receipt(over: Partial<ReceiptModel> = {}): ReceiptModel {
     delayMonths: 4,
     ledger: [
       { cause: 'fire', label: 'OFFER DECLINED', count: 1, months: 2 },
-      { cause: 'gate', label: 'FILING REJECTED', count: 1, months: 2 },
+      { cause: 'monster', label: 'QUERY RAISED', count: 1, months: 2 },
     ],
     engaged: ['PLACE_TILE', 'EXTINGUISH'],
     reachedScreenName: 'Compliance',
@@ -60,7 +62,6 @@ function log(n: number): SetbackLogEntry[] {
 function hudModel(over: Partial<Parameters<Hud['update']>[0]> = {}) {
   return {
     levelLabel: 'x',
-    months: 0,
     lives: LIVES.TOTAL,
     livesTotal: LIVES.TOTAL,
     log: logPanelView([], LIVES.LOG_VISIBLE_ROWS),
@@ -70,20 +71,7 @@ function hudModel(over: Partial<Parameters<Hud['update']>[0]> = {}) {
 }
 
 function lifeLost(over: Partial<LifeLostModel> = {}): { lifeLost: LifeLostModel } {
-  return {
-    lifeLost: {
-      cause: 'fire',
-      monthsAdded: JOURNEY.SETBACK_MONTHS,
-      livesLeft: 2,
-      livesTotal: LIVES.TOTAL,
-      screenName: 'Hire Under Fire',
-      outOfLives: false,
-      ledger: [{ cause: 'fire', label: 'OFFER DECLINED', count: 1, months: 2 }],
-      delayMonths: 2,
-      delays: 1,
-      ...over,
-    },
-  };
+  return { lifeLost: { delays: 3, delayMonths: 6, ...over } };
 }
 
 describe('injectStyles', () => {
@@ -111,17 +99,19 @@ describe('Hud', () => {
     hud = new Hud(parent);
   });
 
-  it('leads with the journey clock and labels it accessibly', () => {
+  it('carries no TIME TO MARKET plaque at all', () => {
+    // Owner call: the clock was the loudest thing on the frame and only moved when
+    // a delay was booked — which the log below it reports, with the reason. The
+    // months live on the closing receipt now, and lives took the plaque.
     hud.setVisible(true);
-    hud.update(hudModel({ levelLabel: 'Hire Under Fire', months: 8 }));
-    const clock = parent.querySelector('.beam-run__hud-clock')!;
-    expect(clock.querySelector('.beam-run__hud-clock-value')!.textContent).toBe('8');
-    expect(clock.getAttribute('aria-label')).toContain('8');
-    expect(clock.getAttribute('aria-label')).toContain(COPY.hud.monthsUnit);
+    hud.update(hudModel({ levelLabel: 'Hire Under Fire' }));
+    expect(parent.querySelector('.beam-run__hud-clock')).toBeNull();
+    expect(CSS).not.toContain('beam-run__hud-clock');
+    expect(parent.querySelector('.beam-run__hud')!.textContent).not.toContain('Time to market');
     expect(parent.querySelector('.beam-run__hud-level')!.textContent).toContain('Hire Under Fire');
   });
 
-  it('shows the lives as pips, distinguished by shape and not by colour', () => {
+  it('shows the lives as hearts, distinguished by shape and not by colour', () => {
     hud.update(hudModel({ lives: 2 }));
     const lives = parent.querySelector('.beam-run__hud-lives')!;
     // The plaque reads "Lives: 2 of 3", not "Lives: 2 of 3 lives left".
@@ -130,14 +120,29 @@ describe('Hud', () => {
       `${COPY.hud.livesLabel}: ${COPY.hud.livesValue(2, LIVES.TOTAL)}`,
     );
     const pips = lives.querySelector('svg.beam-run__hud-lives-pips')!;
-    // Two paths: held pips are solid, spent ones are hollow outlines. Both are
-    // present, so the state is legible without reading the fills.
+    // Two paths: held lives are solid hearts, spent ones the same heart hollowed
+    // out. Both are present, so the state is legible without reading the fills.
     const paths = Array.from(pips.querySelectorAll('path'));
     expect(paths).toHaveLength(2);
     expect(pips.getAttribute('aria-hidden')).toBe('true');
+    // The glyph is a heart, not the old square pip: 7 cells wide, 6 tall.
+    expect(pips.getAttribute('viewBox')).toBe(`0 0 ${pipCells(LIVES.TOTAL)} ${PIP_H}`);
+    expect(PIP_W).toBe(7);
     // A full complement collapses to a single (solid) path.
-    hud.update(hudModel({ lives: LIVES.TOTAL, months: 1 }));
+    hud.update(hudModel({ lives: LIVES.TOTAL }));
     expect(pips.querySelectorAll('path')).toHaveLength(1);
+  });
+
+  it('nudges the lives plaque when a heart goes out, and only then', () => {
+    // The beat the clock's bump used to carry. It must fire on a life *spent*, not
+    // on the reset back to a full complement at the start of the next attempt.
+    const lives = parent.querySelector('.beam-run__hud-lives')!;
+    hud.update(hudModel({ lives: LIVES.TOTAL }));
+    expect(lives.classList.contains('beam-run__hud-lives--spent')).toBe(false);
+    hud.update(hudModel({ lives: LIVES.TOTAL - 1 }));
+    expect(lives.classList.contains('beam-run__hud-lives--spent')).toBe(true);
+    hud.update(hudModel({ lives: LIVES.TOTAL }));
+    expect(lives.classList.contains('beam-run__hud-lives--spent')).toBe(false);
   });
 
   it('hides the delay log until the first delay, then itemises and totals it', () => {
@@ -145,7 +150,7 @@ describe('Hud', () => {
     hud.update(hudModel());
     expect(panel.classList.contains('beam-run__hud-log--visible')).toBe(false);
 
-    hud.update(hudModel({ months: 4, log: logPanelView(log(2), LIVES.LOG_VISIBLE_ROWS) }));
+    hud.update(hudModel({ log: logPanelView(log(2), LIVES.LOG_VISIBLE_ROWS) }));
     expect(panel.classList.contains('beam-run__hud-log--visible')).toBe(true);
     expect(panel.querySelectorAll('.beam-run__hud-log-row')).toHaveLength(2);
     expect(panel.querySelectorAll('.beam-run__hud-log-row--earlier')).toHaveLength(0);
@@ -158,7 +163,7 @@ describe('Hud', () => {
   it('bounds the log panel: older delays roll up instead of growing the frame', () => {
     const panel = parent.querySelector('.beam-run__hud-log')!;
     const n = LIVES.LOG_VISIBLE_ROWS + 3;
-    hud.update(hudModel({ months: 12, log: logPanelView(log(n), LIVES.LOG_VISIBLE_ROWS) }));
+    hud.update(hudModel({ log: logPanelView(log(n), LIVES.LOG_VISIBLE_ROWS) }));
     // Visible rows are capped, plus exactly one roll-up line for the rest.
     expect(panel.querySelectorAll('.beam-run__hud-log-row')).toHaveLength(
       LIVES.LOG_VISIBLE_ROWS + 1,
@@ -173,17 +178,18 @@ describe('Hud', () => {
 
   it('stacks the plaques in two corner columns so the log can grow', () => {
     // The log has no fixed height; anything anchored under it by a pixel offset
-    // would collide the moment another delay was logged.
+    // would collide the moment another delay was logged. Lives sit above it in the
+    // right column now (the clock's old slot), so the two read as cause and cost.
     expect(parent.querySelector('.beam-run__hud-stack--left .beam-run__hud-level')).not.toBeNull();
-    expect(parent.querySelector('.beam-run__hud-stack--left .beam-run__hud-lives')).not.toBeNull();
     expect(parent.querySelector('.beam-run__hud-stack--left .beam-run__hud-power')).not.toBeNull();
-    expect(parent.querySelector('.beam-run__hud-stack--right .beam-run__hud-clock')).not.toBeNull();
+    expect(parent.querySelector('.beam-run__hud-stack--right .beam-run__hud-lives')).not.toBeNull();
     expect(parent.querySelector('.beam-run__hud-stack--right .beam-run__hud-log')).not.toBeNull();
+    expect(parent.querySelector('.beam-run__hud-stack--left .beam-run__hud-lives')).toBeNull();
   });
 
-  it('sets the stage and clock plaques in the bitmap font, not web type', () => {
-    hud.update(hudModel({ levelLabel: 'Compliance Maze', months: 7 }));
-    for (const sel of ['.beam-run__hud-level', '.beam-run__hud-clock']) {
+  it('sets the stage and lives plaques in the bitmap font, not web type', () => {
+    hud.update(hudModel({ levelLabel: 'Compliance Maze', lives: 2 }));
+    for (const sel of ['.beam-run__hud-level', '.beam-run__hud-lives']) {
       const row = parent.querySelector(sel)!;
       // Bitmap art present, and every glyph SVG is decorative.
       const art = Array.from(row.querySelectorAll('svg.beam-run__pixels'));
@@ -198,22 +204,24 @@ describe('Hud', () => {
     }
     // The prose is still there for assistive tech / textContent.
     expect(parent.querySelector('.beam-run__hud-level')!.textContent).toContain('Compliance Maze');
-    expect(parent.querySelector('.beam-run__hud-clock')!.textContent).toContain(
-      COPY.hud.monthsLabel,
+    expect(parent.querySelector('.beam-run__hud-lives')!.textContent).toContain(
+      COPY.hud.livesLabel,
     );
   });
 
-  it('draws the months counter zero-padded so the plaque cannot resize', () => {
-    hud.update(hudModel({ months: 7 }));
-    const art = parent.querySelector('.beam-run__hud-clock-value svg')!;
-    const single = art.getAttribute('width');
-    // Accessible value stays "7"; only the artwork is padded.
-    expect(parent.querySelector('.beam-run__hud-clock-value')!.textContent).toBe('7');
-    hud.update(hudModel({ months: 18 }));
-    expect(art.getAttribute('width')).toBe(single);
+  it('keeps the lives plaque the same width as lives are spent', () => {
+    // The right-hand plaque is anchored to the frame edge, so a readout that
+    // narrowed as it changed would slide the whole stack. Spent lives are drawn as
+    // hollow hearts rather than dropped, which is what keeps the width fixed.
+    hud.update(hudModel({ lives: LIVES.TOTAL }));
+    const art = parent.querySelector('.beam-run__hud-lives-pips')!;
+    const full = art.getAttribute('viewBox');
+    hud.update(hudModel({ lives: 0 }));
+    expect(art.getAttribute('viewBox')).toBe(full);
+    expect(art.querySelectorAll('path')).toHaveLength(1); // all hollow
   });
 
-  it('keeps the stage and clock plaques apart on the narrowest phone frame', () => {
+  it('keeps the stage and lives plaques apart on the narrowest phone frame', () => {
     // Bitmap glyphs bottom out at their floor on a narrow frame, so the two top
     // plaques are at their *widest, relative to the frame*, on a phone. They are
     // anchored to opposite corners of the same row: if the floors are raised
@@ -227,18 +235,17 @@ describe('Hud', () => {
         pixelWidthPx(longest, HUD_PX.stage, frame),
         pixelWidthPx(COPY.hud.stageLabel, HUD_PX.caption, frame),
       );
-      const clock = Math.max(
-        pixelWidthPx(COPY.hud.monthsLabel, HUD_PX.caption, frame),
-        pixelWidthPx('00', HUD_PX.months, frame) +
-          7 +
-          pixelWidthPx(COPY.hud.monthsUnit, HUD_PX.unit, frame),
+      const lives = Math.max(
+        pixelWidthPx(COPY.hud.livesLabel, HUD_PX.caption, frame),
+        // The hearts are hand-built art, so they are measured in authored cells.
+        pixelArtWidthPx(pipCells(LIVES.TOTAL), HUD_PX.lives, frame),
       );
-      const total = stage + clock + 2 * HUD_PLAQUE_CHROME + gutter;
+      const total = stage + lives + 2 * HUD_PLAQUE_CHROME + gutter;
       expect(total, `frame ${frame}px`).toBeLessThan(frame);
 
-      // The lives pips and the widest delay-log row share a row of the frame too
-      // (left stack against right stack), and the log rows are the widest strings
-      // either column ever carries.
+      // The capability chip and the widest delay-log row share the second row of
+      // the frame (left stack against right stack), and the log rows are the widest
+      // strings either column ever carries.
       const longestTag = Object.values(COPY.setback.tag).reduce(
         (a, n) => (n.length > a.length ? n : a),
         '',
@@ -248,9 +255,6 @@ describe('Hud', () => {
         '',
       );
       const left = Math.max(
-        pixelWidthPx(COPY.hud.livesLabel, HUD_PX.caption, frame) +
-          9 +
-          pixelWidthPx('OOO', HUD_PX.lives, frame),
         pixelWidthPx('Talent500', HUD_PX.chip, frame),
         pixelWidthPx(longestPower, HUD_PX.chipSub, frame),
       );
@@ -269,8 +273,8 @@ describe('Hud', () => {
     expect(CSS).toContain('inset 3px 3px 0 rgba(150, 205, 218, 0.22)');
     expect(CSS).toContain('inset -3px -3px 0 rgba(0, 0, 0, 0.45)');
     expect(CSS).not.toMatch(/beam-run__hud-row[\s\S]*?border: 1px solid/);
-    // The delay nudge holds each frame instead of easing between them.
-    expect(CSS).toContain('animation: beam-run-bump 0.36s steps(1, end) both');
+    // The lost-life nudge holds each frame instead of easing between them.
+    expect(CSS).toContain('animation: beam-run-spent 0.36s steps(1, end) both');
   });
 
   it('shows a persistent capability chip with no countdown bar', () => {
@@ -533,19 +537,12 @@ describe('Overlays', () => {
       COPY.start.challenge,
       COPY.start.stakeLead,
       COPY.start.stakeTail,
-      COPY.lifeLost.title,
-      COPY.lifeLost.cause('RED TAPE'),
-      COPY.lifeLost.cost(2),
-      COPY.lifeLost.livesLeft(2),
-      COPY.lifeLost.advice,
-      COPY.lifeLost.cont,
+      COPY.lifeLost.retryHint,
       COPY.gameOver.title,
-      COPY.gameOver.reached('Compliance'),
-      COPY.gameOver.ledgerTitle,
-      COPY.gameOver.totalLabel,
       COPY.gameOver.cost(3, 6),
       COPY.gameOver.advice,
       COPY.gameOver.restart,
+      COPY.gameOver.cta,
       COPY.hud.logLabel,
       COPY.hud.logTotal,
       COPY.hud.livesLabel,
@@ -558,79 +555,64 @@ describe('Overlays', () => {
     }
   });
 
-  it('reports the delay, the lives left and the one instruction on a lost life', () => {
-    overlays.show('lifelost', lifeLost());
-    const el = visible(parent);
-    expect(overlays.current).toBe('lifelost');
-    expect(el.getAttribute('role')).toBe('alertdialog');
-    expect(el.textContent).toContain(COPY.lifeLost.cause('OFFER DECLINED'));
-    expect(el.textContent).toContain(COPY.lifeLost.cost(JOURNEY.SETBACK_MONTHS));
-    // The instruction is the point of the screen.
-    expect(el.querySelector('.beam-run__advice')!.textContent).toBe(COPY.lifeLost.advice);
-    expect(el.textContent).toContain(COPY.hud.lives(2, LIVES.TOTAL));
-    // Mid-attempt there is no ledger: it would bury the instruction.
-    expect((el.querySelector('.beam-run__ledger') as HTMLElement).hidden).toBe(true);
-    // One route out, and it is not the Navigator yet.
-    const btns = buttons(parent).filter((b) => !b.hidden);
-    expect(btns).toHaveLength(1);
-    btns[0]!.click();
-    expect(cb.onContinue).toHaveBeenCalled();
+  it('has no life-lost screen at all — a lost life is not a dialog', () => {
+    // Owner call: with lives left the stage just starts again. The overlay that
+    // used to coach mid-attempt is gone, and so is its name.
+    expect(parent.querySelector('.beam-run__overlay--lifelost')).toBeNull();
+    // Six surfaces left: start, titlecard, pause, gameover, summary, win.
+    expect(parent.querySelectorAll('.beam-run__overlay')).toHaveLength(6);
   });
 
-  it('turns into the itemised ledger, not a wall, on the last life', () => {
-    overlays.show(
-      'lifelost',
-      lifeLost({
-        livesLeft: 0,
-        outOfLives: true,
-        delays: 3,
-        delayMonths: 6,
-        ledger: [
-          { cause: 'fire', label: 'OFFER DECLINED', count: 2, months: 4 },
-          { cause: 'fall', label: 'GROUND GAVE WAY', count: 1, months: 2 },
-        ],
-      }),
-    );
+  it('carries the badge instruction on a retry title card, and only there', () => {
+    // The one thing the deleted life-lost screen said that mattered.
+    overlays.show('titlecard', { levelLabel: 'Compliance' });
+    const hint = visible(parent).querySelector('.beam-run__advice') as HTMLElement;
+    expect(hint.hidden).toBe(true);
+    overlays.show('start');
+    overlays.show('titlecard', { levelLabel: 'Compliance', hint: COPY.lifeLost.retryHint });
+    expect(hint.hidden).toBe(false);
+    expect(hint.textContent).toBe(COPY.lifeLost.retryHint);
+  });
+
+  it('ends an attempt on four things and two routes, not a ledger', () => {
+    overlays.show('gameover', lifeLost({ delays: 3, delayMonths: 6 }));
     const el = visible(parent);
+    expect(overlays.current).toBe('gameover');
+    expect(el.getAttribute('role')).toBe('alertdialog');
+    // The headline, the one figure, the argument.
     expect(el.textContent).toContain(COPY.gameOver.title);
-    expect(el.textContent).toContain(COPY.gameOver.reached('Hire Under Fire'));
-    // Every obstacle itemised, repeats grouped, and a total.
-    const ledger = el.querySelector('.beam-run__ledger') as HTMLElement;
-    expect(ledger.hidden).toBe(false);
-    // Two obstacle rows plus the total, which is the same row with the accent.
-    expect(
-      ledger.querySelectorAll('.beam-run__ledger-row:not(.beam-run__ledger-row--total)'),
-    ).toHaveLength(2);
-    expect(ledger.textContent).toContain('OFFER DECLINED x2');
-    expect(ledger.querySelector('.beam-run__ledger-row--total')!.textContent).toContain('+6');
-    // ...followed by the argument the ledger is evidence for.
+    expect(el.textContent).toContain(COPY.gameOver.cost(3, 6));
     expect(el.querySelector('.beam-run__advice')!.textContent).toBe(COPY.gameOver.advice);
-    // Not a dead end: back to the start AND a route to the Navigator.
+    // …and nothing else. No itemised table, no lives readout (there are none left),
+    // no two-column split: one centred column, symmetrical about its own axis.
+    expect(el.querySelector('.beam-run__ledger')).toBeNull();
+    expect(el.querySelector('.beam-run__lives')).toBeNull();
+    expect(el.querySelector('.beam-run__cols')).toBeNull();
+    expect(el.querySelector('.beam-run__stack--gameover')).not.toBeNull();
+    // Not a dead end: start again AND a route to the Navigator.
     const btns = buttons(parent).filter((b) => !b.hidden);
     expect(btns).toHaveLength(2);
     expect(btns[0]!.textContent).toBe(COPY.gameOver.restart);
+    // Both labels fit one bitmap line, so the pair is not lopsided: the sentence
+    // form the other end screens use wraps onto two.
+    expect(btns[1]!.textContent).toBe(COPY.gameOver.cta);
+    for (const b of btns) expect(wrapPixelLabel(b.textContent!)).toHaveLength(1);
+    btns[0]!.click();
+    expect(cb.onContinue).toHaveBeenCalled();
     btns[1]!.click();
     expect(cb.onCta).toHaveBeenCalledWith('summary');
   });
 
-  it('sizes every readout on the life-lost screen in frame units', () => {
+  it('sizes every readout on the out-of-lives screen in frame units', () => {
     // The trap this guards: a PixelSpec without `maxShare` falls back to the
     // default `min(96%, …)` cap, which is circular inside a shrink-wrapping flex
     // box — the browser then silently uses the SVG's intrinsic width and the
     // element renders at a fraction of its intended size.
-    overlays.show(
-      'lifelost',
-      lifeLost({ outOfLives: true, livesLeft: 0, delays: 2, delayMonths: 4 }),
-    );
-    // The lives pips are the one exception: they are hand-built art sized by the
-    // stylesheet, so their frame-unit cap is asserted against the CSS instead.
-    expect(CSS).toMatch(/\.beam-run__lives-pips \{ width: clamp\([^)]*var\(--beam-run-u\)/);
+    overlays.show('gameover', lifeLost({ delays: 2, delayMonths: 4 }));
     const art = Array.from(
-      visible(parent).querySelectorAll<SVGSVGElement>(
-        '.beam-run__stack svg.beam-run__pixels:not(.beam-run__lives-pips)',
-      ),
+      visible(parent).querySelectorAll<SVGSVGElement>('.beam-run__stack svg.beam-run__pixels'),
     );
-    expect(art.length).toBeGreaterThan(5);
+    expect(art.length).toBeGreaterThan(3);
     for (const svg of art) {
       const style = svg.getAttribute('style') ?? '';
       expect(style, svg.parentElement?.className).toContain('var(--beam-run-u)');
@@ -639,13 +621,12 @@ describe('Overlays', () => {
     }
   });
 
-  it('repaints the life-lost screen for each new delay', () => {
-    overlays.show('lifelost', lifeLost());
+  it('repaints the out-of-lives figure for each attempt', () => {
+    overlays.show('gameover', lifeLost({ delays: 1, delayMonths: 2 }));
+    expect(visible(parent).textContent).toContain(COPY.gameOver.cost(1, 2));
     overlays.show('titlecard', { levelLabel: 'Compliance' });
-    overlays.show('lifelost', lifeLost({ cause: 'gate', livesLeft: 1 }));
-    const el = visible(parent);
-    expect(el.textContent).toContain(COPY.lifeLost.cause('FILING REJECTED'));
-    expect(el.textContent).toContain(COPY.hud.lives(1, LIVES.TOTAL));
+    overlays.show('gameover', lifeLost({ delays: 4, delayMonths: 8 }));
+    expect(visible(parent).textContent).toContain(COPY.gameOver.cost(4, 8));
   });
 
   it('itemises the run\u2019s delays on the closing receipt', () => {
@@ -726,7 +707,7 @@ describe('Overlays', () => {
     const rows = Array.from(
       visible(parent).querySelectorAll<HTMLButtonElement>('.beam-run__receipt-row'),
     );
-    rows[2]!.click(); // GCC-BOT
+    rows[2]!.click(); // the third capability in journey order
     expect(cb.onCta).toHaveBeenCalledWith('win', CAPABILITIES[2]!.topic);
   });
 

@@ -204,52 +204,47 @@ export const CSS = `
 .beam-run__hud .beam-run__pixels { max-width: none; }
 /* Captions wrap a hidden prose span plus the bitmap art; flex keeps the art on
    its own line with no inline-baseline gap under it. */
-.beam-run__hud-caption,
-.beam-run__hud-clock-label { display: flex; }
+.beam-run__hud-caption { display: flex; }
 /* Stage: caption stacked over the stage name, arcade level-readout style. */
 .beam-run__hud-level {
   flex-direction: column; align-items: flex-start; gap: 5px;
 }
 
-/* Lives: caption then the pips, on one line. */
-.beam-run__hud-lives { gap: 9px; }
-.beam-run__hud-lives .beam-run__hud-caption { display: flex; }
-
-/* The journey clock: the loudest readout on screen. */
-.beam-run__hud-clock {
-  flex-direction: column; align-items: flex-end; gap: 5px;
-  /* Orange rail: this readout is the stake. Bevel warmed to match. */
-  box-shadow:
-    inset 3px 3px 0 rgba(255, 158, 116, 0.2),
-    inset -3px -3px 0 rgba(0, 0, 0, 0.45),
-    0 0 0 3px rgba(255, 84, 0, 0.6);
-}
-/* Number and unit share a line, sitting on the same pixel baseline. */
-.beam-run__hud-clock-figure { display: flex; align-items: flex-end; gap: 7px; }
-.beam-run__hud-clock-value { display: flex; }
-.beam-run__hud-clock-unit { display: flex; padding-bottom: 2px; }
 /*
- * The bump used to be an eased scale + border fade — a CSS gesture. Now it is a
- * stepped 4-frame flash: whole-pixel hops and a hard rail change, held (steps)
- * rather than interpolated, which is how an 8-bit machine would draw it.
+ * Lives — caption over the hearts, in the top-right plaque the TIME TO MARKET
+ * clock used to hold. Same column composition as the stage plaque opposite, so
+ * the two top corners mirror each other.
+ *
+ * The rail stays cool. The clock's rail was orange because that readout was the
+ * stake; orange is the ANSR *value* accent, and what is left of your attempt is
+ * not value — it is what the obstacles have taken. The hearts are white.
  */
-.beam-run__hud-clock--bump { animation: beam-run-bump 0.36s steps(1, end) both; }
-@keyframes beam-run-bump {
+.beam-run__hud-lives {
+  flex-direction: column; align-items: flex-end; gap: 6px;
+}
+.beam-run__hud-lives .beam-run__hud-caption { display: flex; }
+/*
+ * A heart going out. Stepped, not eased: whole-pixel hops and a hard rail change,
+ * held per frame, which is how an 8-bit machine would draw it. This is the beat
+ * the clock's bump used to carry.
+ */
+.beam-run__hud-lives--spent { animation: beam-run-spent 0.36s steps(1, end) both; }
+@keyframes beam-run-spent {
   0% { transform: translateY(-4px); box-shadow: 0 0 0 3px ${BRAND.WHITE}; }
   25% { transform: none; box-shadow: 0 0 0 3px ${BRAND.WHITE}; }
-  50% { transform: translateY(-2px); box-shadow: 0 0 0 3px rgba(255, 84, 0, 0.6); }
+  50% { transform: translateY(-2px); box-shadow: 0 0 0 3px rgba(150, 205, 218, 0.5); }
   75% { transform: none; box-shadow: 0 0 0 3px ${BRAND.WHITE}; }
   100% {
     transform: none;
     box-shadow:
-      inset 3px 3px 0 rgba(255, 158, 116, 0.2),
+      inset 3px 3px 0 rgba(150, 205, 218, 0.22),
       inset -3px -3px 0 rgba(0, 0, 0, 0.45),
-      0 0 0 3px rgba(255, 84, 0, 0.6);
+      0 0 0 3px ${RAIL};
   }
 }
 
 /*
- * The delay log, hanging under the clock. Hidden until the first delay, so a
+ * The delay log, hanging under the lives. Hidden until the first delay, so a
  * clean run never sees it. It is deliberately NOT orange: orange is the value
  * accent, and a ledger of avoidable months is the opposite of value. Only the
  * running total is warmed, because that figure is what the closing argument is
@@ -633,28 +628,30 @@ export const CSS = `
   margin-top: 2px; display: flex; flex-direction: column; align-items: center; gap: 4px;
 }
 
-/* Delay ledger - the itemised cost, shared by the out-of-lives screen and the
-   two end screens. Rows are a two-column grid so the figures line up where the
-   eye can total them, and the total row is the same row with the value accent.
-   The lives readout repeats on the life-lost screen at display size, so the one
-   thing that screen is about is the first thing seen. */
-.beam-run__ledger, .beam-run__lives, .beam-run__advice {
-  display: flex; flex-direction: column; gap: 5px; width: 100%; margin: 0;
+/*
+ * A single centred line of instruction: the out-of-lives argument, and the retry
+ * hint on a title card. Both are one sentence carrying one idea, so they get the
+ * full measure and nothing else.
+ *
+ * The itemised delay ledger that used to live here is gone with the life-lost
+ * screen — the same breakdown is on the closing receipt, where it is read rather
+ * than skipped.
+ */
+.beam-run__advice {
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  width: 100%; margin: 0;
 }
-.beam-run__lives, .beam-run__advice { align-items: center; }
-.beam-run__ledger-row {
-  display: grid; grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center; gap: 10px; padding: 6px 12px;
-  background: rgba(0, 22, 29, 0.66);
-  border: 2px solid rgba(150, 205, 218, 0.18);
-}
-.beam-run__ledger-row--total {
-  margin-top: 2px;
-  background: rgba(60, 20, 0, 0.55); border-color: rgba(255, 84, 0, 0.5);
-}
-.beam-run__ledger-label { display: flex; }
-.beam-run__ledger-months { display: flex; justify-content: flex-end; }
-.beam-run__lives-pips { width: clamp(70px, calc(var(--beam-run-u) * 13), 190px); }
+/*
+ * The out-of-lives screen: four elements, one axis. Every child is centred and
+ * the steps between them grow with importance (headline → figure → instruction →
+ * routes), which is what makes a four-element screen read as composed rather than
+ * as a short list.
+ */
+.beam-run__stack--gameover { width: min(100%, 640px); gap: clamp(10px, 2.2%, 22px); }
+.beam-run__stack--gameover .beam-run__clock-strong { justify-content: center; }
+.beam-run__stack--gameover .beam-run__actions { margin-top: clamp(6px, 1.6%, 16px); }
+/* The retry hint sits with the stage name, not under it as a second heading. */
+.beam-run__overlay--titlecard .beam-run__advice { margin-top: clamp(8px, 1.8%, 18px); }
 
 .beam-run__actions {
   display: flex; flex-wrap: wrap; justify-content: center; align-items: center;
@@ -724,6 +721,12 @@ export const CSS = `
   background: rgba(255, 84, 0, 0.55); border-color: rgba(255, 84, 0, 0.85); color: ${BRAND.DEEP_TEAL};
 }
 .beam-run__touch-btn--active { filter: brightness(1.3); }
+/* The Workplace cutter. Hidden until the badge arms it, and cool-toned so the
+   orange act button stays the primary target. */
+.beam-run__touch-btn--shoot { display: none; }
+.beam-run__touch--armed .beam-run__touch-btn--shoot {
+  display: flex; background: rgba(0, 84, 101, 0.75); border-color: rgba(207, 230, 236, 0.85);
+}
 @media (orientation: portrait) {
   /* Portrait puts a band under the play frame (see the stage rules), so the
      controls live below the action instead of on top of it — and can be bigger.
@@ -842,7 +845,7 @@ export const CSS = `
   /* No sweep: the block parks in the middle of its track. */
   .beam-run__title::after { animation: none; background-position-x: 50%; }
   .beam-run__btn:active { transform: none; }
-  .beam-run__hud-clock--bump { animation: none; }
+  .beam-run__hud-lives--spent { animation: none; }
   .beam-run__receipt-row { transition: none; }
   .beam-run__btn { transition: none; }
 }

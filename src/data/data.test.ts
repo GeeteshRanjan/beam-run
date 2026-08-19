@@ -53,10 +53,19 @@ describe('copy', () => {
 
   it('names a capability, a product and a topic for every capability badge', () => {
     const badges = SCREENS.filter((s) => s.badge).map((s) => s.badge!.type);
-    // Every screen carries a badge, but SAFE_PASSAGE (Reception and the Tech
-    // Park, the two screens with nothing to defend against) deliberately carries
-    // no capability and so no product to sell.
-    expect(badges).toHaveLength(SCREENS.length);
+    /*
+     * Every screen with an obstacle carries a badge; Reception carries none (owner
+     * call — a badge whose effect is deliberately unassigned taught the player that
+     * taking one does nothing, one screen before the one that saves them), and the
+     * Tech Park's SAFE_PASSAGE deliberately carries no capability and so no product
+     * to sell.
+     */
+    expect(badges).toHaveLength(SCREENS.length - 1);
+    expect(SCREENS.filter((s) => !s.badge).map((s) => s.name)).toEqual(['Reception']);
+    // …and a screen may only omit the badge if it has nothing to defend against.
+    for (const s of SCREENS) {
+      if (!s.badge) expect(s.hazard, `screen ${s.id} has obstacles but no badge`).toBe('none');
+    }
     for (const b of badges.filter((t) => t !== 'SAFE_PASSAGE')) {
       const cap = capabilityFor(b);
       expect(cap, `badge ${b} needs a capability entry`).toBeTruthy();
@@ -69,7 +78,7 @@ describe('copy', () => {
   });
 
   it('blames the environment for every setback cause, never the player', () => {
-    for (const cause of ['stamp', 'fire', 'gate', 'spike', 'fall']) {
+    for (const cause of ['stamp', 'fire', 'monster', 'mummy', 'fall']) {
       expect(COPY.setback.tag[cause]).toBeTruthy();
       expect(COPY.setback.reason[cause]).toBeTruthy();
       expect(COPY.setback.reason[cause]!.toLowerCase()).not.toContain('you failed');
@@ -111,7 +120,10 @@ describe('levels data', () => {
   });
 
   it('getScreen returns the named screen', () => {
-    expect(getScreen(2).name).toBe('Hire Under Fire');
+    // Journey order (owner call): setup → compliance → workplace → hiring.
+    expect(getScreen(2).name).toBe('Compliance');
+    expect(getScreen(3).name).toBe('Workplace');
+    expect(getScreen(4).name).toBe('Hire Under Fire');
     expect(() => getScreen(99)).toThrow();
   });
 });

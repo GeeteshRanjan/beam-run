@@ -43,17 +43,39 @@ const PX = 4;
 /** One authored pixel = 4 screen px, so the 24-cell body is exactly `WIDTH`. */
 export const STAMP_SCALE = 4;
 
+/**
+ * **Values, not hues, are what made this object visible** (owner: "the stamp is
+ * almost the same colour as the background").
+ *
+ * It used to be painted in the same dark blue-greys as the sky it hangs in —
+ * body `#33505C`, die `#1E353E`, handle `#2A3F49` — against a `#00212B`..`#05303a`
+ * sky and a skyline of `#042A33` towers. Rasterised, only the white label panel
+ * read at all: the frame, the handle and the rubber die dissolved into the city
+ * behind them, so what the player actually saw was a floating white card, not a
+ * stamp coming down. Same class of error as the wrapped figure in beige, and the
+ * fix is the same one: put the object at the opposite end of the value scale from
+ * its background rather than at a different point on the same end.
+ *
+ * So the whole tool is now light — a pale machined frame around a near-white
+ * plate — with a near-black keyline round the outside and a near-black rubber
+ * die. That gives it three things the sky cannot take away: the lightest field on
+ * the upper half of the frame, a hard outline against both the sky *and* the clay
+ * ground it presses onto, and the darkest value in the picture at the business
+ * end, which is the part that can cost you a life.
+ *
+ * Still slate/graphite only. Orange stays reserved for value.
+ */
 const STAMP_PALETTE: Palette = {
-  K: '#0E1A1F', // outline / seams (near-black)
-  G: '#2A3F49', // handle body (dark turned wood, cool so it lifts off the ground)
-  g: '#3E6472', // handle lit face
-  H: '#6E8A96', // knob highlight
-  L: '#4E7280', // flange / lit top edge
-  B: '#33505C', // body
-  b: '#25404A', // body shade
-  W: '#E6E6E6', // printed index label
-  w: '#B9C2C4', // label shade
-  D: '#1E353E', // rubber die
+  K: '#07121A', // keyline / seams (near-black, so the silhouette holds anywhere)
+  G: '#3E5C68', // handle body (turned grip, the darkest part of the tool above the die)
+  g: '#5C8391', // handle lit face
+  H: '#B4D3DD', // knob highlight
+  L: '#C3D9E0', // flange / lit top edge
+  B: '#93B2BC', // body frame — pale machined metal, the read that was missing
+  b: '#6F919D', // body shade
+  W: '#F6FBFC', // printed index label
+  w: '#CBDADF', // label shade
+  D: '#12181C', // rubber die (the darkest value on the screen)
 };
 
 /**
@@ -126,13 +148,15 @@ export function drawInkPads(ctx: CanvasRenderingContext2D, columns: number[]): v
     pxRect(ctx, 'rgba(207, 230, 236, 0.22)', cx - half, GROUND_TOP, half * 2, PX, PX);
     pxRect(ctx, 'rgba(4, 22, 28, 0.4)', cx - half - PX * 3, GROUND_TOP + PX, PX, PX, PX);
     pxRect(ctx, 'rgba(4, 22, 28, 0.4)', cx + half + PX * 2, GROUND_TOP + PX, PX, PX, PX);
-    // …and what it printed. A ghost of the word at scale 1 makes a stamp column
-    // unmistakable even while the stamp itself is parked high above it.
-    drawText(ctx, 'DENIED', cx, GROUND_TOP + PX + 1, {
-      scale: 1,
-      color: 'rgba(178, 208, 216, 0.4)',
-      align: 'center',
-    });
+    /*
+     * **The ghost of the word is no longer printed here** (owner: less to read).
+     * A scale-1 "DENIED" on the ground was 5px tall — below the size anything in
+     * this game is legible at — so it never said the word to anybody; it read as a
+     * grey smudge on the clay, four times over, on a screen that already says
+     * DENIED on every stamp face at scale 2. The pad itself (dark impression,
+     * bright print line, two flecks) is what marks the column, and now that the
+     * stamps are light enough to see, the column is marked by the stamp too.
+     */
   }
 }
 
@@ -193,11 +217,16 @@ export function drawStamps(
     if (s.warn > 0) {
       const lit = `rgba(219, 240, 246, ${0.3 + 0.6 * s.warn})`;
       // The column it is about to print lights up from the floor: the impression's
-      // print line flares and four marks close in on it from both sides.
-      pxRect(ctx, lit, cx - W / 2 + PX, GROUND_TOP, W - PX * 2, PX * 2, PX);
+      // print line flares and two marks close in on it from either side. One cell
+      // thick, not two — at 8px of near-white across 88px it stopped reading as a
+      // line and became a pale lump on the clay.
+      pxRect(ctx, lit, cx - W / 2 + PX, GROUND_TOP, W - PX * 2, PX, PX);
+      // Two closing marks per side, not four. Four converged into one pale blob on
+      // the clay — a cloud rather than a countdown — and the tell is carried by the
+      // print line and the stamp's own cock-back anyway.
       const half = Math.round((W / 2 + PX) * (0.95 - 0.4 * s.warn));
-      for (let i = 0; i < 4; i += 1) {
-        const inset = Math.round((half * i) / 5);
+      for (let i = 0; i < 2; i += 1) {
+        const inset = Math.round((half * i) / 3);
         pxRect(ctx, lit, cx - half + inset, GROUND_TOP - PX * (i + 1), PX * 2, PX, PX);
         pxRect(ctx, lit, cx + half - inset - PX * 2, GROUND_TOP - PX * (i + 1), PX * 2, PX, PX);
       }

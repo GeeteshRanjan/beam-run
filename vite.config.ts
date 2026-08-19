@@ -6,6 +6,7 @@ import { minify } from 'terser';
 // @ts-expect-error — plain-JS build helper, no types needed.
 import { cssMinifyPlugin } from './scripts/css-minify.mjs';
 import { notFoundPagePlugin } from './scripts/not-found-plugin';
+import { stripLevelNotesPlugin } from './scripts/strip-level-notes';
 
 /**
  * Minify the ESM output.
@@ -73,6 +74,8 @@ export default defineConfig(({ mode }) => ({
     // Dev server: answer unmatched routes (the Navigator deep link) with the
     // game's own 404 screen instead of Vite's SPA fallback.
     notFoundPagePlugin(),
+    // Level authoring prose is for humans, so it must not reach the bundle.
+    stripLevelNotesPlugin(),
     minifyEsOutput(),
     // The scoped stylesheet is a TS template literal, so nothing else minifies
     // it; see scripts/css-minify.mjs.
@@ -121,6 +124,7 @@ export default defineConfig(({ mode }) => ({
       'src/**/*.{test,spec}.ts',
       'tests/**/*.{test,spec}.ts',
       'scripts/**/*.{test,spec}.mjs',
+      'scripts/**/*.{test,spec}.ts',
     ],
     setupFiles: [],
     coverage: {
