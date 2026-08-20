@@ -445,6 +445,60 @@ describe('Screen 3 — Workplace (taped off → 500Leaders → the room put righ
     expect(hz.shotStates()).toHaveLength(0);
   });
 
+  describe('the beats the screen is heard on (the host polls these for its cues)', () => {
+    it('the groan comes with the wind-up and the hush a throw later', () => {
+      const sim = onScreen3();
+      const hz = hazardOf(sim);
+      expect(hz.windUps).toBe(0);
+      expect(hz.throws).toBe(0);
+      let sawGap = false;
+      for (let i = 0; i < 1200 && !sawGap; i += 1) {
+        standAtColumn(sim, 14);
+        sim.step(DT, makeInput());
+        if (hz.windUps === 1 && hz.throws === 0) {
+          // The tell is audible before the act, which is the entire point of sounding
+          // the wind-up rather than the release.
+          expect(hz.mummyStates()[0]!.phase).toBe('winding');
+          sawGap = true;
+        }
+      }
+      expect(sawGap, 'he never wound up a throw').toBe(true);
+      for (let i = 0; i < 200 && hz.throws === 0; i += 1) {
+        standAtColumn(sim, 14);
+        sim.step(DT, makeInput());
+      }
+      // One hush per roll, and it lags its own groan.
+      expect(hz.throws).toBe(1);
+      expect(hz.windUps).toBe(1);
+    });
+
+    it('the terminal arcs until it says OK, and somebody types before it does', () => {
+      const sim = onScreen3();
+      // Sparks (and their crackle) from the first frame: the room is broken on arrival.
+      const hz = hazardOf(sim);
+      expect(hz.isSparking).toBe(true);
+      expect(hz.isWorking).toBe(false);
+      engageBadge(sim);
+      fire(sim, HAZARDS.WORKPLACE.TAPE_LAYERS);
+      let sawWorking = false;
+      for (let i = 0; i < 500 && hz.restore < 1; i += 1) {
+        standAtColumn(sim, FIRING_COLUMN);
+        sim.step(DT, makeInput());
+        if (hz.isWorking) {
+          sawWorking = true;
+          // While he is at the keyboard the terminal has not reported yet, so the
+          // keystrokes and the chime can never be heard the wrong way round.
+          expect(hz.restore).toBeLessThanOrEqual(0.5);
+        }
+      }
+      expect(sawWorking, 'nobody ever sat at the terminal').toBe(true);
+      // The chime's threshold is the one `drawTerminal` prints OK at, and the arc stops
+      // on the same frame — one event, one sound, one picture.
+      expect(hz.restore).toBe(1);
+      expect(hz.isSparking).toBe(false);
+    });
+  });
+
   it('help does not lapse: the room stays fixed for the rest of the screen', () => {
     const sim = onScreen3();
     engageBadge(sim);

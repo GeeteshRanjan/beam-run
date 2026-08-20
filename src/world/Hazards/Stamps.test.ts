@@ -312,6 +312,38 @@ describe('Stamps (DENIED rubber stamps)', () => {
     expect(eased.stampStates()[0]!.bottomY).toBeLessThan(plain.stampStates()[0]!.bottomY);
   });
 
+  describe('audio counters (the host polls them; the hazard stays headless)', () => {
+    it('counts one slam per stroke, on the frame it reaches the floor', () => {
+      const h = stamps();
+      const clear = new Player(28 * T, 15 * T - 44);
+      expect(h.slams).toBe(0);
+      // Up to the frame before the die bottoms out: nothing has landed yet.
+      const toFloor = Math.floor(S.DROP_TIME / DT);
+      for (let i = 0; i < toFloor; i += 1) h.update(DT, clear, CTX);
+      expect(h.slams).toBe(0);
+      h.update(DT, clear, CTX);
+      expect(h.slams).toBe(1);
+      // …and it stays at one for the whole hold, the lift and the park. A counter that
+      // read `press >= 1` instead would fire every frame the die was on the floor.
+      for (let i = 0; i < CYCLE_STEPS - toFloor - 2; i += 1) h.update(DT, clear, CTX);
+      expect(h.slams).toBe(1);
+      // One per stroke, on the pair too.
+      const two = pair();
+      for (let i = 0; i < CYCLE_STEPS * 2; i += 1) two.update(DT, clear, CTX);
+      expect(two.slams).toBe(4);
+    });
+
+    it('a stroke refused by an ANSR-backed player deflects instead of landing', () => {
+      const h = stamps();
+      const p = underStamp();
+      run(h, p, Math.ceil(S.DROP_TIME / S.ASSIST_TIME_SCALE / DT) + 8, ASSISTED);
+      // The muffled thud sounds once for the stroke, not once per frame of the back-off…
+      expect(h.deflections).toBe(1);
+      // …and the stroke that gave up never reaches the floor, so it must not also thud.
+      expect(h.slams).toBe(0);
+    });
+  });
+
   it('reset() clears aborted strokes for a fresh attempt', () => {
     const h = stamps();
     const p = underStamp();

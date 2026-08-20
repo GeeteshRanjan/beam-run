@@ -30,9 +30,9 @@ since then has been post-launch passes: a meaning-model rebuild (§4), layout an
 mobile adaptivity, an 8-bit conversion of every remaining web-native surface, the
 finale rebuild, a custom 404 page and the badge work.
 
-- **Tests:** 544 passing (45 files)
-- **Bundle:** ESM 68.4 KB / IIFE 68.9 KB gzip — **the real download is 68.9 KB, 77% of the
-  90 KB budget.** The deployed site payload is **72.4 KB**. The `analyze` gate reads **~137 KB of 90 and
+- **Tests:** 560 passing (45 files)
+- **Bundle:** ESM 70.4 KB / IIFE 70.9 KB gzip — **the real download is 70.9 KB, 79% of the
+  90 KB budget.** The deployed site payload is **73.4 KB**. The `analyze` gate reads **~138 KB of 90 and
   fails**, because it sums *every* `.js` in `dist/` and so adds the two alternative output formats
   together. **This is an open owner decision, not a regression — see `docs/OPEN.md` §1.**
   Everything else is green.
@@ -232,6 +232,20 @@ measurement · the placeholder `navigatorUrl` · screen 1 unassisted, played by 
 Three only, one short paragraph each. The findings live in the journal; anything permanent is
 already in `docs/INVARIANTS.md`.
 
+- **The game learns to make a noise that is not a beep: filtered noise, eleven cues, and the four screens that had nothing to say.**
+  Four owner notes with one defect under all of them — **this engine had no noise source**, so every cue was
+  oscillators, and a thud, a jet of water, an electrical arc and cloth through air *have no pitch*. `AudioEngine`
+  gained `noise()` (looped white-noise buffer through a frequency-ramped biquad — opening upward is something
+  leaving, closing downward something settling), with that half of `AudioContextLike` **optional** so no cue may
+  *be* its noise. On top of it: **two stamp thuds that are the same object**, the muffled one being the floor
+  thud with its transient and top end removed (the mechanism *failing*, not a different sound) and both weighted
+  by distance, because four columns land every 1.4s and one volume is a drum machine — which is what
+  `playSfx(cue, level)` is for; a **badge cue rebuilt as a reward** instead of two beating blips; **five cues for
+  the Workplace**, which had none, the groan on the *wind-up* not the release and the chime on the same 0.5 the
+  renderer prints OK at; and a **`topple`**, the dragon's fall having had no cue at all. Cues were **measured**:
+  `node-web-audio-api` offline, peak/RMS/Goertzel per cue, which found the noise layers 2–3× too quiet and cost
+  two dead runs to an offline context that reports `suspended` forever and a `resume()` that never settles.
+  **560 tests.** Detail: `docs/SCREENS.md` (what each screen sounds like) and `docs/INVARIANTS.md`.
 - **Hire Under Fire, rebuilt: a Godzilla out of smaller cells, a jet instead of a girder, one brick, and an ending you can walk out of.**
   Eight owner notes, and two pairs of them were single decisions. **"Smaller" and "more refined" are the same
   change**: 300×240 at a 10px cell → **230×190 at a 5px cell** (720 cells → 1,748), because at 20 cells across an
@@ -261,11 +275,3 @@ already in `docs/INVARIANTS.md`.
   36px of jump against the 80 he needed, i.e. the screen was sealed. The room lost a work pod and went **off the
   teal axis** (warm plaster and furniture, a cool ceiling so it is not a sepia filter). The raster found five
   defects the code could not, including a spotlight that was a box and a mark hanging from nothing. **530 tests.**
-- **The Workplace again: two tapes, a body with joints, a patroller instead of a respawn, fire for ammunition.**
-  Six owner notes. The figure's tape went **red** (alpha was never going to fix nine yellow shapes plus one yellow
-  figure) and his 20×26 grid was **re-authored with joints** — a 6-row head, a neck, a stepped shoulder, a waist,
-  two legs with a *transparent* column between them. He **paces to and fro** now, which deleted the screen's own
-  winnability argument and re-earned it by probe (**10/12 clean, blind sprint 0/12**, the move being to jump him
-  head on). Ammunition is a **fire orb** that leaves a permanent soot mark; the cutter went to a **mid** value
-  because dark vanished into the furniture it is held in front of; the floor came off the teal axis and the lowest
-  wall register went darkest, since the hero cannot be tuned for one screen. **508 tests.**

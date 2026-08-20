@@ -41,6 +41,10 @@ need all of it. The rules that constrain these modules are in `docs/INVARIANTS.m
 - `Game.ts` — DOM/render host. Owns Loop/Renderer/Input/Hud/Overlays/Effects/Audio/Assist/Touch/
   Analytics. HUD + overlays are created **before** the sim (the sim ctor fires START→syncUI).
   `ResizeObserver` on the stage drives `renderer.resize()`. `handleCta` → navigator payload.
+  Screen audio lives here and nowhere else: `syncStampAudio()`, `syncWorkplaceAudio(dt)` and
+  `syncDragonAudio()` run once per rendered frame and diff the hazards' monotonic counters and phase
+  edges into cues, so `world/*` never imports the AudioEngine. `SPARK_INTERVAL` is here rather than in
+  `tuning.config.ts` because the sparks it paces have no simulation state at all.
 - `Effects.ts` — deterministic mulberry32 RNG, pooled particles (140) + trail ring buffer (14),
   shake / hit-stop / flash; one `reducedMotion` switch disables all of it.
 - `delayFlight.ts` — **pure**: (place of death, log anchor, progress) → position + alpha for the
@@ -175,7 +179,11 @@ silhouette hollowed out = spent, so shape carries it and the plaque cannot chang
 (build-time only — its copy lives in `data/notFoundCopy.ts`, apart from `COPY`, so the 404 page's
 strings do not ship inside the game bundle).
 
-**Other** — `audio/AudioEngine.ts` (Web Audio buses, synthesised cues, 0 audio bytes shipped),
+**Other** — `audio/AudioEngine.ts` (Web Audio buses, 23 synthesised cues, 0 audio bytes shipped;
+two synthesis primitives — `tone()` for anything with a pitch and `noise()`, a looped white-noise buffer
+through a frequency-ramped biquad, for anything without one. The noise half of `AudioContextLike` is
+**optional**, so a host without it still gets every cue's tonal layer. `playSfx(cue, level)` scales a
+whole cue, which is how screen 1's four stamps stay a mechanism instead of a drum machine),
 `analytics/{Analytics,navigator,Save}.ts` (consent-gated), `embed/{mount,FallbackCard}.ts`
 (kill switch, lazy IntersectionObserver boot, error boundary, React factory),
 `data/{tuning.config.ts,levels.json,tokens.ts,copy.ts,levels.ts}`.

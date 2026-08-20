@@ -639,6 +639,46 @@ describe('the hiring dragon', () => {
         expect(seconds).toBeLessThan(20);
       });
 
+      it('the fall is a beat of its own, between the last hit and the costume opening', () => {
+        /*
+         * `isToppling` exists so the host can sound the fall (owner call: it "is very
+         * dumb" — it had no cue at all, so the biggest event on the screen was left
+         * sharing the small tear the three earlier hits play).
+         *
+         * Pinned here rather than in the host: it must be true for exactly the window
+         * between the last jet landing and the hires walking out, never overlap `beaten`,
+         * and never come back.
+         */
+        const d = dragon();
+        const p = stander(20);
+        expect(d.isToppling).toBe(false);
+        const gap = Math.ceil(D.WATER_COOLDOWN / DT) + 1;
+        let guard = 0;
+        let toppleFrames = 0;
+        let edges = 0;
+        let prev = false;
+        while (!d.isBeaten && guard < 6000) {
+          p.box.x = 20 * T;
+          d.update(DT, p, d.isVulnerable && guard % gap === 0 ? SHOOTING : ASSISTED);
+          if (d.isToppling) {
+            toppleFrames += 1;
+            if (!prev) {
+              edges += 1;
+              // The topple starts on the frame the last hit is booked, which is why the
+              // host plays it *instead of* that hit's tear rather than on top of it.
+              expect(d.hits).toBe(D.HITS_TO_STRIP);
+            }
+            expect(d.isBeaten).toBe(false);
+          }
+          prev = d.isToppling;
+          guard += 1;
+        }
+        expect(edges).toBe(1);
+        expect(toppleFrames * DT).toBeCloseTo(D.STRIP_TIME, 1);
+        expect(d.isToppling).toBe(false);
+        expect(d.isBeaten).toBe(true);
+      });
+
       it('the fight stops the instant the costume comes off, and stays stopped', () => {
         const d = dragon();
         const p = stander(20);

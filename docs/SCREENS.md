@@ -306,3 +306,28 @@ Hire Under Fire (4) · Tech Park (5).
    per-brick tones and a course bevel; and the backdrop is down to **two props and one sign** — the
    PERMITS board, its caption and the ink pads' scale-1 ghost word are deleted, and the clock was
    rebuilt at 80px in whole pixels.
+
+---
+
+## What each screen sounds like
+
+Wired in `Game.ts` (`syncStampAudio` · `syncWorkplaceAudio` · `syncDragonAudio`), synthesised in
+`audio/AudioEngine.ts`. Every hazard signals through monotonic counters or a phase edge, never a
+callback — the rules and traps are in `docs/INVARIANTS.md`, the reasoning in `docs/JOURNAL.md`.
+
+| Screen | Cue | Fires on |
+|---|---|---|
+| all | `badge` | the ANSR mark collected. Low fifth + open D–A–D–A arpeggio + bell tail + a noise sparkle |
+| Setup Delays (1) | `stampThud` | a stroke reaching the floor (`Stamps.slams`), **weighted by the distance from the player to `lastSlamAt`** |
+| Setup Delays (1) | `stampDud` | a stroke meeting an ANSR-backed player (`Stamps.deflections`). The same sound with its transient and top end removed: the thud that did not work |
+| Workplace (3) | `mummy` | the **wind-up** of a throw (`windUps`) — 0.55s before the roll, so it is a tell rather than a report |
+| Workplace (3) | `hush` | the roll leaving his hand (`throws`) |
+| Workplace (3) | `typing` | rising edge of `isWorking` — seven unevenly spaced keystrokes |
+| Workplace (3) | `spark` | the unfixed terminal, every `SPARK_INTERVAL` (1.7s) while `isSparking`. Host-paced, because the sparks themselves have no sim clock |
+| Workplace (3) | `chime` | `restore` crossing **0.5** — the same threshold `drawTerminal` prints OK at |
+| Hire Under Fire (4) | `roar` / `water` / `steam` / `strip` | the opening beat · each jet · each quench · each layer |
+| Hire Under Fire (4) | `topple` | rising edge of `Dragon.isToppling`. A 1.05s descending groan and rumble, then a floor impact 0.58s in. Played **instead of** the fourth `strip`, not over it |
+| Hire Under Fire (4) | `hired` | rising edge of `isBeaten` |
+
+Compliance (2), Reception (0) and the Tech Park (5) carry no screen-specific cues: they run on the
+global set (jump · land · badge · setback · screenClear · win).

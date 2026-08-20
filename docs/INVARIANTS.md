@@ -338,6 +338,42 @@ into `docs/INVARIANTS-<screen>.md` and leave the cross-screen rules here.
   `shotsFired`/`quenches`/`hits` plus `isRoaring`/`isBeaten`, and `Game.syncDragonAudio` plays a cue
   per increment it has not seen. That keeps `world/*` clear of the AudioEngine and ties the cue to
   the event the *simulation* booked — a jet fired inside a hit-stop still gets its hiss.
+- **Sound design: a thud, a hiss, a jet, an arc and cloth in the air HAVE NO PITCH.** Every cue in this
+  game that the owner sent back as "dumb" was a physical noise built out of oscillators — the file even
+  admitted it in the `roar`'s comment. `AudioEngine.noise()` (looped white-noise buffer → biquad whose
+  **frequency ramps over the burst**) is the layer those cues actually need; the ramp is their whole
+  character, opening upward for something leaving and closing downward for something settling. Rules that
+  came with it:
+  - **No cue may *be* its noise.** `createBuffer`/`createBufferSource`/`createBiquadFilter` are optional
+    on `AudioContextLike` (jsdom and embed polyfills have none), so every cue keeps a tonal layer that
+    carries it alone. A test runs all of them through a double with the three factories deleted.
+  - **A noise layer at a tone's nominal gain lands 2–3× quieter** — a Q≈1 bandpass throws most of the
+    energy away. First measured pass had `spark` at peak 0.06 and `water` at 0.16, i.e. under the music
+    bed. Measure, do not reason about it.
+  - **Loop the noise buffer from a moving offset.** Same offset every burst means the water cannon's six
+    shots a second phase-lock into a whistle.
+  - **Fill the buffer from an LCG, not `Math.random()`.** Identical grain on every machine, and no quiet
+    exception to the determinism habit outside `step()`.
+- **You can LISTEN to the cues, and a sound pass that does not is the audio version of skipping the
+  raster.** `node-web-audio-api` installs in seconds *outside* the project and has a working
+  `OfflineAudioContext`: point `AudioEngine` at it, render each cue, measure peak/RMS/length plus a
+  Goertzel ladder, write WAVs. Two traps, both of which look like a hang or a no-op rather than a mistake:
+  an offline context reports `state === 'suspended'` until it renders (so `AudioEngine.suspended` is true
+  and **every cue silently refuses**), and its `resume()` **never settles** (so `await unlock()` hangs with
+  no output). Wrap it in a Proxy that reports `'running'` and stubs `resume`.
+- **Sound the TELL, not just the act.** The Workplace groan fires on the throw's wind-up, 0.55s before the
+  roll leaves his hand; a cue on the release would be decoration, a cue on the telegraph is information.
+  Same reason the dragon's roar is a cue and its walk is not.
+- **A cue and the text it accompanies must come off ONE number.** The Workplace chime fires on `restore`
+  crossing 0.5, which is the threshold `drawTerminal` prints OK at. Two thresholds means the sound and
+  the screen eventually disagree about when the room came good.
+- **A hazard that repeats a cue several times a second needs `playSfx(cue, level)`.** Screen 1 lands a
+  stamp every 0.35s (four columns, 1.4s cycle): at one volume that is a drum machine. Weighted by the
+  distance from the player to the column that landed, it becomes a mechanism standing somewhere — and the
+  loud one is the one about to matter, so the mix is information. `lastSlamAt` exists for this.
+- **A "slam landed" edge is the clock crossing `DROP_TIME`, not `press >= 1`** (true for the whole hold),
+  and it must be tested **before** the cycle wrap clears `abortE`, or an aborted stroke thuds on a floor
+  it never reached.
 - **`tuning.config.ts` is `as const`, so a field initialised from it keeps a LITERAL type.**
   TypeScript only widens *fresh* literals, so `private nextAttack = D.ATTACK_INTERVAL` has type
   `0.9` and every later assignment fails to compile. Annotate: `private nextAttack: number = …`.

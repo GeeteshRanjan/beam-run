@@ -180,6 +180,14 @@ export class Workplace implements Hazard {
   private cooldown = 0;
   private armed = false;
   private restoreT = 0;
+  /**
+   * Monotonic counters for the host's cues — the same contract as `Dragon.shotsFired`
+   * and `Stamps.slams`, and the reason this file still has no idea an AudioEngine
+   * exists. `_windUps` is the groan (the tell), `_throws` is the hush (the act); they
+   * are separate because they are `THROW_WINDUP` apart and the gap is the telegraph.
+   */
+  private _windUps = 0;
+  private _throws = 0;
   /** Seconds since the cutter last fired — the host draws the muzzle flash from it. */
   private sinceShotT = Number.POSITIVE_INFINITY;
 
@@ -338,6 +346,7 @@ export class Workplace implements Hazard {
     m.windFrom = m.phase;
     m.phase = 'winding';
     m.t = 0;
+    this._windUps += 1;
   }
 
   /**
@@ -357,6 +366,7 @@ export class Workplace implements Hazard {
 
   /** The roll leaves his hand: clear of his own box, flying at the player's shins. */
   private release(m: MummyEntry): void {
+    this._throws += 1;
     this.bandages.push({
       x: m.dir === 1 ? m.cx + W.MUMMY_W / 2 : m.cx - W.MUMMY_W / 2 - W.THROW_W,
       y: m.feetY - W.THROW_FLOOR_OFF - W.THROW_H / 2,
@@ -586,6 +596,30 @@ export class Workplace implements Hazard {
   /** True from the frame the terminal chimes success onwards. */
   get isFixed(): boolean {
     return this.mummies.length > 0 && this.mummies.every((m) => m.phase === 'restored');
+  }
+
+  /** Wind-ups started (the groan). Monotonic; a retry rebuilds the hazard. */
+  get windUps(): number {
+    return this._windUps;
+  }
+
+  /** Rolls that have actually left his hand (the hush). Monotonic. */
+  get throws(): number {
+    return this._throws;
+  }
+
+  /** Somebody is at the keyboard right now. */
+  get isWorking(): boolean {
+    return this.mummies.some((m) => m.phase === 'working');
+  }
+
+  /**
+   * The terminal is arcing right now — the same condition the renderer draws the
+   * sparks from (`restore < 0.5`, and only where the screen authored a terminal), so
+   * the crackle can never be heard off a terminal that is not throwing sparks.
+   */
+  get isSparking(): boolean {
+    return this.terminal !== null && this.restore < 0.5;
   }
 
   /** Tape layers still on the floor's one obstacle (the on-screen proof). */

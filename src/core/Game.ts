@@ -104,6 +104,17 @@ function solutionTag(badge: string): string {
  */
 const DELAY_LOG_ANCHOR = { x: RESOLUTION.WIDTH - 160, y: 120 };
 
+/**
+ * Seconds between crackles off the Workplace's unfixed terminal.
+ *
+ * Presentation-only, so it lives here rather than in `tuning.config.ts`: the sparks it
+ * accompanies are themselves drawn off a render clock and have no simulation state at
+ * all, and a gameplay constant behind a sound that changes nothing would be a lie about
+ * where the number matters. Long enough that the arc reads as a room the player is
+ * standing in rather than an alarm — the screen can be on for half a minute.
+ */
+const SPARK_INTERVAL = 1.7;
+
 /** A short-lived floating label (value gained / capability unlocked). */
 interface Popup {
   x: number;
@@ -175,7 +186,23 @@ export class Game {
    * *simulation* booked rather than to a frame the renderer happened to draw — a
    * jet fired inside a hit-stop still gets its hiss.
    */
-  private dragonCues = { shots: 0, quenches: 0, hits: 0, roaring: false, beaten: false };
+  private dragonCues = {
+    shots: 0,
+    quenches: 0,
+    hits: 0,
+    roaring: false,
+    toppling: false,
+    beaten: false,
+  };
+  /** Last-seen DENIED stamp counters: strokes that landed, strokes that were refused. */
+  private stampCues = { slams: 0, deflections: 0 };
+  /**
+   * Last-seen Workplace state. Two counters and three edges, plus one timer: the
+   * terminal's crackle has no simulation clock behind it (the sparks are drawn off a
+   * render hash), so its cue is paced here — which keeps the sound and the picture
+   * answering to the same thing, i.e. nothing in the sim.
+   */
+  private workplaceCues = { winds: 0, throws: 0, working: false, ok: false, sparkT: 0 };
   /**
    * Walk-cycle phase (s), advanced by *distance covered* rather than wall clock,
    * so any hazard that drags the player visibly slows the stride too. A
@@ -587,6 +614,8 @@ export class Game {
       }
     }
     this.prevOnGround = p.onGround;
+    this.syncStampAudio();
+    this.syncWorkplaceAudio(dt);
     this.syncDragonAudio();
 
     const shake = this.effects.shakeOffset();
@@ -863,16 +892,113 @@ export class Game {
   /**
    * Turn the dragon's counters into sound, once each.
    *
-   * Five cues, five edges: the opening roar, a jet leaving the cannon, a jet
-   * beating the fire back, a layer of the costume going, and the five hires
-   * landing. The counters only ever go up, so "how many have I not played yet" is
-   * subtraction — and a reload resets them to zero, which is why the roar is
-   * detected as a *rising edge* of `isRoaring` rather than counted.
+   * Six cues, six edges: the opening roar, a jet leaving the cannon, a jet
+   * beating the fire back, a layer of the costume going, the animal going over, and
+   * the five hires landing. The counters only ever go up, so "how many have I not
+   * played yet" is subtraction — and a reload resets them to zero, which is why the
+   * roar and the topple are detected as *rising edges* of a phase rather than counted.
    */
+  /**
+   * Setup Delays: the DENIED stamps, which are two sounds and not one.
+   *
+   * A stroke that reaches the floor thuds; a stroke that meets an ANSR-backed player
+   * gives up, and *that* is the muffled version — the thud that did not work (owner
+   * call). The whole screen is one mechanism either landing or being stopped, so the
+   * pair has to be audibly the same object, which is why `stampDud` is `stampThud` with
+   * its transient and its top end removed rather than a different noise.
+   *
+   * Both come off monotonic counters for the reason the dragon's do: several stamps can
+   * land inside one rendered frame, and a hazard that fired callbacks would sound them
+   * during a hit-stop.
+   */
+  private syncStampAudio(): void {
+    const hazard = this.sim.activeHazard;
+    const stamps = hazard instanceof Stamps ? hazard : null;
+    if (!stamps) {
+      this.stampCues = { slams: 0, deflections: 0 };
+      return;
+    }
+    if (this.sim.state !== 'PLAYING') return;
+    const c = this.stampCues;
+    // One cue per kind per frame, as with the jets: four thuds on the same millisecond
+    // is a click, not four stamps.
+    if (stamps.slams > c.slams) {
+      /*
+       * Weighted by how far the column that landed is from the player: the four stamps
+       * land every 1.4s between them, and at one volume that is a drum machine. Near it
+       * is a slam, a screen away it is a pulse under the music — which is the read the
+       * screen wants anyway, since the loud one is the one about to matter.
+       */
+      const at = stamps.lastSlamAt;
+      const p = this.sim.player;
+      const d = at === null ? 0 : Math.abs(at - (p.box.x + p.box.w / 2));
+      const near = Math.max(0, 1 - d / (RESOLUTION.WIDTH * 0.55));
+      this.audio.playSfx('stampThud', 0.3 + 0.7 * near * near);
+    }
+    if (stamps.deflections > c.deflections) this.audio.playSfx('stampDud');
+    c.slams = stamps.slams;
+    c.deflections = stamps.deflections;
+  }
+
+  /**
+   * The Workplace, which until now was the only screen in the game with no voice of
+   * its own (owner call: five cues). Four of them are the figure and the room —
+   *
+   *  - **the figure**, groaning as he winds up. On the wind-up rather than on the
+   *    release, because that is the frame the *telegraph* starts: the sound is worth
+   *    having only if it is information, and `THROW_WINDUP` later is too late to be.
+   *  - **the hush** of the roll leaving his hand, which is the act the groan warned of.
+   *  - **the keyboard**, once the freed colleague is at it. A rising edge, so the flurry
+   *    plays as he sits down and not once per frame he is sitting there.
+   *  - **the arc** off the unfixed terminal, paced on a real-time timer here because the
+   *    sparks themselves are drawn off a render hash and have no sim clock to borrow.
+   *  - **the chime**, on the frame the screen says OK — which is `restore` crossing 0.5,
+   *    the same threshold `drawTerminal` prints the word at, so the sound and the text
+   *    cannot disagree.
+   */
+  private syncWorkplaceAudio(dt: number): void {
+    const w = this.workplace;
+    if (!w) {
+      this.workplaceCues = { winds: 0, throws: 0, working: false, ok: false, sparkT: 0 };
+      return;
+    }
+    if (this.sim.state !== 'PLAYING') return;
+    const c = this.workplaceCues;
+    if (w.windUps > c.winds) this.audio.playSfx('mummy');
+    if (w.throws > c.throws) this.audio.playSfx('hush');
+    c.winds = w.windUps;
+    c.throws = w.throws;
+
+    const working = w.isWorking;
+    if (working && !c.working) this.audio.playSfx('typing');
+    c.working = working;
+
+    const ok = w.restore > 0.5;
+    if (ok && !c.ok) this.audio.playSfx('chime');
+    c.ok = ok;
+
+    if (w.isSparking) {
+      c.sparkT += dt;
+      if (c.sparkT >= SPARK_INTERVAL) {
+        c.sparkT = 0;
+        this.audio.playSfx('spark');
+      }
+    } else {
+      c.sparkT = 0;
+    }
+  }
+
   private syncDragonAudio(): void {
     const dragon = this.dragon;
     if (!dragon) {
-      this.dragonCues = { shots: 0, quenches: 0, hits: 0, roaring: false, beaten: false };
+      this.dragonCues = {
+        shots: 0,
+        quenches: 0,
+        hits: 0,
+        roaring: false,
+        toppling: false,
+        beaten: false,
+      };
       return;
     }
     const c = this.dragonCues;
@@ -882,9 +1008,20 @@ export class Game {
 
     // Capped at one cue per frame per kind: several jets can land inside one
     // rendered frame, and four hisses stacked on the same millisecond is a click.
+    /*
+     * The fall (owner call: it "is very dumb", and it was — it had no cue of its own, so
+     * the moment the boss went over sounded exactly like the three small hits before it).
+     * The topple *replaces* the fourth `strip`: they land on the same frame, and a tear
+     * of cloth under a falling animal is the small sound winning the mix.
+     */
+    const toppling = dragon.isToppling;
+    const fell = toppling && !c.toppling;
+    if (fell) this.audio.playSfx('topple');
+    c.toppling = toppling;
+
     if (dragon.shotsFired > c.shots) this.audio.playSfx('water');
     if (dragon.quenches > c.quenches) this.audio.playSfx('steam');
-    if (dragon.hits > c.hits) this.audio.playSfx('strip');
+    if (dragon.hits > c.hits && !fell) this.audio.playSfx('strip');
     c.shots = dragon.shotsFired;
     c.quenches = dragon.quenches;
     c.hits = dragon.hits;

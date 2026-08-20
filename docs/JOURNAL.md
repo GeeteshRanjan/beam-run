@@ -2487,3 +2487,164 @@ the test measures it as distinct cells covering under 45% of the rectangle they 
   ~2.7 KB is the two new grids and the new art; the budget gate's own measurement question is unchanged
   (`docs/OPEN.md` §1).
 - Validator green on all six screens.
+
+---
+
+## Pass: the game learns to make a noise that is not a beep — noise synthesis, eleven cues, and the four screens that had nothing to say
+
+Four owner notes, and every one of them was the same defect underneath: **this engine had no noise
+source.** Twelve cues, all of them built out of oscillators, because `AudioEngine` implemented exactly
+`createGain` + `createOscillator` and nothing else. The file even says so out loud, in the `roar`'s own
+comment — *"with no noise source and no filter, a growl has to be built out of low detuned ramps"*. A
+growl built out of ramps is a beep. So is a thud, so is a jet of water, so is an electrical arc, so is
+cloth through air. The owner's word for all four of them was "dumb", and he was right: **none of those
+sounds has a pitch**, and every one of them had been given one.
+
+So the pass is one engine change and then four screens' worth of wiring on top of it.
+
+### 1. The engine grows a second half: filtered noise
+
+`AudioContextLike` gains four **optional** members — `sampleRate`, `createBuffer`,
+`createBufferSource`, `createBiquadFilter` — and the engine gains `noise(from, to, dur, gain, delay, q,
+type)`: one second of white noise, generated once, looped through a biquad whose **frequency ramps over
+the burst**. That ramp is the whole character of a cue, and it is the thing an oscillator cannot do:
+opening upward is something *leaving* (a jet out of a barrel), closing downward is something *settling*
+(a thud, a cloud of steam, a roll of tape through the air).
+
+Three decisions inside that are load-bearing:
+
+- **Optional, not required.** A host with no buffer source (jsdom, an embed polyfill) still gets every
+  cue — just the tonal layer of it. So no cue is allowed to *be* its noise: noise is texture, the tones
+  carry the meaning. There is a test for exactly this, running every noisy cue through a double with the
+  three factories deleted and asserting an oscillator still starts.
+- **The buffer is filled from an LCG, not `Math.random()`.** The grain is then identical on every machine
+  and in every run. `step()` is the only place the no-random rule formally binds, but a quiet exception
+  in the audio layer is still an exception, and there was no reason to take it.
+- **A read cursor that advances 0.137 of a second per burst.** Without it every burst reads the same
+  grain from the same offset, and the water cannon at six shots a second phase-locks into a *whistle* —
+  the exact defect the noise was added to remove. This one is not theoretical; it is what the buffer
+  being a one-second loop implies.
+
+`playSfx` also takes an optional `level` (0..1) that scales every layer of the cue. That exists for one
+reason, and it is in §2.
+
+### 2. Setup Delays: two thuds, and they are the same object
+
+Owner: a thud when the stamp hits the ground, and *"a muffled low power thud when it hits the powered-up
+character, as if the thud didn't work"*.
+
+The second one is the interesting half, because it is not a second sound. `stampDud` is `stampThud`
+**with everything that made it land taken away**: no transient, no top end, a shorter and much lower
+sub, and a lowpass that never opens above 260 Hz where the floor thud's opens to 1100. Measured: the
+floor thud peaks at 0.57 with its energy at 120 Hz, the dud peaks at 0.31 with *all* of it at 60 Hz. The
+player has to hear the stamp **fail**, not hear a different stamp — a fresh sound there would say
+"something else happened", when what happened is that the same mechanism could not do its job.
+
+Neither existed before because the hazard had no way to say the words. `Stamps` now carries the same kind
+of monotonic counters `Dragon` has had all along — `slams`, `deflections`, plus `lastSlamAt` — and the
+host diffs them in `syncStampAudio()`. Two details the counters had to get right:
+
+- **A slam is the frame the clock crosses `DROP_TIME`**, not `press >= 1`. The latter is true for the
+  whole `HOLD_TIME`, which would have thudded every frame the die sat on the floor.
+- **A stroke that aborted never thuds.** The check runs *before* the cycle wrap clears `abortE`, because
+  the wrap is also where a fresh stroke begins and the two would otherwise be indistinguishable.
+
+And then the number that forced `playSfx(cue, level)`: screen 1 authors **four** stamps at phases 0,
+0.25, 0.5, 0.75 on a 1.4s cycle, so something lands **every 0.35 seconds, forever**. At one volume that
+is not a mechanism, it is a drum machine. The host weights each thud by the distance from the player to
+the column that landed (`0.3 + 0.7·near²`), so the one over your head is a slam and the one across the
+room is a pulse under the music. That is not just mixing: **the loud one is the one about to matter**, so
+the weighting is information about which column to watch.
+
+### 3. The badge: the one cue on every screen, and it sounded like a menu
+
+Owner: replace it, it is not good. It was `tone(660→990)` then `tone(990→1320)` — two rising blips, and
+660 against 990 is a bare fifth beating against its own sweep. The most valuable event in the game
+sounded like a form validating.
+
+Rebuilt as a reward rather than a notification, in four layers: a **low fifth underneath** (147 Hz — the
+only good event in the game with a body), an **open arpeggio** of nothing but fifths and octaves
+(D–A–D–A, so it cannot sound minor and no two notes of it beat), a **bell tail** two octaves up that
+outlives the arpeggio, and a **sparkle** — a thin band of noise sweeping 2.6→7.2 kHz, which is the layer
+no oscillator could have supplied. 0.89s, peak 0.49; the old one was 0.26s of two tones. `pickup` (unused
+by game code, kept for the API) was reduced to the same family's two-note opening so the two can never
+disagree.
+
+### 4. The Workplace: the only screen in the game with no voice at all
+
+Five cues, and the screen had **zero** before this — no `syncWorkplaceAudio` existed. The interesting
+choice is *where* two of them attach:
+
+- **The groan goes on the wind-up, not the release.** `mummy` is two detuned saws with a muffled breath
+  over them, and it fires the frame he starts winding — which is `THROW_WINDUP` (0.55s) *before* the roll
+  leaves his hand. A sound on the release would be decoration; a sound on the tell is information, and it
+  doubles the screen's existing visual telegraph rather than duplicating its outcome.
+- **The hush is the act it warned about.** A falling band of noise, 2 kHz down to 520 — cloth through
+  air, and the only honest way to make that noise is noise.
+- **The keyboard** is a flurry of seven keystrokes at *uneven* spacing (0, 0.10, 0.17, 0.27, 0.33, 0.44,
+  0.52), because a fixed interval reads as a machine and this is a person. Rising edge of "somebody is at
+  the terminal", so it plays as he sits down rather than once per frame he is sitting there.
+- **The chime** fires on `restore` crossing **0.5** — which is the *same threshold* `drawTerminal` prints
+  the word OK at. Sound and text off one number, so they can never disagree about when the room came good.
+- **The arc** is the one cue with no simulation event behind it, and deliberately so: the sparks are drawn
+  from a render hash (`hash2(t*14)`) and have no sim clock to borrow. So its pacing lives in the host too
+  — `SPARK_INTERVAL = 1.7s` in `Game.ts`, *not* in `tuning.config.ts`, because a gameplay constant behind
+  a sound that changes nothing would be a lie about where the number matters. Quiet on purpose (peak
+  0.12): the screen can be on for half a minute and this has to read as a room you are standing in.
+
+`Workplace` grew `windUps`, `throws`, `isWorking` and `isSparking` to say all of that, and stayed as
+headless as it was.
+
+### 5. Hire Under Fire: a jet made of water, and a fall that finally has a sound
+
+The cannon was `sine(880→1560)` plus `triangle(1320→2100)`: two blips, six times a second. Water is
+**broadband** — it has no pitch at all — so it is now a band of noise opening 420→2800 with a short low
+chuff under it for the valve. The measured spectrum went from two spikes to energy across every band from
+120 Hz to 8 kHz, which is what a jet is. `steam` became its mirror (5.2 kHz closing to 700, longer and
+softer — a cloud next to a stream) and `strip` gained a tear of noise over its pluck.
+
+The topple was the note with the biggest gap behind it. **"The Godzilla going down is very dumb"** — and
+it had *no cue of its own at all*. The fourth hit played `strip`, the same 0.14s tear as the three small
+hits before it, and then nothing happened until `hired` a second and a half later. The biggest event on
+the screen was the quietest.
+
+`topple` is built as a **fall**, in two parts, because that is what is on the screen: a long descending
+groan (124→30 Hz over 1.05s) with a rumble under it while it goes over, and then a **floor impact 0.58s
+later** when it arrives. 1.16s, peak 0.68, and nothing else in this game reaches 26 Hz. It needed one new
+public getter (`Dragon.isToppling`) because the fall is the only event on that screen with no counter
+behind it, and the host plays it **instead of** the fourth `strip` rather than on top: they land on the
+same frame, and a tear of cloth under a falling animal is the small sound winning the mix.
+
+### 6. Listening to it, the way we look at the pixels
+
+There is no browser here and there was no way to hear any of this — which is the same hole the raster
+harness fills for art, and the handoff is blunt about what happens when a visual pass skips the raster.
+So: `node-web-audio-api` (a real Rust Web Audio implementation with a working `OfflineAudioContext`)
+installed **outside the project**, `AudioEngine` pointed at it, every cue rendered to a buffer and
+measured — peak, RMS, length, and a Goertzel ladder at 60/120/250/500/1k/2k/4k/8k Hz. WAVs written out
+for a human to play.
+
+Two things needed working round, both worth writing down for the next session:
+
+- An `OfflineAudioContext` reports `state === 'suspended'` until it renders, so `AudioEngine.suspended`
+  is true and **every cue silently refuses to play**. The probe wraps the context in a Proxy that reports
+  `'running'`.
+- Its `resume()` **never settles** (it is only meaningful mid-render), so `await engine.unlock()` hangs
+  forever with no output at all. The same Proxy stubs `resume` to a resolved promise. This cost two dead
+  runs that looked like an infinite loop in the measurement code.
+
+The first measurement pass then found a real defect, and one the code could not show: **the noise-led
+cues were far too quiet.** White noise through a Q≈1 bandpass keeps a small fraction of its energy, so a
+noise layer at the same nominal gain as a tone lands 2–3× lower — `spark` peaked at 0.06 and `water` at
+0.16, i.e. under the music bed. Ten gains were raised and re-measured. Nobody would have caught that by
+reading the file; it is exactly the audio version of the occluded sun.
+
+### Numbers
+
+- **560 tests** (45 files), up from 544: four in `AudioEngine.test.ts` (noise layering, tone-only
+  fallback, per-cue level, the thud/dud family), two on the stamp counters, two on the Workplace beats,
+  one on the topple window.
+- **IIFE 70.90 KB gzip** (was 68.91), site payload **73.44 KB** (was 72.4) — 79% of the 90 KB budget. The
+  ~2 KB is eleven cue bodies and the noise plumbing. The gate's own measurement question is unchanged
+  (`docs/OPEN.md` §1).
+- Typecheck, lint, build, build:site and validator all green.

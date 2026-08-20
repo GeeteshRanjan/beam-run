@@ -99,6 +99,19 @@ export class Stamps implements Hazard {
    * never leak into the next attempt.
    */
   private _struckAt: number | null = null;
+  /**
+   * Monotonic counters, polled by the host so it can sound a cue exactly once per
+   * event without this file ever knowing an AudioEngine exists — the same contract
+   * `Dragon.shotsFired` uses, and the reason neither of them is a callback.
+   *
+   * `_slams` counts strokes that reached the floor, `_deflections` strokes that hit
+   * an ANSR-backed player and gave up. They are deliberately the two halves of the
+   * screen's argument: the mechanism landing, and the mechanism failing to.
+   */
+  private _slams = 0;
+  private _deflections = 0;
+  /** Column centre (px) of the stroke that landed most recently, or null. */
+  private _lastSlamAt: number | null = null;
 
   constructor(stamps: StampSpec[]) {
     this.stamps = stamps.map((s) => ({
@@ -196,7 +209,18 @@ export class Stamps implements Hazard {
     this.slowed = ctx.assisted;
 
     for (const s of this.stamps) {
+      const prevE = s.e;
       s.e += step;
+      /*
+       * It has hit the floor: the frame the accelerating slam bottoms out, i.e. the
+       * clock crossing `DROP_TIME`. Counted *before* the wrap clears the abort, because
+       * a stroke that aborted never reached the floor and must not thud — and counted
+       * off the clock rather than off `press >= 1`, which is true for the whole hold.
+       */
+      if (s.abortE === null && prevE < S.DROP_TIME && s.e >= S.DROP_TIME) {
+        this._slams += 1;
+        this._lastSlamAt = s.cx;
+      }
       if (s.e >= S.CYCLE) {
         s.e %= S.CYCLE;
         s.abortE = null; // a fresh cycle starts with a clean stroke
@@ -221,6 +245,7 @@ export class Stamps implements Hazard {
         if (s.abortE === null) {
           s.abortE = s.e;
           s.abortPress = press;
+          this._deflections += 1;
         }
         continue;
       }
@@ -283,5 +308,29 @@ export class Stamps implements Hazard {
   /** How many stamps are currently backing off a shielded player. */
   get retractingCount(): number {
     return this.stamps.filter((s) => s.abortE !== null).length;
+  }
+
+  /**
+   * Strokes that have reached the floor. Never reset — like the dragon's counters it
+   * is "how many have happened", and a retry builds a brand new Stamps anyway.
+   */
+  get slams(): number {
+    return this._slams;
+  }
+
+  /** Strokes that hit an ANSR-backed player and backed off instead of pressing. */
+  get deflections(): number {
+    return this._deflections;
+  }
+
+  /**
+   * Where the most recent stroke came down (px), or null before the first.
+   *
+   * The host needs it to weight the thud by distance: four columns land every cycle
+   * and one volume for all of them is a drum machine rather than a mechanism standing
+   * somewhere on the floor.
+   */
+  get lastSlamAt(): number | null {
+    return this._lastSlamAt;
   }
 }

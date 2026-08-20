@@ -1122,6 +1122,17 @@ export class Dragon implements Hazard {
     return this.phase === 'waiting';
   }
 
+  /**
+   * It is going down: the beat between the last jet landing and the costume opening.
+   *
+   * Public because it is the one event on this screen with no counter behind it — the
+   * host needs the rising edge of this phase to sound the topple, and before it had it
+   * the fourth hit was the only thing the fall got to say for itself.
+   */
+  get isToppling(): boolean {
+    return this.phase === 'stripping';
+  }
+
   /** Costume off: the screen is safe and the hires have walked out. */
   get isBeaten(): boolean {
     return this.phase === 'beaten';
