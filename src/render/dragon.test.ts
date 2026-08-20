@@ -13,7 +13,7 @@ import {
   drawWaterShots,
 } from './dragon';
 import { BRAND, HAZARDS, RESOLUTION } from '../data/tuning.config';
-import { coneBoxes } from '../world/Hazards/Dragon';
+import { coneAxisY, coneBoxes, CONE_LABEL_F } from '../world/Hazards/Dragon';
 import type {
   CandidateState,
   DragonState,
@@ -33,17 +33,49 @@ interface Rect {
   fill: string;
 }
 
-/** The smallest canvas that can answer "what did it paint, where, and in what". */
+/**
+ * The smallest canvas that can answer "what did it paint, where, and in what".
+ *
+ * It carries a **transform** now, because the taunt is set at the flame's own angle
+ * (owner call) and that is `save`/`translate`/`rotate`/`restore`. Only translation is
+ * applied to the recorded rectangles: a rotated glyph is not an axis-aligned box, so
+ * pretending otherwise would report positions that are wrong in a way tests would then
+ * be written against. What the rotation is for is checked by counting the calls.
+ */
 function recorder() {
   const rects: Rect[] = [];
+  let tx = 0;
+  let ty = 0;
+  const stack: [number, number][] = [];
+  const rotations: number[] = [];
   const ctx = {
     fillStyle: '',
     globalAlpha: 1,
     fillRect(x: number, y: number, w: number, h: number) {
-      rects.push({ x, y, w, h, fill: String((this as { fillStyle: string }).fillStyle) });
+      rects.push({
+        x: x + tx,
+        y: y + ty,
+        w,
+        h,
+        fill: String((this as { fillStyle: string }).fillStyle),
+      });
+    },
+    save() {
+      stack.push([tx, ty]);
+    },
+    restore() {
+      const p = stack.pop();
+      if (p) [tx, ty] = p;
+    },
+    translate(x: number, y: number) {
+      tx += x;
+      ty += y;
+    },
+    rotate(a: number) {
+      rotations.push(a);
     },
   } as unknown as CanvasRenderingContext2D;
-  return { ctx, rects };
+  return { ctx, rects, rotations };
 }
 
 /** It stands on the ground, so the body box's bottom edge is the ground band. */
@@ -61,6 +93,7 @@ function dragon(over: Partial<DragonState> = {}): DragonState {
     layers: D.HITS_TO_STRIP,
     dissolve: null,
     costume: null,
+    jawOpen: 0,
     ...over,
   };
 }
@@ -78,7 +111,20 @@ function fire(over: Partial<FireState> = {}): FireState {
     dir: -1,
     quenched: 0,
     label: 'CANDIDATE DECLINED',
-    labelAt: { x: (mouth.x + target.x) / 2, y: mouth.y - D.CONE_NEAR_H / 2 - 44 },
+    /*
+     * The taunt's anchor and angle come from the hazard's own functions, because they are
+     * the hazard's decision (owner call: the words sit ON the flame at the flame's angle).
+     * Written out by hand here, this fixture kept the old "44px above the whole shape"
+     * formula and quietly tested a picture the game no longer draws.
+     */
+    labelAngle: Math.atan2(
+      -(coneAxisY(mouth, target, D.CONE_TOUCHDOWN) - mouth.y),
+      Math.abs(target.x - mouth.x) * D.CONE_TOUCHDOWN,
+    ),
+    labelAt: {
+      x: mouth.x + (target.x - mouth.x) * CONE_LABEL_F,
+      y: coneAxisY(mouth, target, CONE_LABEL_F),
+    },
     boxes: coneBoxes(mouth, target, extent),
     ...over,
   };
@@ -154,67 +200,78 @@ describe('the Godzilla', () => {
     }
   });
 
-  it('wears glasses and nothing else: no jacket, no tie, no shirt', () => {
-    // Owner call, third pass. The costume used to be four garments; it is one pair of
-    // glasses, and this is the assertion that says so in the palette rather than in a
-    // comment — the suit, shirt and tie colours must be nowhere on it.
+  it('wears NOTHING: no glasses, no jacket, no tie, no shirt', () => {
+    /*
+     * Owner call, fourth pass on this costume: "remove the spectacles from the Godzilla."
+     * The suit and the tie went two passes earlier and the glasses were what survived, so
+     * this is the assertion that the animal is now *only* an animal — stated in the palette
+     * rather than in a comment, because that is the form that survives a rebuild.
+     *
+     * The frame and lens tones are listed with the garments they used to be listed against,
+     * which is the point: they are dead colours now and anything painting them again is a
+     * costume creeping back on.
+     */
     const { ctx, rects } = recorder();
     drawDragon(ctx, dragon(), 1.2, true);
     const fills = upper(rects);
-    expect(fills).toContain('#16232A'); // frame
-    expect(fills.some((f) => f.startsWith('RGBA(207,230,236,0.42'))).toBe(true); // lens
-    for (const gone of ['#243642', '#1E4C6B', '#EDF3F6', '#C2D4DC']) {
-      expect(fills).not.toContain(gone);
+    for (const gone of ['#16232A', '#0B1418', '#243642', '#1E4C6B', '#EDF3F6', '#C2D4DC']) {
+      expect(fills, `${gone} is a costume colour and should be gone`).not.toContain(gone);
     }
+    expect(fills.some((f) => f.startsWith('RGBA(207,230,236,0.42'))).toBe(false);
   });
-
-  it('keeps the glasses on the eye rather than strapped across the muzzle', () => {
-    // The correction the rasteriser caught: sized to the head instead of the eye, the
-    // frame was an 80px band over the whole snout — a welding mask, and it hid the
-    // teeth as well as the eye it was supposed to sit on.
-    const { ctx, rects } = recorder();
-    const d = dragon();
-    drawDragon(ctx, d, 1.2, true);
-    const glass = rects.filter((r) =>
-      ['#16232A'].includes(r.fill.toUpperCase()) || r.fill.startsWith('rgba(207,230,236,0.42'),
-    );
-    expect(glass.length).toBeGreaterThan(2);
-    const span = Math.max(...glass.map((r) => r.x + r.w)) - Math.min(...glass.map((r) => r.x));
-    expect(span).toBeLessThan(D.BODY_W * 0.32);
-    // …and it is up on the head, in the top quarter of the animal.
-    for (const r of glass) expect(r.y).toBeLessThan(d.box.y + D.BODY_H * 0.25);
-  });
-
-  it('cracks the glass as the hits land, and washes it off on the last one', () => {
-    const cracksAt = (layers: number): number => {
-      const { ctx, rects } = recorder();
-      drawDragon(ctx, dragon({ layers }), 1.2, true);
-      return rects.filter((r) => r.fill.toUpperCase() === '#0B1418').length;
-    };
-    // Untouched glass is clean; every hit adds a splinter.
-    expect(cracksAt(4)).toBe(0);
-    expect(cracksAt(3)).toBeGreaterThan(0);
-    expect(cracksAt(2)).toBeGreaterThan(cracksAt(3));
-    expect(cracksAt(1)).toBeGreaterThan(cracksAt(2));
-
-    // The final hit slides the frame off the snout and fogs it on the way.
+  it('shows a landed hit as WATER ON THE HIDE, not as damage to something it wears', () => {
+    /*
+     * The `dissolve` beat still exists — the rules book a hit the frame the jet lands and the
+     * picture gets `DISSOLVE_TIME` to show it — but with nothing on the animal to break, what
+     * it paints is the water: a lit soaked patch where the jet landed, running down the body.
+     *
+     * Which is the honest picture anyway. A beast being hosed is wet; the glasses fogging and
+     * running was a description of the same event through an object that is no longer there.
+     */
     const dry = recorder();
-    drawDragon(dry.ctx, dragon({ layers: 1 }), 1.2, true);
-    const washing = recorder();
-    drawDragon(
-      washing.ctx,
-      dragon({ layers: 0, dissolve: { layer: 1, progress: 0.6, hitY: 440 } }),
-      1.2,
-      true,
-    );
-    const frameY = (rs: Rect[]) =>
-      Math.min(...rs.filter((r) => r.fill.toUpperCase() === '#16232A').map((r) => r.y));
-    expect(frameY(washing.rects)).toBeGreaterThan(frameY(dry.rects));
-    // Water on the glass: fog over the lens and runs coming off it.
-    expect(washing.rects.some((r) => r.fill.includes('233,246,250'))).toBe(true);
-    expect(washing.rects.some((r) => r.fill.includes('168,236,250'))).toBe(true);
+    drawDragon(dry.ctx, dragon(), 1.2, true);
+    const hit = recorder();
+    drawDragon(hit.ctx, dragon({ layers: 3, dissolve: { layer: 4, progress: 0.4, hitY: 440 } }), 1.2, true);
+    const water = (rs: Rect[]) =>
+      rs.filter((r) => r.fill.includes('168,236,250') || r.fill.includes('79,190,220'));
+    expect(water(dry.rects)).toHaveLength(0);
+    expect(water(hit.rects).length).toBeGreaterThan(0);
+    // It lands where the jet did, not at a fixed place on the sprite.
+    const high = recorder();
+    drawDragon(high.ctx, dragon({ layers: 3, dissolve: { layer: 4, progress: 0.4, hitY: 470 } }), 1.2, true);
+    const topOf = (rs: Rect[]) => Math.min(...water(rs).map((r) => r.y));
+    expect(topOf(high.rects)).toBeGreaterThan(topOf(hit.rects));
   });
-
+  it('OPENS ITS JAW, and opens it gradually so the wind-up is the warning', () => {
+    /*
+     * Owner call: "while throwing the flame the Godzilla doesn't open its mouth — make it
+     * open it." And it matters more than a flourish, because the same pass deleted the floor
+     * marks that used to carry the wind-up (see `drawCone`): the animal's own head is the
+     * telegraph now, so the jaw has to be visibly *doing* something through the whole 0.65s.
+     *
+     * Measured as the depth of the maw, which is the thing that grows — a boolean "mouth
+     * open" sprite would pass a test written about colours and fail the note.
+     */
+    const mawDepth = (jawOpen: number, phase: DragonState['phase'] = 'charging'): number => {
+      const { ctx, rects } = recorder();
+      drawDragon(ctx, dragon({ jawOpen, phase }), 1.2, true);
+      const maw = rects.filter((r) => r.fill.toUpperCase() === '#2E070B');
+      if (maw.length === 0) return 0;
+      // Against the SHUT mouth's own span, not against zero: the grid already carries a
+      // closed mouth line in the same tone, so "how much maw is there" only means
+      // anything as a difference. A test written against zero passes for the wrong
+      // reason and then fails the moment somebody draws teeth.
+      return Math.max(...maw.map((r) => r.y + r.h)) - Math.min(...maw.map((r) => r.y));
+    };
+    const shut = mawDepth(0, 'waiting');
+    expect(mawDepth(0.4)).toBeGreaterThan(shut);
+    expect(mawDepth(1)).toBeGreaterThan(mawDepth(0.4));
+    // Lit from inside while it is charging or burning: light in a mouth is what makes an
+    // open mouth read as a mouth rather than as a bite taken out of the head.
+    const { ctx, rects } = recorder();
+    drawDragon(ctx, dragon({ jawOpen: 1, phase: 'burning' }), 1.2, true);
+    expect(upper(rects)).toContain('#FFF2D0');
+  });
   it('leaves an empty COSTUME on the floor once it is beaten, and nothing standing', () => {
     /*
      * The owner's ending: "it dies on the ground and on one side the Godzilla's costume
@@ -237,11 +294,12 @@ describe('the Godzilla', () => {
     // Nothing is more than a heap high: the suit is 65px deep and it lies on the ground.
     const highest = Math.min(...rects.map((r) => r.y));
     expect(highest).toBeGreaterThan(GROUND_TOP - 90);
-    // The way out of it, and the glasses beside it.
+    // The way out of it, and the water that put it there.
     expect(fills).toContain('#180509'); // the dark inside of the suit
-    expect(fills).toContain('#16232A'); // the frame
-    expect(fills).toContain('#0B1418'); // its cracked lens
     expect(rects.some((r) => r.fill.includes('28,127,166'))).toBe(true); // the puddle
+    // …and NO glasses lying beside it (owner call): they were the trophy of a costume the
+    // animal no longer wears, i.e. a prop for an object the player never saw.
+    for (const gone of ['#16232A', '#0B1418']) expect(fills).not.toContain(gone);
   });
 
   it('unzips the suit as far as it has been opened, and no further', () => {
@@ -320,26 +378,59 @@ describe('the Godzilla', () => {
     expect(roaring.rects.length).toBeGreaterThan(quiet.rects.length);
   });
 
-  it('keeps its name plate and pips off the HUD corner it stands in', () => {
-    // It lives at the far right, where the HUD's clock and delay log hang. The plate
-    // is therefore drawn to the INSIDE of the body at chest height, and this is the
-    // guard that nobody "tidies" it back over the head into the chrome.
-    const { ctx, rects } = recorder();
-    const d = dragon();
-    drawDragon(ctx, d, 1.2, true);
-    const cx = d.box.x + d.box.w / 2;
-    const pips = rects.filter((r) => r.w === 8 && r.h <= 6 && r.x < cx - 150);
-    expect(pips.filter((r) => r.fill.toUpperCase() === '#A8ECFA')).toHaveLength(4);
+  it('carries a real HEALTH BAR, and keeps it off the HUD corner it stands in', () => {
+    /*
+     * Owner call: "remove the life visibility of the Godzilla and add a better one, a more
+     * visible one." What went was four 8x5 pips - 32px of lit cells beside a 200px animal -
+     * *and* the glasses, whose cracks were the readout that actually told you how the fight
+     * was going. So the bar has to carry the whole job.
+     *
+     * Three things are asserted and each one is a rule the game already paid for elsewhere:
+     * it is far bigger than what it replaced; it does **not change width** as it empties
+     * (the HUD lives plaque's rule - a readout that shrinks is a readout that moves); and
+     * nothing is painted in the top-right corner, where this beast stands under the HUD's
+     * own right-hand column and the rasteriser cannot see the chrome.
+     */
+    const barOf = (layers: number) => {
+      const { ctx, rects } = recorder();
+      const d = dragon({ layers });
+      drawDragon(ctx, d, 1.2, true);
+      const cx = d.box.x + d.box.w / 2;
+      const low = rects.filter((r) => r.x < cx - 150 && r.y > d.box.y + D.BODY_H * 0.6);
+      // The bar's frame is its widest single rectangle down here; the lit rails are the
+      // 3px courses along the top of each held segment.
+      const frame = low.reduce((a, r) => (r.w > a.w ? r : a), low[0]!);
+      return {
+        left: frame.x,
+        right: frame.x + frame.w,
+        held: low.filter((r) => r.fill.toUpperCase() === '#A8ECFA' && r.h === 3 && r.w > 20)
+          .length,
+      };
+    };
+    const full = barOf(4);
+    expect(full.right - full.left).toBeGreaterThan(150);
+    expect(full.held).toBe(4);
+    // Emptying changes what is lit, never the bar's extent.
+    for (const layers of [3, 2, 1, 0]) {
+      const b = barOf(layers);
+      expect(b.left).toBe(full.left);
+      expect(b.right).toBe(full.right);
+      expect(b.held).toBe(layers);
+    }
     // Nothing at all is painted in the top-right corner of the frame.
+    const d = dragon();
+    const { ctx, rects } = recorder();
+    drawDragon(ctx, d, 1.2, true);
     expect(rects.filter((r) => r.x > 1080 && r.y < d.box.y - 20)).toHaveLength(0);
   });
 
-  it('drops the pips once it has been beaten', () => {
+  it('drops the health bar once it has been beaten', () => {
     const { ctx, rects } = recorder();
     const d = dragon({ layers: 0, phase: 'beaten', costume: { openness: 1, fade: 0 } });
     drawDragon(ctx, d, 1.2, true);
     const cx = d.box.x + d.box.w / 2;
-    expect(rects.filter((r) => r.w === 8 && r.h <= 6 && r.x < cx - 150)).toHaveLength(0);
+    const lit = rects.filter((r) => r.x < cx - 150 && r.fill.toUpperCase() === '#A8ECFA');
+    expect(lit).toHaveLength(0);
   });
 
   it('draws the same animal facing either way', () => {
@@ -386,30 +477,51 @@ describe('the cone of fire', () => {
     expect(rects).toHaveLength(0);
   });
 
-  it('telegraphs the whole LANE on the floor, in cream, before anything burns', () => {
+  it('telegraphs on the ANIMAL, not with lines on the floor', () => {
+    /*
+     * Owner call: "there are dashed lines, one on the floor till where the flame will come
+     * and one in the path of the flame - those don't look nice, remove them, only keep the
+     * flame."
+     *
+     * What went: 32px cream dashes marching out along the floor with orange chevrons over
+     * every other one, eight stepping cells down the axis, and a bracketed bar at the far
+     * end. Every one of them existed to satisfy "the tell has to be where the player is
+     * looking", and every one of them was a dashed line drawn across the picture.
+     *
+     * So this is the one place in the game where a telegraph was **deleted rather than
+     * moved**, and the test states what carries it instead: nothing on the floor, and a
+     * charging throat plus falling embers at the jaw. The jaw opening is the third part and
+     * it belongs to `drawDragon` (tested there), which is why those two notes turned out to
+     * be one change.
+     */
     const { ctx, rects } = recorder();
     const f = fire({ phase: 'windup', progress: 0.9, extent: 0 });
     drawCone(ctx, f, 1.2, true);
-    // The tell has to be where the player is looking *and* has to cover the ground the
-    // fire will run down — marking only one end would be a lie about the reach. It is
-    // cream because two warm colours at low alpha over this screen's terracotta floor
-    // rasterised as mud.
-    const onFloor = rects.filter((r) => r.y + r.h >= GROUND_TOP - 14);
-    expect(onFloor.length).toBeGreaterThan(10);
-    const cream = onFloor.filter((r) => r.fill.includes('255,242,208'));
-    expect(cream.length).toBeGreaterThan(8);
-    const reach = Math.max(...cream.map((r) => r.x)) - Math.min(...cream.map((r) => r.x));
-    expect(reach).toBeGreaterThan(D.CONE_REACH * 0.6);
-    // …and it is legible: the marks are at high alpha, not the 0.2 wash that vanished.
-    expect(cream.some((r) => /0\.[5-9]/.test(r.fill))).toBe(true);
+    // Nothing at all on the floor: no lane, no chevrons, no bracket at the reach.
+    expect(rects.filter((r) => r.y + r.h >= GROUND_TOP - 14)).toHaveLength(0);
+    // Nothing down the axis either, away from the jaw.
+    expect(rects.filter((r) => Math.abs(r.x - f.mouth.x) > 120)).toHaveLength(0);
+    // What IS there is at the mouth: a tightening ring and a hot core.
+    const atJaw = rects.filter((r) => Math.abs(r.x - f.mouth.x) < 40);
+    expect(atJaw.length).toBeGreaterThan(6);
+    expect(atJaw.some((r) => r.fill.includes('255,242,208'))).toBe(true);
+    expect(atJaw.some((r) => r.fill.includes('255,84,0'))).toBe(true);
   });
 
-  it('draws a sight line from the jaw down the axis', () => {
-    const { ctx, rects } = recorder();
-    const f = fire({ phase: 'windup', progress: 0.95, extent: 0 });
-    drawCone(ctx, f, 1.2, true);
-    const line = rects.filter((r) => r.y > f.mouth.y - 20 && r.y < GROUND_TOP - 40);
-    expect(line.length).toBeGreaterThan(4);
+  it('drops embers out of the open jaw once the mouth is properly open', () => {
+    // The vertical half of the telegraph, and the reason it reads from the far end of the
+    // frame: a glow inside a head is ~30px of change on a busy backdrop, and something
+    // falling out of that head is movement.
+    const early = recorder();
+    drawCone(early.ctx, fire({ phase: 'windup', progress: 0.2, extent: 0 }), 1.2, true);
+    const late = recorder();
+    drawCone(late.ctx, fire({ phase: 'windup', progress: 0.95, extent: 0 }), 1.2, true);
+    const embers = (rs: Rect[]) =>
+      rs.filter(
+        (r) => r.w === 6 && r.h === 6 && ['#FFB07A', '#FF5400'].includes(r.fill.toUpperCase()),
+      );
+    expect(embers(early.rects)).toHaveLength(0);
+    expect(embers(late.rects).length).toBeGreaterThan(2);
   });
 
   it('paints exactly the boxes it burns with, and nothing outside them', () => {
@@ -451,22 +563,46 @@ describe('the cone of fire', () => {
     expect(span(half.rects)).toBeLessThan(span(full.rects));
   });
 
-  it('carries its taunt on a plaque that sits over the lane, not on the flame', () => {
-    // Owner call: the labels do not travel. One per burst, pinned where the burst put
-    // it, and the next burst brings the next one.
-    const { ctx, rects } = recorder();
+  it("writes its taunt ON the flame, at the flame's own angle, and does not move it", () => {
+    /*
+     * Owner call: "the text that depicts what this flame represents should be an overlay on
+     * top of the flame itself, in the same angle the flame is in, and it should be present on
+     * the flame; it should not come forward with the flame - while the flame is there it is
+     * there too."
+     *
+     * Four claims, four assertions. The plaque is gone (a framed dark plate over burning fire
+     * is a sign in *front* of the fire); the type is set inside the flame's own band; it is
+     * rotated to the axis; and its position comes from the burst, so it does not move as the
+     * fire grows through it.
+     */
+    const { ctx, rects, rotations } = recorder();
     const f = fire();
     drawCone(ctx, f, 1.2, true);
-    // A plaque, not bare pixel type: bare glyphs over a flame are unreadable, which
-    // is the whole reason drawLabelPlaque exists.
-    const plaque = rects.filter((r) => r.fill.includes('28,10,4'));
-    expect(plaque.length).toBeGreaterThan(0);
-    // Over the lane, and clear of the flame's own top edge at the point it sits over
-    // — measured against the segment it is actually above, because the cone's top edge
-    // is 130px higher at the jaw than it is at the far end.
+    // No plaque: the old background tone is not painted at all.
+    expect(rects.some((r) => r.fill.includes('28,10,4'))).toBe(false);
+    // It is rotated, and by the angle the hazard committed.
+    expect(rotations).toContain(f.labelAngle);
+    // The glyphs are ON the flame: inside the band, not above it. Measured against the
+    // segment the anchor falls in, because the cone's top edge is far higher at the jaw.
     const under = f.boxes.find((b) => f.labelAt.x >= b.x && f.labelAt.x <= b.x + b.w)!;
     expect(under).toBeTruthy();
-    for (const r of plaque) expect(r.y + r.h).toBeLessThan(under.y);
+    const glyphs = rects.filter((r) => r.fill.toUpperCase() === '#FFF6E2');
+    expect(glyphs.length).toBeGreaterThan(20);
+    for (const r of glyphs) {
+      expect(r.y).toBeGreaterThan(under.y - 30);
+      expect(r.y).toBeLessThan(under.y + under.h + 30);
+    }
+    // Growing the flame does not move the words.
+    const half = recorder();
+    drawCone(
+      half.ctx,
+      { ...f, extent: 0.5, boxes: coneBoxes(f.mouth, f.target, 0.5) },
+      1.2,
+      true,
+    );
+    const leftmost = (rs: Rect[]) =>
+      Math.min(...rs.filter((r) => r.fill.toUpperCase() === '#FFF6E2').map((r) => r.x));
+    expect(leftmost(half.rects)).toBe(leftmost(rects));
   });
 
   it('boils off steam once the water is beating it back', () => {
@@ -491,13 +627,36 @@ describe('the cone of fire', () => {
 });
 
 describe('the ground, and the bricks the badge lands on', () => {
-  it('scorches the floor around the roost and nowhere else', () => {
+  it('leaves the BRICKS CLEAN while the beast still holds the far end', () => {
+    /*
+     * Owner call: "below the Godzilla, on the bricks, there are some dirty/black spots on the
+     * brick - can you clean that."
+     *
+     * There was a 600x24 dither of near-black cells over the ground band under the roost:
+     * the animal's own scorch on paper, a scatter of dirt on the frame. Fourth time this
+     * build has been told that loose dark cells over a lit material read as dirt (the badge's
+     * dithered halo, the drifting embers, the confetti, now this), so the rule is worth
+     * having in a test as well as in a doc: **a texture that is a scatter of dark cells over
+     * a lit material will read as dirt on that material.**
+     *
+     * So this function draws nothing at all until the screen has been won.
+     */
     const { ctx, rects } = recorder();
     drawScorchedGround(ctx, 1060);
+    expect(rects).toHaveLength(0);
+  });
+  it('grows grass through the floor once it has been beaten', () => {
+    // The half that survived: the payoff. Something *did* happen here, and what says so is
+    // the ground recovering rather than a stain that stayed.
+    const { ctx, rects } = recorder();
+    drawScorchedGround(ctx, 1060, 1);
     expect(rects.length).toBeGreaterThan(20);
+    expect(rects.some((r) => r.fill.toUpperCase() === '#7BC46A')).toBe(true);
     for (const r of rects) {
       expect(r.x).toBeGreaterThan(700);
-      expect(r.y).toBeGreaterThanOrEqual(GROUND_TOP);
+      // On the floor, not floating over it: blades grow up out of the walkable line.
+      expect(r.y).toBeLessThan(GROUND_TOP);
+      expect(r.y).toBeGreaterThan(GROUND_TOP - 40);
     }
   });
 

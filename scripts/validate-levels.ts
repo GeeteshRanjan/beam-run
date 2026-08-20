@@ -366,11 +366,17 @@ function validateModel(): Problem[] {
     push(`capability monthsSaved sums to ${saved} but the baseline gap is ${gap}`);
   }
 
-  // Each capability must be earned exactly once across the run. `SAFE_PASSAGE`
-  // is the deliberate exception: it carries no capability, so it may repeat (the
-  // Tech Park is its only holder now that Reception carries no badge at all) and
-  // it must never appear on a hazard screen, where the player would take a badge
-  // that does nothing.
+  /*
+   * Each capability must be earned exactly once across the run, and there is no longer
+   * any exception to that. `SAFE_PASSAGE` used to be one: a badge with no capability
+   * behind it, allowed to repeat, and banned from any screen with an obstacle on it.
+   * The owner has deleted both of its holders — Reception's, then the Tech Park's — so
+   * the type is gone and with it three rules that only existed to fence it off.
+   *
+   * What is left is stronger than what it replaced: **every badge in the game maps to a
+   * capability**, so the "appears exactly once" loop below is now a complete account of
+   * the badges on the six screens rather than a check with a hole in it.
+   */
   const badges = SCREENS.filter((s) => s.badge).map((s) => s.badge!.type);
   for (const cap of CAPABILITIES) {
     const count = badges.filter((b) => b === cap.badge).length;
@@ -378,17 +384,18 @@ function validateModel(): Problem[] {
       push(`capability ${cap.product} (${cap.badge}) appears on ${count} screens, expected 1`);
     }
   }
-  const known = new Set<string>([...CAPABILITIES.map((c) => c.badge), 'SAFE_PASSAGE']);
+  const known = new Set<string>(CAPABILITIES.map((c) => c.badge));
   for (const b of badges) {
     if (!known.has(b)) {
       push(`badge type ${b} has no entry in CAPABILITIES (no product name to show)`);
     }
   }
-  for (const s of SCREENS) {
-    if (s.hazard !== 'none' && s.badge?.type === 'SAFE_PASSAGE') {
-      push(`screen ${s.id} has obstacles but carries the no-effect SAFE_PASSAGE badge`);
-    }
-  }
+  /*
+   * The "a badge on a screen with obstacles must not be the no-effect one" check used to
+   * live here. There is no no-effect badge left, so the check has nothing to fail on —
+   * and the `known` set above now says the same thing more strongly: a badge type with
+   * no capability behind it fails the build wherever it is authored, obstacles or not.
+   */
   return problems;
 }
 

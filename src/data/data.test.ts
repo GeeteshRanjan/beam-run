@@ -54,27 +54,33 @@ describe('copy', () => {
   it('names a capability, a product and a topic for every capability badge', () => {
     const badges = SCREENS.filter((s) => s.badge).map((s) => s.badge!.type);
     /*
-     * Every screen with an obstacle carries a badge; Reception carries none (owner
-     * call — a badge whose effect is deliberately unassigned taught the player that
-     * taking one does nothing, one screen before the one that saves them), and the
-     * Tech Park's SAFE_PASSAGE deliberately carries no capability and so no product
-     * to sell.
+     * **Every badge in the game is a capability, and there are exactly four.** The two
+     * screens with nothing to defend against carry none: Reception (owner call — a badge
+     * whose effect is deliberately unassigned taught the player that taking one does
+     * nothing, one screen before the one that saves them) and now the Tech Park (owner
+     * call — a rail hanging in the middle of the payoff, on a screen already won). The
+     * `SAFE_PASSAGE` type went with its last holder, so the "filter out the one that has
+     * no product" step this test used to need is gone.
      */
-    expect(badges).toHaveLength(SCREENS.length - 1);
-    expect(SCREENS.filter((s) => !s.badge).map((s) => s.name)).toEqual(['Reception']);
+    expect(badges).toHaveLength(SCREENS.length - 2);
+    expect(SCREENS.filter((s) => !s.badge).map((s) => s.name)).toEqual([
+      'Reception',
+      'ANSR Tech Park',
+    ]);
     // …and a screen may only omit the badge if it has nothing to defend against.
     for (const s of SCREENS) {
       if (!s.badge) expect(s.hazard, `screen ${s.id} has obstacles but no badge`).toBe('none');
     }
-    for (const b of badges.filter((t) => t !== 'SAFE_PASSAGE')) {
+    for (const b of badges) {
       const cap = capabilityFor(b);
       expect(cap, `badge ${b} needs a capability entry`).toBeTruthy();
       expect(cap!.product).toBeTruthy();
       expect(cap!.topic).toBeTruthy();
+      // …and a HUD label, so the engaged chip is never blank.
+      expect(COPY.powers[b]).toBeTruthy();
     }
-    // ...and it still has a HUD label, so the chip is never blank.
-    expect(COPY.powers.SAFE_PASSAGE).toBeTruthy();
-    expect(capabilityFor('SAFE_PASSAGE')).toBeUndefined();
+    // Nothing in COPY.powers is a badge nobody carries.
+    expect(Object.keys(COPY.powers).sort()).toEqual([...badges].sort());
   });
 
   it('blames the environment for every setback cause, never the player', () => {

@@ -221,15 +221,18 @@ describe('badge reachability', () => {
         // Nothing a player can do from the floor reaches it: a full jump off the ground
         // tops out well below the deck the mark stands on.
         expect(GROUND_FEET_Y - jumpRise).toBeGreaterThan(deck);
-        // It stands on the last column of a solid, and that solid floats.
+        // It stands on a solid, that solid floats, and the mark is CENTRED across it
+        // (owner call). It used to be parked on the deck's last column; the arithmetic
+        // that matters is the same either way — the pickup has to be *on* the deck — so
+        // this asserts the centring rather than a column index.
         const support = screen.solids.find(
           (r) =>
             r.gy * RESOLUTION.TILE === deck &&
-            r.gx <= screen.badge!.gx &&
-            r.gx + r.w > screen.badge!.gx,
+            r.gx * RESOLUTION.TILE <= box.x &&
+            (r.gx + r.w) * RESOLUTION.TILE >= box.x + box.w,
         );
         expect(support, `no deck under the perch on screen ${screen.id}`).toBeTruthy();
-        expect(support!.gx + support!.w - 1).toBe(screen.badge!.gx);
+        expect(box.x + box.w / 2).toBe((support!.gx + support!.w / 2) * RESOLUTION.TILE);
         expect((support!.gy + support!.h) * RESOLUTION.TILE).toBeLessThan(
           GROUND_FEET_Y - PLAYER.HEIGHT,
         );

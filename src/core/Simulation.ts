@@ -664,8 +664,11 @@ export class Simulation {
     this.screenClock += dt;
 
     // Collidables = static solids + any bodies the hazard contributes.
+    // The player is handed to `solids()` **before** he moves, on purpose: a one-way
+    // platform is "solid only if you were above it", and where he was is the only
+    // reading of that which cannot be fooled by the move that is about to happen.
     const solids: AABB[] = this._screen.solids.concat(
-      this.hazard ? this.hazard.solids() : [],
+      this.hazard ? this.hazard.solids(this._player) : [],
     );
     const speedMult = this.hazard ? this.hazard.speedMultAt(this._player) : 1;
     this._player.update(dt, input, solids, speedMult);
@@ -681,6 +684,9 @@ export class Simulation {
         // Passed straight through as an edge: the one hazard with a verb of its
         // own fires once per press, never from a held button.
         shoot: input.shootPressed,
+        // …and the held state alongside it, for the one hazard whose verb is a hose
+        // rather than a trigger (see `HazardContext.shootHeld`).
+        shootHeld: input.shoot,
       });
       if (cause) {
         this.setback(cause);
@@ -732,8 +738,10 @@ export class Simulation {
    * `dropBoxAt` on the air-drop one. Deriving it twice is how a pickup ends up
    * visually somewhere the collision is not.
    *
-   * `SAFE_PASSAGE` badges are collected like any other; they simply have no
-   * capability to add to the receipt.
+   * There is no such thing as a badge with no capability behind it any more: the
+   * `SAFE_PASSAGE` mark went with the last screen that carried it (owner call, the
+   * Tech Park). So every collection here adds a row to the receipt, and `engaged` and
+   * the four capability links are the same list.
    */
   private tryCollectBadge(): void {
     const b = this._screen.data.badge;

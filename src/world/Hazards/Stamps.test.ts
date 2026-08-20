@@ -40,8 +40,8 @@ function run(h: Stamps, p: Player, n: number, ctx: HazardContext = CTX): string 
 }
 
 describe('Stamps (DENIED rubber stamps)', () => {
-  it('contributes no solids and never drags — you time it, you do not climb it', () => {
-    expect(stamps().solids()).toEqual([]);
+  it('contributes no solids UNASSISTED and never drags — you time it, you do not climb it', () => {
+    expect(stamps().solids(underStamp())).toEqual([]);
     expect(stamps().speedMultAt()).toBe(1);
   });
 
@@ -219,6 +219,84 @@ describe('Stamps (DENIED rubber stamps)', () => {
 
     it('declares itself a shielding hazard, so the host may draw the bubble', () => {
       expect(stamps().shieldsPlayer).toBe(true);
+    });
+
+    /*
+     * The third thing 1Wrk does on this screen (owner call): a stamp you have jumped
+     * onto holds your weight instead of dropping you on the floor.
+     *
+     * Every one of these says the same thing from a different side — the platform is
+     * only there for somebody who was **above** it, and only while the head is coming
+     * down or held. Both halves are the fairness of it: two-way, four pressed heads
+     * would be four walls across a screen the badge is supposed to make *easier*
+     * (a pressed head spans 512-600, i.e. exactly a standing player); solid on the
+     * way up, it would carry a rider to the parked row and hand him back on the next
+     * slam.
+     */
+    describe('and it can be stood on', () => {
+      const clear = () => new Player(28 * T, 15 * T - 44);
+      /** Assisted seconds into the stroke, with nobody in the column. */
+      const driveTo = (h: Stamps, e: number): void => {
+        const step = DT * S.ASSIST_TIME_SCALE;
+        const away = clear();
+        for (let i = 0; i < Math.ceil(e / step); i += 1) h.update(DT, away, ASSISTED);
+      };
+      /** A player whose feet are exactly on the col-8 head at the given press. */
+      const standingOn = (press: number): Player => {
+        const top = S.REST_BOTTOM + press * (15 * T - S.REST_BOTTOM) - S.HEAD_H;
+        return new Player(8 * T + T / 2 - 14, top - 44);
+      };
+
+      it('offers the pressing face as a platform once the head is down', () => {
+        const h = stamps();
+        driveTo(h, S.DROP_TIME + S.HOLD_TIME * 0.5); // held flat on the floor
+        const boxes = h.solids(standingOn(1));
+        expect(boxes).toHaveLength(1);
+        expect(boxes[0]!.w).toBe(S.WIDTH);
+        expect(boxes[0]!.h).toBe(S.HEAD_H);
+        // The platform IS the hitbox — the same face that would have flattened him.
+        expect(boxes[0]!.y + boxes[0]!.h).toBeCloseTo(15 * T, 0);
+      });
+
+      it('is one-way: a player at ground level walks straight through it', () => {
+        const h = stamps();
+        driveTo(h, S.DROP_TIME + S.HOLD_TIME * 0.5);
+        // Standing on the floor in the stamp's own column — the walk-through the
+        // assisted screen has always promised.
+        expect(h.solids(underStamp())).toEqual([]);
+      });
+
+      it('is not a platform while the head is on its way back up', () => {
+        const h = stamps();
+        driveTo(h, S.DROP_TIME + S.HOLD_TIME + S.LIFT_TIME * 0.5);
+        expect(h.stampStates()[0]!.press).toBeGreaterThan(0);
+        expect(h.stampStates()[0]!.press).toBeLessThan(1);
+        expect(h.solids(standingOn(1))).toEqual([]);
+      });
+
+      it('is not a platform while it is backing off a shielded player', () => {
+        const h = stamps();
+        const p = underStamp();
+        run(h, p, Math.ceil(S.DROP_TIME / S.ASSIST_TIME_SCALE / DT) + 8, ASSISTED);
+        expect(h.retractingCount).toBe(1);
+        expect(h.solids(standingOn(0.9))).toEqual([]);
+      });
+
+      it('does not reverse the stroke when the rider drops off during the lift', () => {
+        /*
+         * The lift hands the platform back, so a rider overlaps the head for a frame or
+         * two on his way down. That used to read as "it touched the player", abort the
+         * stroke and send the head back DOWN — a stamp reversing under the person who
+         * had just stepped off it.
+         */
+        const h = stamps();
+        driveTo(h, S.DROP_TIME + S.HOLD_TIME + S.LIFT_TIME * 0.2);
+        const before = h.stampStates()[0]!.press;
+        const rider = standingOn(1); // now overlapping the rising head
+        for (let i = 0; i < 4; i += 1) h.update(DT, rider, ASSISTED);
+        expect(h.retractingCount).toBe(0);
+        expect(h.stampStates()[0]!.press).toBeLessThan(before);
+      });
     });
   });
 

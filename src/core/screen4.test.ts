@@ -3,6 +3,7 @@ import { makeInput } from './Input';
 import { HAZARDS, JOURNEY, POWERUPS, RESOLUTION } from '../data/tuning.config';
 import { Dragon } from '../world/Hazards/Dragon';
 import { dropLandsAt, dropRestBox } from '../world/badgeDrop';
+import { SCREENS } from '../data/levels';
 import {
   DT,
   T,
@@ -294,9 +295,12 @@ describe('Screen 4 — Hire Under Fire (cross the lane → Talent500 → hire th
 
     it('is the only screen whose badge is FLOWN in', () => {
       /*
-       * Reception (0) is not in this list: it has no badge at all now (owner call), so it
-       * reports neither a delivery nor a box, and asserting a pickup exists there would
-       * fail for being correct.
+       * **Two screens are not in this list, and both were emptied by the owner**: Reception
+       * (0) and now the Tech Park (5). Neither reports a delivery or a box, and asserting a
+       * pickup exists on either would fail for being correct. Fourth time a rule phrased
+       * around "every screen's badge" has had to name its exceptions — so the list of
+       * screens with a badge is derived from the level data below rather than typed out,
+       * which is what stops there being a fifth.
        *
        * The Workplace (3) is in the list but only for `badgeDrop`, because it is the one
        * other screen whose badge is **not always collectable**: its mark falls out of a
@@ -304,16 +308,20 @@ describe('Screen 4 — Hire Under Fire (cross the lane → Talent500 → hire th
        * every cycle. "There is always a pickup somewhere" is a claim about rails and
        * perches, and it has to say so.
        */
-      for (const id of [1, 2, 3, 5]) {
+      const badged = SCREENS.filter((s) => s.badge && s.id !== 4).map((s) => s.id);
+      expect(badged).toEqual([1, 2, 3]);
+      for (const id of badged) {
         const sim = driveToScreen(id);
         expect(sim.badgeDrop).toBeNull();
         if (sim.badgeCeiling) continue;
         expect(sim.badgeBox).not.toBeNull();
       }
-      const reception = driveToScreen(0);
-      expect(reception.screen.data.badge).toBeUndefined();
-      expect(reception.badgeDrop).toBeNull();
-      expect(reception.badgeBox).toBeNull();
+      for (const id of SCREENS.filter((s) => !s.badge).map((s) => s.id)) {
+        const sim = driveToScreen(id);
+        expect(sim.screen.data.badge).toBeUndefined();
+        expect(sim.badgeDrop).toBeNull();
+        expect(sim.badgeBox).toBeNull();
+      }
     });
   });
 

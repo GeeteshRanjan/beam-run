@@ -220,6 +220,55 @@ describe('Screen 1 — Setup Delays (DENIED stamps → 1Wrk → walk through)', 
     expect(sim.activePower?.product).toBe('1Wrk');
   });
 
+  /*
+   * Owner call: "when the player jumps on the stamp he is currently hitting the
+   * ground — make it such that the player is standing on the stamp, in the case that
+   * he jumps on it with the powerup taken."
+   *
+   * Arriving from ABOVE is the only way onto a pressed head and that is not a
+   * limitation of the test, it is the screen: assisted, a stamp that meets the player
+   * aborts its stroke and retracts, so standing in the column is how you *stop* a
+   * press rather than how you get on top of one. So the fixture drops him in.
+   */
+  it('1Wrk turns a pressed stamp into something you can stand on', () => {
+    const sim = driveToScreen(1);
+    engageBadge(sim);
+    expireGrace(sim);
+    const hazard = sim.activeHazard as Stamps;
+    const gx = sim.screen.data.stamps![0]!.gx;
+    // Let the first stamp reach the floor with nobody in its column.
+    sim.player.box.x = 28 * T;
+    for (let i = 0; i < 3000 && hazard.stampStates()[0]!.press < 1; i += 1) {
+      sim.step(DT, makeInput());
+    }
+    const headTop = hazard.stampStates()[0]!.bottomY - S.HEAD_H;
+    expect(headTop).toBeLessThan(15 * T - 40); // it really is up off the floor
+    // Drop him onto it from a jump's worth of air above it.
+    sim.player.box.x = gx * T + T / 2 - sim.player.box.w / 2;
+    sim.player.box.y = headTop - sim.player.box.h - 24;
+    for (let i = 0; i < 30 && sim.state === 'PLAYING'; i += 1) sim.step(DT, makeInput());
+    expect(sim.player.box.y + sim.player.box.h).toBeCloseTo(headTop, 0);
+    expect(sim.setbacks).toBe(0);
+  });
+
+  it('…and without the badge the same landing is still a flattening', () => {
+    // The contrast is the point: the platform is the capability, not the geometry.
+    const sim = driveToScreen(1);
+    expireGrace(sim);
+    const hazard = sim.activeHazard as Stamps;
+    sim.player.box.x = 28 * T;
+    for (let i = 0; i < 600 && hazard.stampStates()[0]!.press < 1; i += 1) {
+      sim.step(DT, makeInput());
+    }
+    const gx = sim.screen.data.stamps![0]!.gx;
+    const headTop = hazard.stampStates()[0]!.bottomY - S.HEAD_H;
+    sim.player.box.x = gx * T + T / 2 - sim.player.box.w / 2;
+    sim.player.box.y = headTop - sim.player.box.h - 24;
+    for (let i = 0; i < 30 && sim.state === 'PLAYING'; i += 1) sim.step(DT, makeInput());
+    expect(sim.setbacks).toBe(1);
+    recoverFromLifeLost(sim);
+  });
+
   it('no badge places geometry any more — the stage is walkable ground plus a wall', () => {
     const sim = driveToScreen(1);
     engageBadge(sim);

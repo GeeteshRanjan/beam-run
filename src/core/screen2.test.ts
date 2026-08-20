@@ -94,11 +94,19 @@ describe('Screen 2 — Compliance (a staircase maze of compliance monsters)', ()
     const deck = sim.screen.data.solids.find((s) => s.role === 'wall-ansr-mark')!;
     expect(step).toBeTruthy();
     expect(deck).toBeTruthy();
-    // The mark is on the DECK, not on the step, and on the deck's right-hand column —
-    // the end the player arrives at, coming back leftwards.
+    /*
+     * The mark is on the DECK, not on the step, and **centred across it** (owner call:
+     * "the ANSR powerup is on the right side of the brick, make it centre on the floating
+     * brick"). It used to stand on the deck's right-hand column under an older owner rule
+     * about landing late; that rule assumes a deck you arrive at walking right, and this
+     * one is reached by turning round and jumping back up-left, so the arrival is at the
+     * far end and the walk is inwards anyway.
+     */
     expect(badge.restGy).toBe(deck.gy);
-    expect(badge.gx).toBe(deck.gx + deck.w - 1);
-    expect(sim.badgeBox).toEqual({ x: badge.gx * T, y: deck.gy * T - T, w: T, h: T });
+    expect(badge.gx).toBe(deck.gx);
+    expect(badge.restW).toBe(deck.w);
+    const deckMid = (deck.gx + deck.w / 2) * T;
+    expect(sim.badgeBox).toEqual({ x: deckMid - T / 2, y: deck.gy * T - T, w: T, h: T });
     // The deck is higher than the step and to its left, with a gap between them: the two
     // jumps have to be in opposite directions, and neither is a walk.
     expect(deck.gy).toBeLessThan(step.gy);

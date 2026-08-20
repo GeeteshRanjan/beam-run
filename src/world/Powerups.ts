@@ -68,9 +68,10 @@ export class Powerups {
   /**
    * HUD view — a persistent chip, no countdown bar (help does not expire).
    *
-   * `SAFE_PASSAGE` (the badge on the two screens with nothing to defend against)
-   * has no entry in `CAPABILITIES`, so it has no product name; the chip falls
-   * back to the brand rather than rendering an empty plaque.
+   * The fallbacks are belt and braces rather than a live path: every badge type in
+   * the game has a `CAPABILITIES` entry and a `COPY.powers` line now that the
+   * no-effect `SAFE_PASSAGE` mark has gone with its last holder (owner call, the Tech
+   * Park). `data.test.ts` states that as an equality, so a chip can never be blank.
    */
   hudModel(): ActivePowerView | null {
     if (!this.activeType) return null;

@@ -56,6 +56,9 @@ const TRAVEL = GROUND_TOP - S.REST_BOTTOM;
 
 const BUSY = S.DROP_TIME + S.HOLD_TIME + S.LIFT_TIME;
 
+/** The two beats of the stroke during which the head is moving down or held. */
+const DESCENDING = S.DROP_TIME + S.HOLD_TIME;
+
 interface StampEntry {
   /** Column centre (px). */
   cx: number;
@@ -106,9 +109,51 @@ export class Stamps implements Hazard {
     }));
   }
 
-  /** Stamps are hazards, never collidable — you time them, you do not climb them. */
-  solids(): AABB[] {
-    return [];
+  /**
+   * **An ANSR-backed stamp can be stood on** (owner call: "when the player jumps on
+   * the stamp he is currently hitting the ground — make it such that the player is
+   * standing on the stamp, in the case that he jumps on it with the powerup taken").
+   *
+   * Unassisted this returns nothing and always did: a stamp you could climb is a
+   * stamp you are not timing, and timing them is the screen. Assisted it returns the
+   * pressing face, and that is the third thing 1Wrk does on this screen — the
+   * mechanism slows down, it cannot press you, and now the thing that used to flatten
+   * you holds your weight. Which is the argument the screen makes, as geometry.
+   *
+   * Three constraints, and every one of them is load-bearing:
+   *
+   *  · **One-way.** The face is only solid to a player who was already above it, so
+   *    walking into a pressed stamp is still a walk-through and the assisted screen
+   *    is not quietly given four new walls. A two-way solid here would be a *harder*
+   *    screen with the badge than without it, which inverts the whole model — and a
+   *    pressed head spans 512-600, i.e. exactly a standing player, so it would have
+   *    been four walls rather than four hurdles.
+   *  · **Only while it is coming DOWN or held.** A rising solid under a standing body
+   *    passes through it — `moveAndCollide` is driven by the player's motion — and the
+   *    honest ways round that are both wrong here: carrying the rider would take him
+   *    to the parked row at 242 and hand him back on the next slam (a lift he cannot
+   *    get off), and pushing him would be the defect. Dropping the solid for the lift
+   *    means the stamp simply leaves from under him, which is also the picture.
+   *  · **Never while it is retracting.** A stamp backing off a shielded player is
+   *    mid-apology; giving it a surface at the same time says two things at once.
+   *
+   * Nothing can be crushed against it, because a press that meets the player aborts
+   * (see `update`) — so the one solid in this game that descends can never descend
+   * into anybody.
+   */
+  solids(player: Player): AABB[] {
+    if (!this.slowed) return [];
+    const boxes: AABB[] = [];
+    const prevBottom = player.box.y + player.box.h;
+    for (const s of this.stamps) {
+      if (s.abortE !== null || s.e >= DESCENDING) continue;
+      const press = this.pressOf(s);
+      if (press <= 0) continue;
+      const head = this.headBox(s, press);
+      if (prevBottom > head.y) continue; // he was not above it: walk through
+      boxes.push(head);
+    }
+    return boxes;
   }
 
   speedMultAt(): number {
@@ -162,6 +207,16 @@ export class Stamps implements Hazard {
       if (!aabbOverlap(player.box, this.headBox(s, press))) continue;
 
       if (ctx.assisted) {
+        /*
+         * Already on its way back up: there is nothing left to call off, so leave the
+         * stroke alone. Without this, a player who has just been *standing* on the
+         * head drops through it the moment the lift starts (`solids()` hands the
+         * platform back at exactly that point), which reads as an overlap and sent
+         * the stamp back DOWN again — a stamp that reverses under the person who
+         * stepped off it. The rule is the same one the abort itself encodes: a press
+         * that cannot happen is not aborted, it is simply not a press.
+         */
+        if (s.e >= DESCENDING) continue;
         // It cannot press an ANSR-backed player. Back off from right here.
         if (s.abortE === null) {
           s.abortE = s.e;

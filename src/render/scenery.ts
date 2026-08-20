@@ -27,7 +27,14 @@
 import { RESOLUTION } from '../data/tuning.config';
 import { drawBricks, hash2, pxRect, type BrickOptions } from './PixelArt';
 import { drawText, drawLabelPlaque } from './PixelText';
-import { drawAnsrLogo, LOGO_ORANGE } from './ansrLogo';
+/*
+ * `drawAnsrLogo`/`LOGO_ORANGE` used to be imported here for the mark on Reception's
+ * feature wall. The owner removed it from that wall, and with it the last reason this
+ * module knows the brand asset exists — which is worth a note, because it also takes
+ * `render/ansrLogo.ts` out of the backdrop layer's dependency graph entirely. The
+ * plaza (`render/finale.ts`), the attract screen, the DOM lockup and the badge are
+ * the mark's four remaining homes.
+ */
 
 const { WIDTH: W, TILE } = RESOLUTION;
 const GROUND_TOP = 15 * TILE; // 600
@@ -42,21 +49,31 @@ export interface TileMaterial extends BrickOptions {
  * (brand) with per-level shifts that carry meaning.
  */
 export const TILE_MATERIALS: Record<number, TileMaterial> = {
-  // L0 Reception — a polished stone lobby floor: clean, inviting ("getting started
-  // is easy"), and bright enough that the walkable ground lifts off the interior
-  // behind it.
-  //
-  // Big slabs at very low speckle, where every other screen is a small rough
-  // course: a lobby floor is *laid*, and the one thing that says "maintained" in a
-  // material is the size and regularity of its joints. This is the same reasoning
-  // that keeps the Workplace floor (screen 3) a scuffed 40×40 grey-green — the two
-  // interiors separate on material, not on hue.
+  /*
+   * L0 Reception — a polished stone lobby floor: clean, inviting ("getting started
+   * is easy") and *laid*, which is what the big slabs at zero speckle say.
+   *
+   * **Off the teal axis and inverted in value** (owner call: "the colour scheme of
+   * the background and brick of the first screen is too much camouflage with the
+   * character"). It was `#15788B` — brand Light Teal with the lightness turned up —
+   * standing in front of a `#0E3B4A` wall, i.e. a teal floor and a teal wall behind
+   * a hero whose blazer is brand Light Teal `#005465`: three variations on one hue,
+   * which is exactly the failure the Workplace floor paid for two passes ago. This
+   * is warm limestone now, and the *room* went light (see `drawLobbyInterior`), so
+   * the hero and every step he has to jump are dark shapes against a lit wall
+   * instead of teal shapes inside a teal field.
+   *
+   * The floor is deliberately DARKER than the wall with one bright top edge, which
+   * is the same rule the Workplace furniture obeys — and here it does double duty,
+   * because the three tutorial steps are drawn in this material and a step is only
+   * a step if it has a silhouette.
+   */
   0: {
     // Speckle is deliberately ZERO here, and it is the only material in the game
     // with none: every dot of it rasterised as litter on a floor whose whole job is
     // to look swept. What is left is the course grid at low contrast — laid stone.
-    face: '#15788B', shade: '#12707F', highlight: '#1E8AA0', mortar: '#0F6376',
-    brickW: 64, brickH: 32, speckle: 0, edge: '#7FEBFC',
+    face: '#6E6454', shade: '#5D5445', highlight: '#867B67', mortar: '#4A4234',
+    brickW: 64, brickH: 32, speckle: 0, edge: '#DCD0B6',
   },
   /*
    * L1 Setup Delays — ink-stained clay brick. Warm and earthy, deliberately NOT
@@ -609,13 +626,22 @@ function drawSkyline(
   }
 }
 
-/** A small potted plant silhouette (lobby greenery). */
+/**
+ * A small potted plant (lobby greenery), and one of the two places the Reception
+ * repaint gets its colour from.
+ *
+ * It used to be a silhouette in two greens with `'#123'`/`'#1C6'` for the pot — CSS
+ * shorthand, i.e. a near-black navy under a fluorescent mint, which is nobody's
+ * planter. Foliage in three tones over a stone pot with a lit rim, on the same rule
+ * every prop in this room follows: dark mass, one lit edge.
+ */
 function drawPottedPlant(ctx: CanvasRenderingContext2D, x: number, baseY: number): void {
-  pxRect(ctx, '#0C4B3A', x + 4, baseY - 34, 4, 22, 2); // stem
-  pxRect(ctx, '#0F6B4E', x - 6, baseY - 44, 24, 16, 2); // foliage
-  pxRect(ctx, '#083726', x - 2, baseY - 36, 16, 8, 2); // foliage shadow
-  pxRect(ctx, '#123', x - 2, baseY - 12, 16, 12, 2); // pot base
-  pxRect(ctx, '#1C6', x - 2, baseY - 12, 16, 3, 2);
+  pxRect(ctx, '#25603D', x + 4, baseY - 34, 4, 22, 2); // stem
+  pxRect(ctx, '#194A2E', x - 6, baseY - 44, 24, 16, 2); // foliage, shaded mass
+  pxRect(ctx, '#2C6B45', x - 6, baseY - 44, 24, 6, 2); // foliage, mid
+  pxRect(ctx, '#4C9A66', x - 2, baseY - 46, 14, 5, 2); // foliage, lit crown
+  pxRect(ctx, '#5E5545', x - 2, baseY - 14, 16, 14, 2); // stone pot
+  pxRect(ctx, '#A69A85', x - 3, baseY - 14, 18, 3, 2); // lit rim
 }
 
 /*
@@ -653,23 +679,66 @@ function drawPropLabel(ctx: CanvasRenderingContext2D, cx: number, topY: number, 
   });
 }
 
+/** Height of a scale-2 step plaque: `TEXT_LINE_H * 2 + padY * 2`. */
+const STEP_LABEL_H = 24;
+/** Air between the bottom of a step plaque and the top of the step it names. */
+const STEP_LABEL_GAP = 16;
+
+/**
+ * Where a Reception step's label hangs: the centre of the block it names, and the
+ * top of the plaque above it.
+ *
+ * Exported and pure purely so the alignment can be *stated* as a test rather than
+ * eyeballed — the defect it encodes (a plaque centred on a block's first tile
+ * instead of on the block) was invisible in the code and half a tile wide on the
+ * frame, and it survived every pass this screen has had.
+ */
+export function stepLabelAnchor(
+  gx: number,
+  gy: number,
+  w: number,
+): { cx: number; plaqueTop: number; blockTop: number } {
+  return {
+    cx: gx * TILE + (w * TILE) / 2,
+    plaqueTop: gy * TILE - STEP_LABEL_GAP - STEP_LABEL_H,
+    blockTop: gy * TILE,
+  };
+}
+
 /**
  * A label pinned just above one of the Reception steps. The three easy hops are
  * the three things that genuinely *are* easy — the paperwork before any of the
  * real work starts — so naming them turns tutorial geometry into the first beat
  * of the story ("on paper, this all looks fine").
+ *
+ * **It takes the block's WIDTH, and that is the whole bug it fixes** (owner call:
+ * "the three tags for the hurdles are not properly aligned with the brick
+ * obstacles"). The old signature took `gx`/`gy` only and centred the plaque on
+ * `gx * TILE + TILE / 2` — the middle of the block's *first* tile, which is only
+ * the middle of the block when the block is one tile wide. BUDGET stands on a
+ * two-tile step (gx 23, w 2, i.e. x 920-1000) and its plaque was centred on 940
+ * rather than 960: half a tile out, and out in a direction nothing in the code
+ * could hint at. A label is centred on the thing it names, so it is derived from
+ * the same `w` the collision box is.
+ *
+ * A short leader drops from the plaque to the block's top edge for the same
+ * reason: three plaques floating in a room full of props are three captions, and
+ * a caption with a leader on it is a caption *of something*.
  */
 function drawStepLabel(
   ctx: CanvasRenderingContext2D,
   gx: number,
   gy: number,
+  w: number,
   text: string,
 ): void {
-  drawLabelPlaque(ctx, text, gx * TILE + TILE / 2, gy * TILE - 34, {
+  const { cx, plaqueTop } = stepLabelAnchor(gx, gy, w);
+  pxRect(ctx, 'rgba(30,26,18,0.6)', cx - 2, plaqueTop + STEP_LABEL_H, 4, STEP_LABEL_GAP, 2);
+  drawLabelPlaque(ctx, text, cx, plaqueTop, {
     scale: 2,
-    fg: '#CFE6EC',
-    bg: 'rgba(0,20,27,0.78)',
-    frame: 'rgba(28,120,142,0.6)',
+    fg: '#F4EEDF',
+    bg: 'rgba(30,26,18,0.86)',
+    frame: 'rgba(120,106,80,0.7)',
     padX: 7,
     padY: 5,
     alpha: 0.95,
@@ -1375,7 +1444,66 @@ function drawWallClock(
  * and 23, i.e. x 360-400, 640-680 and 920-1000): a prop behind a step reads as
  * one shape with it, and those three steps are the only thing on this screen the
  * player has to learn.
+ *
+ * **The room came off the teal axis and its value inverted** (owner call: "the
+ * colour scheme of the background and brick of the first screen is too much
+ * camouflage with the character … also work on giving colour to the objects placed
+ * in this screen, and work on the window visuals — make it daylight").
+ *
+ * It was eight teals: a `#0B3240`/`#0E3B4A` wall, a `#12586A` feature bay, a
+ * `#06303C` counter, `#125C70` lift doors, a `#12586A` bench, `#0C4C5E` "daylight"
+ * in the glazing and a `#15788B` floor — behind a hero whose blazer is brand Light
+ * Teal. Every object obeyed its own contrast rule and the frame was still one field
+ * with shapes scored into it, which is the third time this build has met that
+ * failure (the Workplace floor, the Compliance maze, now here) and the third time
+ * the answer is the same: the HERO cannot be tuned for one screen, so the room
+ * moves. Two moves, and they are one decision — the shell went **warm** (limestone
+ * and plaster, a cool ceiling so it does not read as a sepia filter) and it went
+ * **light**, because a maintained lobby lit by real daylight is the picture this
+ * screen is making anyway. So the hero, the three steps and every piece of
+ * furniture are dark shapes against a lit wall.
+ *
+ * Value order, top to bottom of the frame: daylight in the glazing and the lamps
+ * are the lightest, then the upper wall, then the dado, then the floor, then the
+ * furniture. Teal survives in exactly three places — the glazing, the lift
+ * indicators and the player — so the one cool thing on the floor is the person.
  * ------------------------------------------------------------------------- */
+
+/**
+ * The lobby's palette. One place, because eight objects tuned against each other
+ * one at a time is how the screen ended up monochrome in the first place.
+ */
+const LOBBY = {
+  /** Cool painted soffit — plaster and painted metal are different materials. */
+  ceil: '#5E727C',
+  ceilCoffer: '#4B5D66',
+  ceilLit: '#8CA3AC',
+  /** Warm plaster, upper register (the lightest large surface in the room). */
+  wall: '#B4A78F',
+  wallHi: '#C6BAA4',
+  /** Warm plaster, dado (below the rail, i.e. the band the hero stands against). */
+  dado: '#93866E',
+  rail: '#D8CCB2',
+  skirt: '#5E5545',
+  /** Furniture: warm walnut, darker than the wall, one lit edge each. */
+  wood: '#4A3524',
+  woodLit: '#8A6440',
+  woodDark: '#301F13',
+  /** Stone: worktops, plinths, planters. */
+  stone: '#7E7461',
+  stoneLit: '#CFC3AA',
+  /** Brushed steel: the lift bank. */
+  steel: '#6A737A',
+  steelLit: '#9DA8AE',
+  steelDark: '#3A4147',
+  /** Upholstery — the one saturated colour in the room, and it is not orange. */
+  seat: '#2F5E4C',
+  seatLit: '#4A8A6E',
+  /** Planting. */
+  leaf: '#2C6B45',
+  leafLit: '#4C9A66',
+  leafDark: '#194A2E',
+} as const;
 
 /**
  * Recessed downlight: the fitting, flush in the soffit, plus the wash it throws.
@@ -1386,9 +1514,9 @@ function drawWallClock(
  * lamp is a lit hole in a solid ceiling, and that is what says "maintained".
  */
 function drawDownlight(ctx: CanvasRenderingContext2D, cx: number, y: number): void {
-  pxRect(ctx, '#04161C', cx - 11, y - 12, 22, 12, 2); // the hole
-  pxRect(ctx, '#DCF1F6', cx - 7, y - 8, 14, 6, 2); // lamp
-  pxRect(ctx, '#8FC9D6', cx - 11, y, 22, 2, 2); // lit lip
+  pxRect(ctx, '#2A3238', cx - 11, y - 12, 22, 12, 2); // the hole
+  pxRect(ctx, '#FFF8E6', cx - 7, y - 8, 14, 6, 2); // lamp
+  pxRect(ctx, '#E8DCC0', cx - 11, y, 22, 2, 2); // lit lip
   /*
    * **There is no light cone under these.** The first pass drew the wash as three
    * stepped rectangles of low-alpha white, on the reasoning that hard steps are more
@@ -1401,12 +1529,25 @@ function drawDownlight(ctx: CanvasRenderingContext2D, cx: number, y: number): vo
 }
 
 /**
- * The entrance wall: full-height glazing with the market outside it, an automatic
- * door in the middle bay and a mat inside.
+ * The entrance wall: full-height glazing with the market outside it in **daylight**,
+ * an automatic door in the middle bay and a mat inside.
  *
  * The city is drawn *through* the glass rather than behind the building, which is
  * the whole point of moving this screen indoors: the skyline is where you have
  * come from, and the lobby is the first room of the thing you are building.
+ *
+ * **It is real daylight now** (owner call: "work on the window visuals, also make it
+ * daylight"). It was one flat `#0C4C5E` fill with a night skyline and lit windows
+ * behind it — a dark teal patch inside a dark teal wall, i.e. the Workplace's
+ * invisible-window defect in its second costume, and lit windows at ten in the
+ * morning on top of it. Three changes, and they are the same three that fixed that
+ * window: the sky is **stepped courses** rather than one fill, because a graded sky
+ * is what says "outside" and hard steps are what keep it 8-bit; the city is in
+ * **near silhouette** with its windows *out*, since a lit window only reads at
+ * night; and the **frame is dark**, which is what makes the opening an opening.
+ *
+ * Daylight is the lightest thing on the WALL and it stays under the lamps, which are
+ * the lightest thing in the FRAME — the value discipline the Workplace glazing set.
  */
 function drawEntranceWall(
   ctx: CanvasRenderingContext2D,
@@ -1420,47 +1561,82 @@ function drawEntranceWall(
   ctx.beginPath();
   ctx.rect(x, top, w, GROUND_TOP - top);
   ctx.clip();
-  // Daylight outside, deliberately the brightest field on the screen: it is what
-  // makes the room read as *inside*, and it puts real light at the end the player
-  // walks in from. (Every other screen's sky is a night teal; this is glass, and
-  // glass with a night sky behind it rasterised as three dark holes in a wall.)
-  ctx.fillStyle = '#0C4C5E';
-  ctx.fillRect(x, top, w, GROUND_TOP - top);
+  /*
+   * Morning sky in six stepped courses, lightest at the horizon: a sky graded the
+   * other way up reads as a ceiling. The band heights are uneven on purpose — six
+   * equal stripes is a flag.
+   */
+  const sky: [string, number][] = [
+    ['#7FA6BC', 60],
+    ['#8FB4C6', 46],
+    ['#A0C2D0', 40],
+    ['#B2CFDA', 34],
+    ['#C4DCE2', 30],
+    ['#D6E8EA', 260],
+  ];
+  let sy = top;
+  for (const [tone, h] of sky) {
+    pxRect(ctx, tone, x, sy, w, Math.min(h, GROUND_TOP - sy), 2);
+    sy += h;
+  }
   // The skyline generator draws up from the ground band, so it is lifted to sit
-  // on the pavement outside rather than on this floor.
+  // on the pavement outside rather than on this floor. Near silhouette against
+  // daylight, and the "lit" tone is only a step lighter than the mass: at this
+  // hour a window is a reflection, not a lamp.
   ctx.translate(0, -54);
-  drawSkyline(ctx, 11, '#0A3F51', '#C6EAF2', t, reduced);
+  drawSkyline(ctx, 11, '#6E8896', '#8FA8B4', t, reduced);
   ctx.restore();
 
-  // Glazing bars: a heavy frame, three bays, and a transom at door head height.
-  const bar = '#1A5E70';
+  // Glazing bars: a heavy DARK frame, three bays, and a transom at door head
+  // height. Dark, because a pale mullion against a pale sky is no frame at all.
+  const bar = '#38414A';
   pxRect(ctx, bar, x, top - 6, w + 6, 8, 2);
   pxRect(ctx, bar, x + w, top - 6, 6, GROUND_TOP - top + 6, 2);
   for (const bx of [108, 222]) pxRect(ctx, bar, bx, top, 5, GROUND_TOP - top, 2);
   pxRect(ctx, bar, x, 300, w, 5, 2);
-  // Highlight on the upper half of the glass, so it reads as glazing.
-  pxRect(ctx, 'rgba(159,216,228,0.07)', x, top, w, 180, 2);
+  // Two hard sheen bands on the upper glass rather than one wash: glass this
+  // bright needs the reflection to be a *shape*, or the bay reads as a hole.
+  pxRect(ctx, 'rgba(255,255,255,0.16)', x + 6, top + 14, 96, 8, 2);
+  pxRect(ctx, 'rgba(255,255,255,0.10)', x + 6, top + 30, 96, 5, 2);
+  pxRect(ctx, 'rgba(255,255,255,0.13)', 228, top + 22, 96, 7, 2);
 
-  // The automatic door in the middle bay: two leaves parted, with a threshold.
-  pxRect(ctx, '#0E4655', 113, 300, 44, GROUND_TOP - 300, 2);
-  pxRect(ctx, '#0E4655', 176, 300, 44, GROUND_TOP - 300, 2);
-  pxRect(ctx, '#2A7C90', 113, 300, 44, 5, 2);
-  pxRect(ctx, '#2A7C90', 176, 300, 44, 5, 2);
-  // Entrance mat, on the floor line, dark against the polished stone.
-  pxRect(ctx, '#062B36', 96, GROUND_TOP - 8, 150, 8, 2);
+  /*
+   * The automatic door in the middle bay: two leaves parted, with a threshold.
+   *
+   * The leaves are GLASS, so they are a tint over the daylight with a dark stile down
+   * each leading edge and a rail top and bottom — not a filled panel. Filled, they
+   * were `#4C565E`, which is the value the near-silhouette skyline is drawn in, and
+   * the left leaf landed exactly on a tower: an entrance door rasterising as another
+   * building behind the glass. A door is its frame, not its glazing.
+   */
+  for (const lx of [113, 176]) {
+    pxRect(ctx, 'rgba(255,255,255,0.20)', lx, 300, 44, GROUND_TOP - 300, 2); // glazing
+    pxRect(ctx, '#4C565E', lx, 300, 44, 6, 2); // top rail
+    pxRect(ctx, '#4C565E', lx, GROUND_TOP - 8, 44, 8, 2); // bottom rail
+    pxRect(ctx, '#38414A', lx === 113 ? lx + 38 : lx, 300, 6, GROUND_TOP - 300, 2); // stile
+  }
+  // Daylight spilling onto the floor inside the doors — a lit surface, no beam.
+  pxRect(ctx, 'rgba(232,236,224,0.16)', 60, GROUND_TOP - 14, 230, 14, 2);
+  // Entrance mat, on the floor line, dark against the stone.
+  pxRect(ctx, '#3A3428', 96, GROUND_TOP - 8, 150, 8, 2);
 }
 
 /**
  * The reception desk, the feature wall behind it and the ANSR mark on it.
  *
- * The mark is the real brand asset (`drawAnsrLogo`), never an interpretation of
- * it — and because that function is a silent no-op without `Path2D`, the wordmark
- * underneath carries the read on its own wherever the vector cannot be drawn.
+ * **There is no ANSR mark on this wall any more** (owner call: "remove the ANSR logo
+ * from this page on the wall"). The bay carried the real brand asset at 64px with the
+ * wordmark under it; what stands there now is a triptych of framed artwork, which is
+ * what an unbranded lobby feature wall actually has on it — and it is also where two
+ * of the room's colours come from, which the mark was never going to supply. Nothing
+ * else in the game changed: the plaza, the attract screen, the DOM lockup and the
+ * badge still draw `ui/ansrMark.ts`, and they are still the only interpretations of
+ * it that exist.
  */
 function drawLobbyDesk(ctx: CanvasRenderingContext2D, cx: number): void {
   const baseY = GROUND_TOP;
   /*
-   * Feature wall: a lit bay behind the desk, one value LIGHTER than the room.
+   * Feature wall: a panelled bay behind the desk, one value LIGHTER than the room.
    *
    * It was darker on the first pass, on the reasoning that the mark would then be
    * the lightest thing in the middle of the frame. Rasterised, that gave the room a
@@ -1469,22 +1645,44 @@ function drawLobbyDesk(ctx: CanvasRenderingContext2D, cx: number): void {
    * the counter now has a silhouette, which is the only reliable way to make a prop
    * read at this size.
    */
-  pxRect(ctx, '#12586A', cx - 136, 190, 272, 410, 2);
-  pxRect(ctx, '#1E7B8F', cx - 136, 190, 272, 6, 2);
-  pxRect(ctx, '#0A3F4E', cx - 136, 190, 8, 410, 2); // shadowed reveal, left
-  pxRect(ctx, '#0A3F4E', cx + 128, 190, 8, 410, 2); // …and right
+  pxRect(ctx, LOBBY.wallHi, cx - 136, 190, 272, 410, 2);
+  pxRect(ctx, LOBBY.stoneLit, cx - 136, 190, 272, 6, 2);
+  pxRect(ctx, LOBBY.dado, cx - 136, 190, 8, 410, 2); // shadowed reveal, left
+  pxRect(ctx, LOBBY.dado, cx + 128, 190, 8, 410, 2); // …and right
   // Cove light along the head of the bay: the one device that says "designed".
-  pxRect(ctx, '#CFE6EC', cx - 122, 202, 244, 3, 2);
-  pxRect(ctx, 'rgba(207,230,236,0.10)', cx - 122, 205, 244, 22, 2);
-  // Two tall panels rather than a dozen bands: the first pass ruled this wall every
-  // 44px and it rasterised as a roller shutter.
-  pxRect(ctx, 'rgba(0,26,34,0.22)', cx - 6, 232, 12, 356, 2);
+  pxRect(ctx, '#FFF8E6', cx - 122, 202, 244, 3, 2);
+  pxRect(ctx, 'rgba(255,248,230,0.14)', cx - 122, 205, 244, 22, 2);
+  /*
+   * A shadow line down the joint between the bay's two panels — and it stops at the
+   * head of the artwork rather than running the full 356px it used to. Full height it
+   * ran from the cove to the counter top through the middle of the wall, and with the
+   * mark gone from in front of it there was nothing left to explain a dark stripe
+   * down the centre of the room: it rasterised as a post standing behind the desk.
+   */
+  pxRect(ctx, 'rgba(48,31,19,0.16)', cx - 6, 210, 12, 36, 2);
 
-  // The mark, centred on the bay, with the wordmark under it. Real brand asset;
-  // `drawAnsrLogo` is a silent no-op without Path2D, so the wordmark under it has
-  // to carry the read on its own.
-  drawAnsrLogo(ctx, cx, 282, 64, 0, LOGO_ORANGE);
-  drawText(ctx, 'ANSR', cx, 326, { scale: 3, color: '#F2FBFD', align: 'center' });
+  /*
+   * The triptych that replaced the mark. Three canvases in walnut frames, each one
+   * a plain field with a band across it — abstract, because a picture drawn at 60px
+   * is a smudge, and a field plus a band is the smallest thing that reads as *art*
+   * rather than as a poster. The three fields are the room's colour: the planting's
+   * green, the glazing's daylight blue, and a warm ochre that belongs to nothing
+   * else, so the wall is not just the furniture again.
+   */
+  const artY = 250;
+  for (const [i, [field, band]] of (
+    [
+      ['#2F5E4C', '#7CB894'],
+      ['#3E6E82', '#9CC6D6'],
+      ['#8A6B34', '#D2B172'],
+    ] as const
+  ).entries()) {
+    const ax = cx - 114 + i * 78;
+    pxRect(ctx, LOBBY.woodDark, ax, artY, 62, 84, 2); // frame
+    pxRect(ctx, field, ax + 5, artY + 5, 52, 74, 2); // canvas
+    pxRect(ctx, band, ax + 5, artY + 5 + (i + 1) * 14, 52, 12, 2); // the band
+    pxRect(ctx, LOBBY.woodLit, ax, artY, 62, 3, 2); // lit top rail
+  }
 
   /*
    * Desk: a dark counter with a lit reveal under the top.
@@ -1504,17 +1702,17 @@ function drawLobbyDesk(ctx: CanvasRenderingContext2D, cx: number): void {
    * against *that* comes out at three times human scale. 62px puts the top at his
    * eye line, which is what a reception counter is.
    */
-  pxRect(ctx, '#06303C', cx - 96, baseY - 54, 192, 54, 2); // body
-  pxRect(ctx, '#04222B', cx - 80, baseY - 42, 160, 30, 2); // recessed front panel
-  pxRect(ctx, '#1E7B8F', cx - 106, baseY - 62, 212, 10, 2); // counter top
-  pxRect(ctx, '#8FD6E4', cx - 106, baseY - 62, 212, 3, 2); // polished top edge
-  pxRect(ctx, '#CFE6EC', cx - 98, baseY - 50, 196, 3, 2); // LED reveal
+  pxRect(ctx, LOBBY.wood, cx - 96, baseY - 54, 192, 54, 2); // walnut body
+  pxRect(ctx, LOBBY.woodDark, cx - 80, baseY - 42, 160, 30, 2); // recessed front panel
+  pxRect(ctx, LOBBY.stone, cx - 106, baseY - 62, 212, 10, 2); // stone worktop
+  pxRect(ctx, LOBBY.stoneLit, cx - 106, baseY - 62, 212, 3, 2); // polished top edge
+  pxRect(ctx, '#FFF8E6', cx - 98, baseY - 50, 196, 3, 2); // LED reveal
   // Monitor on the counter, angled away from the player.
-  pxRect(ctx, '#04222B', cx + 22, baseY - 90, 48, 28, 2);
-  pxRect(ctx, '#2A93A8', cx + 26, baseY - 86, 40, 20, 2);
+  pxRect(ctx, '#2A3238', cx + 22, baseY - 90, 48, 28, 2);
+  pxRect(ctx, '#4E8A96', cx + 26, baseY - 86, 40, 20, 2);
   // A visitor book and a pen pot, because a lobby desk is never empty.
-  pxRect(ctx, '#F2FBFD', cx - 74, baseY - 66, 34, 4, 2);
-  pxRect(ctx, '#0A3F4E', cx - 30, baseY - 72, 9, 10, 2);
+  pxRect(ctx, '#F4EEDF', cx - 74, baseY - 66, 34, 4, 2);
+  pxRect(ctx, LOBBY.seat, cx - 30, baseY - 72, 9, 10, 2);
 }
 
 /**
@@ -1528,22 +1726,23 @@ function drawLobbyDesk(ctx: CanvasRenderingContext2D, cx: number): void {
  */
 function drawLiftBank(ctx: CanvasRenderingContext2D, x: number): void {
   // Stone surround, so the two cars read as one piece of architecture.
-  pxRect(ctx, '#0A303C', x - 14, 396, 216, 204, 2);
-  pxRect(ctx, '#13586B', x - 14, 396, 216, 6, 2);
+  pxRect(ctx, LOBBY.stone, x - 14, 396, 216, 204, 2);
+  pxRect(ctx, LOBBY.stoneLit, x - 14, 396, 216, 6, 2);
   for (const dx of [0, 108]) {
     const dxx = x + dx;
-    pxRect(ctx, '#2A7C90', dxx, 424, 84, 176, 2); // frame
-    pxRect(ctx, '#125C70', dxx + 6, 430, 72, 170, 2); // doors
-    pxRect(ctx, '#0A3543', dxx + 41, 430, 3, 170, 2); // the parting line
-    pxRect(ctx, 'rgba(159,216,228,0.10)', dxx + 6, 430, 72, 60, 2); // brushed sheen
+    pxRect(ctx, LOBBY.steelDark, dxx, 424, 84, 176, 2); // frame
+    pxRect(ctx, LOBBY.steel, dxx + 6, 430, 72, 170, 2); // brushed steel doors
+    pxRect(ctx, LOBBY.steelDark, dxx + 41, 430, 3, 170, 2); // the parting line
+    pxRect(ctx, 'rgba(255,255,255,0.12)', dxx + 6, 430, 72, 60, 2); // brushed sheen
     // Indicator over the doors: a lit arrow cell and a dark one, so the pair reads
-    // as a display rather than as two lamps.
-    pxRect(ctx, '#06222B', dxx + 22, 402, 40, 16, 2);
-    pxRect(ctx, '#9FE0EE', dxx + 28, 406, 8, 8, 2);
-    pxRect(ctx, '#123F4C', dxx + 48, 406, 8, 8, 2);
+    // as a display rather than as two lamps. The lit cell keeps its teal — one of
+    // the three places in this room that still has any.
+    pxRect(ctx, '#22282C', dxx + 22, 402, 40, 16, 2);
+    pxRect(ctx, '#6FD6E6', dxx + 28, 406, 8, 8, 2);
+    pxRect(ctx, '#33474C', dxx + 48, 406, 8, 8, 2);
     // Call panel beside each car, at the height a hand reaches.
-    pxRect(ctx, '#0E4655', dxx + 88, 520, 12, 24, 2);
-    pxRect(ctx, '#CFE6EC', dxx + 92, 526, 4, 4, 2);
+    pxRect(ctx, LOBBY.steelDark, dxx + 88, 520, 12, 24, 2);
+    pxRect(ctx, '#E8DCC0', dxx + 92, 526, 4, 4, 2);
   }
 }
 
@@ -1553,17 +1752,23 @@ function drawLounge(ctx: CanvasRenderingContext2D, x: number): void {
   // Seat height, back height and table height are all measured against the drawn
   // hero (60px): a seat at his knee, a back at his hip. The first version had a
   // back 92px tall, which is a sofa taller than the person sitting on it.
-  pxRect(ctx, '#12586A', x, baseY - 34, 128, 22, 2); // seat
-  pxRect(ctx, '#2A93A8', x, baseY - 38, 128, 7, 2); // seat edge, catching the light
-  pxRect(ctx, '#0E4655', x + 4, baseY - 64, 120, 30, 2); // back
-  pxRect(ctx, '#1E7B8F', x + 4, baseY - 64, 120, 4, 2);
-  pxRect(ctx, '#082F3A', x + 8, baseY - 12, 10, 12, 2); // legs
-  pxRect(ctx, '#082F3A', x + 110, baseY - 12, 10, 12, 2);
+  //
+  // The upholstery is the one saturated field in the room, and it is deliberately
+  // GREEN: the room is warm, the player is teal, and orange belongs to the badges.
+  pxRect(ctx, LOBBY.seat, x, baseY - 34, 128, 22, 2); // seat
+  pxRect(ctx, LOBBY.seatLit, x, baseY - 38, 128, 7, 2); // seat edge, catching the light
+  pxRect(ctx, '#264C3E', x + 4, baseY - 64, 120, 30, 2); // back
+  pxRect(ctx, LOBBY.seatLit, x + 4, baseY - 64, 120, 4, 2);
+  pxRect(ctx, LOBBY.woodDark, x + 8, baseY - 12, 10, 12, 2); // legs
+  pxRect(ctx, LOBBY.woodDark, x + 110, baseY - 12, 10, 12, 2);
   // Low table with a magazine squared up on it.
-  pxRect(ctx, '#0E5063', x + 146, baseY - 24, 66, 6, 2);
-  pxRect(ctx, '#082F3A', x + 152, baseY - 18, 7, 18, 2);
-  pxRect(ctx, '#082F3A', x + 199, baseY - 18, 7, 18, 2);
-  pxRect(ctx, '#DCF1F6', x + 162, baseY - 27, 26, 3, 2);
+  pxRect(ctx, LOBBY.wood, x + 146, baseY - 24, 66, 6, 2);
+  pxRect(ctx, LOBBY.woodLit, x + 146, baseY - 24, 66, 2, 2);
+  pxRect(ctx, LOBBY.woodDark, x + 152, baseY - 18, 7, 18, 2);
+  pxRect(ctx, LOBBY.woodDark, x + 199, baseY - 18, 7, 18, 2);
+  // A magazine on the table, in a deep brick red — its own colour, and well clear
+  // of the reserved value orange, which is what a lighter red would have been.
+  pxRect(ctx, '#8E3A2E', x + 162, baseY - 27, 26, 3, 2);
 }
 
 /**
@@ -1576,22 +1781,28 @@ function drawLobbyInterior(
   reduced: boolean,
 ): void {
   // Walls: a lighter upper register over a darker dado, with a shadow gap at the
-  // floor so the ground band has something to sit against.
-  ctx.fillStyle = '#0B3240';
+  // floor so the ground band has something to sit against. Warm plaster, and the
+  // LIGHTEST large surface in the room — which is what makes a dark step, a dark
+  // counter and a teal hero all read as shapes in front of it.
+  ctx.fillStyle = LOBBY.dado;
   ctx.fillRect(0, 0, W, GROUND_TOP);
-  ctx.fillStyle = '#0E3B4A';
+  ctx.fillStyle = LOBBY.wall;
   ctx.fillRect(0, 120, W, 300);
-  pxRect(ctx, '#164F5F', 0, 418, W, 4, 2);
-  pxRect(ctx, '#093040', 0, 422, W, GROUND_TOP - 422, 2);
-  pxRect(ctx, '#06222C', 0, GROUND_TOP - 26, W, 26, 2); // skirting shadow
+  pxRect(ctx, LOBBY.wallHi, 0, 120, W, 8, 2); // light spilling down off the soffit
+  pxRect(ctx, LOBBY.rail, 0, 418, W, 4, 2); // dado rail, catching the light
+  pxRect(ctx, LOBBY.dado, 0, 422, W, GROUND_TOP - 422, 2);
+  pxRect(ctx, LOBBY.skirt, 0, GROUND_TOP - 26, W, 26, 2); // skirting shadow
 
   // Coffered soffit: a solid, maintained ceiling — the opposite of the Workplace
-  // screen's missing tiles — with the fittings on a regular pitch.
-  pxRect(ctx, '#06222C', 0, 0, W, 44, 2);
-  pxRect(ctx, '#0F4152', 0, 44, W, 6, 2);
+  // screen's missing tiles — with the fittings on a regular pitch. It stays COOL
+  // while the walls are warm, for the same reason the Workplace ceiling does:
+  // plaster and painted metal are different materials, and a room that is warm all
+  // the way up reads as a sepia filter rather than as daylight.
+  pxRect(ctx, LOBBY.ceil, 0, 0, W, 44, 2);
+  pxRect(ctx, LOBBY.ceilLit, 0, 44, W, 6, 2);
   for (let x = 0; x < W; x += 160) {
-    pxRect(ctx, '#0A2E3A', x + 12, 8, 136, 28, 2);
-    pxRect(ctx, '#12495A', x + 12, 8, 136, 3, 2);
+    pxRect(ctx, LOBBY.ceilCoffer, x + 12, 8, 136, 28, 2);
+    pxRect(ctx, LOBBY.ceilLit, x + 12, 8, 136, 3, 2);
   }
   for (let x = 80; x < W; x += 160) drawDownlight(ctx, x, 44);
 
@@ -1602,10 +1813,11 @@ function drawLobbyInterior(
   // Two framed panels over the lounge. They exist because the wall between the desk
   // bay and the lifts was 380px of nothing, and an empty wall at this value reads as
   // an unfinished room rather than as a quiet one.
-  for (const px of [706, 800]) {
-    pxRect(ctx, '#0A3F4E', px, 392, 74, 96, 2);
-    pxRect(ctx, '#12586A', px + 6, 398, 62, 84, 2);
-    pxRect(ctx, '#1E7B8F', px + 6, 398, 62, 4, 2);
+  for (const [i, px] of [706, 800].entries()) {
+    pxRect(ctx, LOBBY.woodDark, px, 392, 74, 96, 2);
+    pxRect(ctx, i === 0 ? '#3E6E82' : '#8A6B34', px + 6, 398, 62, 84, 2);
+    pxRect(ctx, i === 0 ? '#9CC6D6' : '#D2B172', px + 6, 424, 62, 16, 2);
+    pxRect(ctx, LOBBY.woodLit, px, 392, 74, 3, 2);
   }
   /*
    * Planters bookending the room. Both sit clear of the three steps, which is a
@@ -1812,10 +2024,15 @@ export function drawSceneBackground(
       // it has left the slide deck. It hangs on the wall under the soffit rather
       // than in a sky that no longer exists.
       drawFloorSign(ctx, W * 0.5, 100, 'MARKET ENTRY: ON PAPER');
-      // Name the three easy hops (geometry from levels.json screen 0).
-      drawStepLabel(ctx, 9, 14, 'BUSINESS CASE');
-      drawStepLabel(ctx, 16, 13, 'BOARD APPROVAL');
-      drawStepLabel(ctx, 23, 12, 'BUDGET');
+      /*
+       * Name the three easy hops. The three arguments after the ctx are the step's
+       * own `gx`, `gy` and `w` from `levels.json` screen 0 — the width is not
+       * decoration, it is what centres the plaque on a step that is more than one
+       * tile wide (BUDGET, gx 23 w 2, was half a tile out).
+       */
+      drawStepLabel(ctx, 9, 14, 1, 'BUSINESS CASE');
+      drawStepLabel(ctx, 16, 13, 1, 'BOARD APPROVAL');
+      drawStepLabel(ctx, 23, 12, 2, 'BUDGET');
       break;
     }
     case 1: {
@@ -2000,7 +2217,19 @@ export function drawSceneBackground(
       // The queue of candidates waiting to join, behind a rope: who the five inside the
       // costume are, before anybody gets them out.
       drawHiringQueue(ctx, rel);
-      drawFloorSign(ctx, W * 0.42, 70, 'HIRE UNDER FIRE');
+      /*
+       * **The HIRE UNDER FIRE sign is gone** (owner call: "remove the text that says hire
+       * under fire"), and it is the third piece of signage this screen has lost — after the
+       * suspended job board and its HIRING label — for the same reason each time: the stage
+       * announces itself on its own title card, and the frame is already carrying the
+       * beast's name plate and the taunt written on its fire. A floor sign naming the screen
+       * is a fourth thing to read on the one screen where reading the floor is the game.
+       *
+       * Worth generalising, because the same note has now been given three times on this
+       * screen and twice on Compliance: **signage that repeats a label the player has
+       * already been given is not context, it is competition.** The only screens with a
+       * floor sign left are the ones where it says something the title card does not.
+       */
       /*
        * The suspended job board and its HIRING label are gone (they hung at y≈130).
        * Same call as the compliance boards: the dragon now flies through that band

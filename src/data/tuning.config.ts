@@ -530,8 +530,49 @@ export const HAZARDS = {
      * so a shorter lane would have handed the screen back to the sprinter. **A high jaw
      * makes the lane shorter, not longer** for the same reason — move `MOUTH_Y_FRACTION`,
      * `CONE_NEAR_H` or `CONE_FAR_H` and all of this has to be solved again together.
+     *
+     * **…and then DOWN to 510, because the flame now reaches the floor and runs along
+     * it** (`CONE_TOUCHDOWN`). Same chain, solved again from the top, and this time the
+     * new number let the lane get *shorter* rather than longer:
+     *
+     *   axis, descending:  438.5 + 234.2f   (jaw → the ground-run height, over 0..0.55)
+     *   half thickness:    14 + 34f         (CONE_NEAR_H 28 → CONE_FAR_H 96)
+     *   lethal when the lower edge passes a standing head (556):
+     *     438.5 + 234.2f + 14 + 34f ≥ 556 → **f ≥ 0.386**
+     *
+     * So 0.614 of the reach is lethal where 0.505 of it used to be — a flame that comes
+     * down to the floor is dangerous over more of its own length, which is the whole
+     * point of it. 510 × 0.614 = **313px of lethal floor**, the same figure the screen
+     * was balanced on: ~1.31s to walk clear with the player's own width, against 1.60s
+     * of safe floor per cycle (`BURST_GAP` + `BURST_WINDUP`) plus the 0.3s the flame
+     * takes to grow.
+     *
+     * Two things the shorter reach bought, and both matter more than the pixels: the far
+     * end of the fire is now at x≈458 rather than 348, which leaves the spawn **418px**
+     * clear instead of 280 — and that is the room the badge's brick moved into when the
+     * owner asked for it "closer to the spawn point" (`levels.json`). The fire's reach
+     * and the drop column are measured against each other; they always were.
      */
-    CONE_REACH: 620,
+    CONE_REACH: 510,
+    /**
+     * Fraction of the reach at which the flame's axis has come DOWN to the floor. After
+     * it, the axis runs level and the fire lies along the ground.
+     *
+     * Owner call: "make the flame look more realistic". A jet whose axis descends in one
+     * straight line all the way to the far end is a *ramp* — it is thickest and lowest at
+     * exactly the same moment, so it reads as a girder leaned against the floor. Real
+     * fire thrown downwards hits the ground and then **runs**, and that is two segments:
+     * a throw and a floor run.
+     *
+     * 0.55 is measured, not felt. It has to leave the beast a safe pocket at its own feet
+     * (the invariant that a beast which sets fire to its own shoes is a beast nobody
+     * believes) — lethal starts at f 0.386, i.e. 197px in front of the jaw — and it has to
+     * put the flame on the floor for enough of the lane that "the floor is on fire" is the
+     * read. It also has to stay **above** the lethal threshold, or the fire touches a
+     * standing head before it has finished descending, which would make the touchdown
+     * invisible.
+     */
+    CONE_TOUCHDOWN: 0.55,
     /**
      * s for the cone to grow from the jaw to its full reach.
      *
@@ -545,26 +586,35 @@ export const HAZARDS = {
     /**
      * px: the flame's thickness at the jaw and at full reach.
      *
-     * **Down from 120/190** (owner call: "the fire it throws is too bad — it's too wide
-     * right now"). 190px of flame at the far end is three standing players tall, which is
-     * not a breath, it is weather; at 70 → 120 the jet is a little over one player deep
-     * where it lands and reads as something thrown from a mouth. The divergence is
-     * unchanged in character — a 1.7× spread over 620px, under 3° off the axis either
-     * side — so it is still a jet rather than a flamethrower's fan.
+     * **28 → 96, down from 70 → 120, which was down from 120 → 190.** Three passes, one
+     * note each time, and the third one said what the first two had not: "reduce the
+     * thickness of the flame — it is of uniform thickness; make the flame thinner near
+     * the Godzilla's mouth and wider at the end, so it looks natural."
      *
-     * Narrowing it is a **fairness** change before it is a picture: a thinner cone meets
-     * a standing head later along the axis, which shortens the lethal strip, which is why
-     * `CONE_REACH` went up in the same pass. The far figure still has to cover a standing
-     * player (44px) with margin, or a burst could be walked through.
+     * 70 → 120 *was* thinner at the mouth. It read as uniform because a 1.7× spread over
+     * 620px is 25px of growth in a shape 35px deep to begin with — arithmetically a cone
+     * and visually a pipe. What reads as a cone is the **ratio**: 28 → 96 is 3.4×, i.e. the
+     * flame is 14px off its own axis where it leaves the jaw and 48px at the far end, which
+     * is a shape whose two ends are plainly different. And it is *thinner overall*: the
+     * widest the fire ever gets is 96px where it used to be 120, and where it leaves the
+     * mouth it is 28 where it used to be 70.
      *
-     * The near figure is also why the strip under the jaw is safe. The axis starts
-     * 161px up and only meets the floor at the end of its reach, so the near end of
-     * the cone passes over a standing head — and that pocket is deliberate. A beast
-     * that sets fire to its own feet is a beast whose fire nobody believes, and it
-     * gives "get in close" a meaning on a screen whose body is not a hitbox.
+     * Narrowing it is a **fairness** change before it is a picture: a thinner cone meets a
+     * standing head later along its axis, which shortens the lethal strip. Twice now that
+     * has been paid for by lengthening `CONE_REACH`; this time `CONE_TOUCHDOWN` paid for it
+     * instead — a flame that comes down to the floor and runs along it is lethal over more
+     * of its length, so the reach could come *down* to 510. The far figure still has to
+     * cover a standing player (44px) with margin, or a burst could be walked through: 96 is
+     * 2.2× that.
+     *
+     * The near figure is also why the strip under the jaw is safe. The axis starts 161px up
+     * and does not reach the floor until `CONE_TOUCHDOWN`, so the near end of the cone
+     * passes over a standing head — and that pocket is deliberate. A beast that sets fire to
+     * its own feet is a beast whose fire nobody believes, and it gives "get in close" a
+     * meaning on a screen whose body is not a hitbox.
      */
-    CONE_NEAR_H: 70,
-    CONE_FAR_H: 120,
+    CONE_NEAR_H: 28,
+    CONE_FAR_H: 96,
     /**
      * Segments the cone's hitbox is cut into, and therefore exactly what is drawn.
      *
@@ -588,32 +638,52 @@ export const HAZARDS = {
     WATER_W: 44,
     WATER_H: 22,
     /**
-     * s between jets, and live jets at once (bounded, so the array cannot grow).
+     * s between one segment of the stream and the next, and how many may be live at once
+     * (bounded, so the array cannot grow).
      *
-     * 0.24 rather than the cutter's 0.22 and emphatically not lower: at 0.16 four
-     * hits was 0.64s of held button, and a boss with a five-candidate payoff that
-     * comes apart inside a second is not a fight. Together with the retaliation every
-     * hit provokes (`strike`), this makes the exchange a rhythm you can hear.
+     * **It is a HOSE now** (owner call: "make the water gun throw a continuous flow of
+     * water when engaged"), so this is no longer a weapon's cooldown — it is the spacing
+     * of the stream. 0.045s at 720 px/s puts a segment every 32px along the line, which
+     * against a 44px hitbox is a continuously overlapping column of water: the jet reads
+     * as one unbroken flow and the simulation still owns discrete boxes, which is what
+     * keeps "what is painted is what hits" true.
+     *
+     * `MAX_WATER` had to grow with it. A stream crossing ~500px of frame at 720 px/s is
+     * 0.7s in flight, i.e. ~16 segments, and the cap is the only thing standing between a
+     * held button and an unbounded array.
+     *
+     * **Holding it does not make the fight quicker**, and that is checked rather than
+     * hoped for: the beast is only vulnerable between bursts and every landed hit provokes
+     * one immediately (`Dragon.strike`), so a continuous stream lands exactly one hit per
+     * gap — the same rhythm the 0.24s trigger gave. What the stream changes is that the
+     * *fire* is now fought with a sustained flow instead of with three taps, which is what
+     * `QUENCH_RATE` exists to keep honest.
      */
-    WATER_COOLDOWN: 0.24,
-    MAX_WATER: 5,
+    WATER_COOLDOWN: 0.045,
+    MAX_WATER: 20,
     /**
-     * s knocked off the remaining burst by one jet crossing the cone.
+     * s of burn knocked off per **second** of stream on the fire.
      *
-     * This is what "water overpowers the fire a bit" is, in numbers: three jets end
-     * a 1.2s burst early rather than one jet switching it off, so the exchange is a
-     * contest you win instead of a button you press. 0.42 is `BURST_TIME / 3` rounded
-     * up, and a test holds it there — at 0.34 it took four, which is more jets than
-     * the whole costume needs and made putting the fire out the harder job.
+     * A rate rather than a per-jet figure, and that change is forced: it used to be
+     * `QUENCH_TIME` 0.42s off the burst per jet, tuned so that three jets at a 0.24s
+     * cooldown ended a 1.2s burst. Keep a per-jet figure with a 0.045s stream and a held
+     * button puts a burst out in three frames — the "contest, not a switch" rule broken by
+     * a change that was only supposed to be about the picture.
+     *
+     * 1.7 is that same balance restated: 0.72s of water on the flame ends a 1.2s burst,
+     * which is what it took before. Each segment therefore removes
+     * `QUENCH_RATE × WATER_COOLDOWN` ≈ 0.077s, so the arithmetic is independent of how
+     * finely the stream is chopped — change the spacing and the contest does not move.
      */
-    QUENCH_TIME: 0.42,
+    QUENCH_RATE: 1.7,
     /**
-     * Jets on the dragon needed to take the glasses off (only between bursts).
+     * Jets on the dragon needed to beat it (only between bursts).
      *
-     * The costume is **one piece** now (owner call: glasses, no jacket and no tie),
-     * so this is no longer "one hit per garment" — the four hits crack the lenses
-     * progressively and the last one washes them off the snout. The pips over the
-     * beast and the state of the glass are the same health bar they always were.
+     * It wears **nothing** now (owner call: "remove the spectacles from the Godzilla"), so
+     * these four hits are no longer damage to a costume that is visible on its face — which
+     * is exactly why the same note asked for a health readout ("remove the life visibility
+     * of the Godzilla and add a better one, a more visible one"). The glasses *were* the
+     * health bar; with them gone the bar has to be a bar.
      */
     HITS_TO_STRIP: 4,
     /**

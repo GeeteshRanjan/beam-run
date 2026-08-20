@@ -21,11 +21,21 @@ export interface InputState {
   jumpPressed: boolean;
   jumpHeld: boolean;
   /**
-   * Edge only, and used by exactly one screen: the Workplace cutter fires once per
-   * press. Held-down auto-fire is deliberately not offered — three deliberate
-   * shots is the beat that screen is built on.
+   * Edge: the Workplace cutter fires once per press. Held-down auto-fire is
+   * deliberately not offered *there* — three deliberate shots is the beat that screen
+   * is built on.
    */
   shootPressed: boolean;
+  /**
+   * Held, and read by exactly one screen: the hiring dragon's water cannon is a **hose**
+   * (owner call: "make it throw a continuous flow of water when engaged"), so it needs
+   * the button's state and not its edge.
+   *
+   * Both are reported and each screen takes the one that matches its verb. This is the
+   * only place in the game where "held" is offered for `shoot`, and the distinction is
+   * deliberate rather than a convenience: a cutter is a trigger, a hose is a valve.
+   */
+  shoot: boolean;
   pausePressed: boolean;
   mutePressed: boolean;
   /** Any mapped key went down this frame (used to skip the title card). */
@@ -39,6 +49,7 @@ export const NEUTRAL_INPUT: Readonly<InputState> = {
   jumpPressed: false,
   jumpHeld: false,
   shootPressed: false,
+  shoot: false,
   pausePressed: false,
   mutePressed: false,
   anyPressed: false,
@@ -172,6 +183,9 @@ export class Input {
       jumpHeld,
       jumpPressed,
       shootPressed: this.edges.shoot || this.virtualShootEdge,
+      // Held: the key is down, or the touch button is. Nothing clears this at the end of
+      // a frame — that is what makes it a valve rather than an edge.
+      shoot: this.held.has('shoot') || this.virtual.shoot,
       pausePressed: this.edges.pause,
       mutePressed: this.edges.mute,
       anyPressed: this.edges.any,

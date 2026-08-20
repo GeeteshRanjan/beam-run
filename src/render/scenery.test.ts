@@ -19,9 +19,11 @@ import {
   drawReliefWash,
   drawSceneBackground,
   drawSunBreak,
+  stepLabelAnchor,
   WEATHER_CELL as C,
 } from './scenery';
 import { BRAND, RESOLUTION } from '../data/tuning.config';
+import { SCREENS } from '../data/levels';
 
 interface Rect {
   x: number;
@@ -369,5 +371,56 @@ describe("Hire Under Fire's payoff: the environment comes good", () => {
     const half = recorder();
     drawReliefWash(half.ctx, 0.5);
     expect(half.rects).toHaveLength(2);
+  });
+});
+
+/**
+ * Reception's three tutorial labels.
+ *
+ * There is only one thing worth pinning here and it is arithmetic rather than art: a
+ * label is centred on the **block** it names, which is not the same as being centred
+ * on that block's first tile. `drawStepLabel` took `gx`/`gy` only for the whole life
+ * of this screen and centred every plaque on `gx * TILE + TILE / 2`, so BUDGET — the
+ * one step that is two tiles wide — hung half a tile to the left of the thing it
+ * labels, and no amount of reading the call site could show it (owner call: "the
+ * three tags for the hurdles are not properly aligned with the brick obstacles").
+ *
+ * The screen's real geometry is the fixture on purpose: a tidy invented one would not
+ * have contained the two-tile case the bug lives in.
+ */
+describe('the Reception step labels', () => {
+  const steps = SCREENS.find((s) => s.id === 0)!.solids.filter((s) =>
+    s.role?.startsWith('step-'),
+  );
+
+  it('names all three of the tutorial steps and nothing else', () => {
+    expect(steps.map((s) => s.role)).toEqual([
+      'step-business-case',
+      'step-board-approval',
+      'step-budget',
+    ]);
+  });
+
+  it('centres each plaque on its own block, at any block width', () => {
+    for (const s of steps) {
+      const { cx } = stepLabelAnchor(s.gx, s.gy, s.w);
+      const box = { left: s.gx * RESOLUTION.TILE, right: (s.gx + s.w) * RESOLUTION.TILE };
+      expect(cx).toBe((box.left + box.right) / 2);
+    }
+    // Stated the other way too, because "centre of the block" and "centre of the first
+    // tile" agree on every one-tile step and this is the only screen with a wider one.
+    const wide = steps.find((s) => s.w > 1)!;
+    expect(stepLabelAnchor(wide.gx, wide.gy, wide.w).cx).not.toBe(
+      wide.gx * RESOLUTION.TILE + RESOLUTION.TILE / 2,
+    );
+  });
+
+  it('leaves the plaque clear of the step, with room for the leader between them', () => {
+    for (const s of steps) {
+      const { plaqueTop, blockTop } = stepLabelAnchor(s.gx, s.gy, s.w);
+      // The plaque is 24px tall, so its bottom edge is the gap above the block.
+      expect(blockTop - (plaqueTop + 24)).toBe(16);
+      expect(plaqueTop).toBeGreaterThan(0);
+    }
   });
 });

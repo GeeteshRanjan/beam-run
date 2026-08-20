@@ -81,10 +81,11 @@ import { getSessionId, getMutePref, setMutePref } from '../analytics/Save';
 /**
  * The short ANSR product tag shown on a badge (single source: CAPABILITIES).
  *
- * `SAFE_PASSAGE` — the badge on the two screens with nothing to defend against —
- * has no capability and so no product tag. It falls back to the brand rather
- * than to the raw badge type, which would draw as "SAFE PASSAGE" (the 5×7 font
- * has no underscore) and name a product that does not exist.
+ * Every badge in the game maps to a capability now — the no-effect `SAFE_PASSAGE`
+ * mark was deleted with its last holder, the Tech Park's (owner call) — so the
+ * fallback is unreachable from level data. It stays because this takes a `string`:
+ * the brand is a safe answer, where the raw badge type would draw as "SAFE PASSAGE"
+ * (the 5×7 font has no underscore) and name a product that does not exist.
  */
 function solutionTag(badge: string): string {
   return capabilityFor(badge)?.tag ?? 'ANSR';

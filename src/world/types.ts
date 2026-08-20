@@ -37,6 +37,20 @@ export interface HazardContext {
    * held button.
    */
   shoot?: boolean;
+  /**
+   * The shoot button is **held** this step.
+   *
+   * The one exception to "pass edges, never held state", and the exception is the whole
+   * point of it: the hiring dragon's answer is a **hose** (owner call: "make the water gun
+   * throw a continuous flow of water when engaged"), and a hose is defined by being held
+   * open. The Workplace cutter still reads `shoot` only, because a cutter fires shots and a
+   * hazard that auto-fires from a held button is the defect that rule exists to prevent.
+   *
+   * So both fields are here and each hazard takes the one that matches its verb. Anything
+   * new that reads `shootHeld` has to answer the same question first: is this thing a
+   * trigger or a tap?
+   */
+  shootHeld?: boolean;
 }
 
 /**
@@ -50,12 +64,22 @@ export interface HazardContext {
  */
 export interface Hazard {
   /**
-   * Extra collidable AABBs this hazard contributes. None of the four do: even
-   * the maze's toll gates are lethal rather than solid, because a solid gate on
-   * the only route would make the screen impossible without the badge, and no
-   * screen in this game is.
+   * Extra collidable AABBs this hazard contributes, given where the player was at
+   * the **start** of this step.
+   *
+   * Two of the four contribute something. The Compliance maze owns the clearance
+   * lift and hoist, because they are the only moving geometry in the game and one
+   * object has to own their positions. The DENIED stamps contribute the pressing
+   * face of an *assisted* stamp, as a **one-way platform** — which is what the
+   * player argument is for: "one-way" means "only if you were above it", and the
+   * position that answers that is the one before this step's move, which is
+   * exactly what the simulation is holding when it asks.
+   *
+   * What no hazard may contribute is a solid that blocks the only route: a solid
+   * toll gate on the maze's single corridor would make that screen impossible
+   * without its badge, and no screen in this game is.
    */
-  solids(): AABB[];
+  solids(player: Player): AABB[];
   /** Horizontal speed multiplier applied to the player (1 = untouched). */
   speedMultAt(player: Player): number;
   /**

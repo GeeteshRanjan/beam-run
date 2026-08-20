@@ -184,8 +184,11 @@ export const COPY = {
      * setup → compliance → workplace → hiring. `CAPABILITIES` above is that
      * order. */
     UNWRAP: 'Team unblocked',
-    /* The two screens with nothing to defend against still carry the mark. */
-    SAFE_PASSAGE: 'Badge taken',
+    /*
+     * There is no `SAFE_PASSAGE` line any more. It read "Badge taken" and belonged to
+     * the no-effect mark on Reception and the Tech Park; the owner has now deleted both
+     * of those badges, so every entry in here is a capability that changed a screen.
+     */
   } as Record<string, string>,
 
   /** Per-screen "on clear" lines (mirrored in levels.json, centralised here). */

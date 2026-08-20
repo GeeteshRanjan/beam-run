@@ -210,10 +210,9 @@ describe('the badge standing on a wall (the Compliance perch)', () => {
     drawBadgePerch(ctx, PERCH);
     // Everything it paints is within a tile and a half of the mark. The rail's shaft ran
     // 310px and its chevron sat on the ground band 100px below — both of them describe a
-    // pickup that moves, and this one does not.
-    // Everything stays inside a tile and a half of the mark now that there is no ring
-    // round it: the plinth and the contact shadow are on the wall's top course, and the
-    // four flare cells are 26px out.
+    // pickup that moves, and this one does not. Now that the flare cells are gone too,
+    // the only things outside the mark are the plinth and the contact shadow, and both
+    // of them are on the wall's own top course.
     for (const r of rects) {
       expect(r.y).toBeGreaterThan(PERCH.cy - 60);
       expect(r.y + r.h).toBeLessThanOrEqual(PERCH.cy + 60);
@@ -230,13 +229,20 @@ describe('the badge standing on a wall (the Compliance perch)', () => {
     expect(onSurface.some((r) => r.color.includes('0,16,22'))).toBe(true);
   });
 
-  it('carries flare cells at full alpha, few and bright', () => {
+  it('carries NO flare cells: the read is the plinth, not dots beside the mark', () => {
     const { ctx, rects } = recorder();
     drawBadgePerch(ctx, PERCH);
-    // The halo lesson: a still 40px mark on masonry needs a handful of opaque cells to
-    // read as a pickup, and must not get a low-alpha field (which reads as grime).
-    const flare = rects.filter((r) => r.color === '#ff8a4d' && r.w === 5);
-    expect(flare).toHaveLength(4);
+    /*
+     * Owner call: "there are two dots around the ANSR powerup — remove that." There were
+     * four, and only two of them were ever visible: the pair level with the mark's middle.
+     * The other pair fell inside its own rays. So "few cells at full alpha say light" is
+     * true and still the wrong device here — two cells flanking a logo are two dots.
+     */
+    expect(rects.filter((r) => r.color === '#ff8a4d')).toHaveLength(0);
+    // What replaced them is what was always doing the work: a lit plinth under the mark.
+    expect(rects.some((r) => r.color.includes('255,138,77') && r.y < PERCH.surfaceY)).toBe(
+      true,
+    );
   });
 
   it('is a pure function of its view', () => {
@@ -256,7 +262,7 @@ describe('there is no ring round the mark', () => {
    *
    * Stated as a count in the annulus the ring lived in, because that is the shape of the
    * thing rather than one of its constants: the dashed ring put ~50 cells on a circle
-   * 28px out from the centre, and what is allowed out there now is the four flare cells on
+   * 28px out from the centre, and what is allowed out there now is **nothing at all** on
    * a perch and the shaft's wake on a rail. Any new ring, of any radius near the mark,
    * fails this immediately.
    */
@@ -266,10 +272,12 @@ describe('there is no ring round the mark', () => {
       return d >= 24 && d <= 34;
     });
 
-  it('the perched mark has four flare cells out there and nothing else', () => {
+  it('the perched mark has NOTHING out there — the four flare cells went too', () => {
+    // Sixth and last: dithered field · four dots · corona · dashed ring · flare cells.
+    // The answer round this mark has been "nothing" every time it has been asked.
     const { ctx, rects } = recorder();
     drawBadgePerch(ctx, { cx: 260, cy: 500, surfaceY: 520, phase: 0.2 });
-    expect(ringCells(rects, 260, 500)).toHaveLength(4);
+    expect(ringCells(rects, 260, 500)).toHaveLength(0);
   });
 
   it('the floating mark has only its own wake out there', () => {

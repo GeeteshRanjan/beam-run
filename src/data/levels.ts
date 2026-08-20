@@ -27,17 +27,17 @@ export type HazardKind = 'none' | 'stamps' | 'dragon' | 'maze' | 'workplace';
  *                          caution tape off the figure blocking the workplace,
  *                          and the colleague underneath fixes the room
  *
- * `SAFE_PASSAGE` is the non-capability badge carried by the two screens with no
- * obstacle to answer (Reception and the Tech Park). It exists so the ANSR mark
- * appears on every screen; its effect is deliberately unassigned, and it is
- * excluded from the capability receipt.
+ * **Those four are now the whole list.** There used to be a fifth, `SAFE_PASSAGE`,
+ * carried by the two screens with no obstacle to answer, so that the ANSR mark would
+ * appear on every screen with its effect deliberately unassigned. Both holders have
+ * been deleted by the owner, one pass apart and for the same reason each time:
+ * Reception's taught a first-time player that taking an ANSR badge changes nothing —
+ * one screen before the badge that saves their life — and the Tech Park's hung a rail
+ * in the middle of the payoff, on a screen the player has already won. So every badge
+ * in the game is a capability that changes the screen it is on, and the type went with
+ * its last holder: a badge type nothing carries is a trap for whoever reads this next.
  */
-export type BadgeType =
-  | 'PLACE_TILE'
-  | 'EXTINGUISH'
-  | 'CLEAR_PATH'
-  | 'UNWRAP'
-  | 'SAFE_PASSAGE';
+export type BadgeType = 'PLACE_TILE' | 'EXTINGUISH' | 'CLEAR_PATH' | 'UNWRAP';
 
 export type ScreenType = 'intro' | 'hazard' | 'finale';
 
@@ -298,6 +298,18 @@ export interface BadgeSpec {
    * pickup sits on a surface authored in this file" has one meaning across all three.
    */
   restGy?: number;
+  /**
+   * Perch only: how many tiles wide the deck it stands on is, so the mark can be
+   * **centred on that deck** rather than parked in one of its columns (owner call).
+   *
+   * Defaults to 1, which is every other case: an air-drop and a ceiling drop both land
+   * on a one-tile-wide pedestal, so their `gx` already is the centre column. Only the
+   * Compliance deck is wider than the pickup, and a two-tile deck has no centre
+   * *column* — hence a width rather than a fractional `gx`, which would put a
+   * gameplay-critical number half way between two grid cells for the first time in
+   * this file.
+   */
+  restW?: number;
   /**
    * Airdrop only: the grid columns the drone drops on, used in order and then
    * repeated, so a missed drop is a lost opportunity rather than a lost screen.

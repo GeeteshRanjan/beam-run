@@ -66,11 +66,14 @@ describe('Golden playthrough', () => {
   it('engages every badge and reports the four capabilities on the receipt', () => {
     const sim = playToWin({ engage: true });
     const r = sim.receipt;
-    // Five badges are taken — Reception has none — and the Tech Park's
-    // SAFE_PASSAGE carries no capability, so the receipt lists the four real ones
-    // in journey order, which is the order they are collected in.
-    expect(r.engaged).toEqual([...CAPABILITIES.map((c) => c.badge), 'SAFE_PASSAGE']);
-    expect(r.engaged.filter((b) => b !== 'SAFE_PASSAGE')).toHaveLength(4);
+    /*
+     * **Four badges are taken and all four are capabilities**, in journey order, which is
+     * the order they are collected in. Reception and the Tech Park both carry none now
+     * (owner calls, one pass apart), and with them went the `SAFE_PASSAGE` mark that used
+     * to make this list five long with one entry that meant nothing. So the receipt and
+     * the run are the same list, which they never quite were before.
+     */
+    expect(r.engaged).toEqual(CAPABILITIES.map((c) => c.badge));
     expect(r.matchedBenchmark).toBe(true);
     expect(r.benchmarkMonths).toBe(JOURNEY.ANSR_BENCHMARK_MONTHS);
     expect(r.baselineMonths).toBe(JOURNEY.BASELINE_MONTHS);

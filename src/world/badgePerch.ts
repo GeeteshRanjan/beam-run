@@ -45,10 +45,25 @@ export function isPerched(badge: BadgeSpec): boolean {
  * `restGy` is the row whose top it stands on — the same meaning the air-drop gives
  * it — so a wall authored two courses tall at rows 13-14 carries its mark in the tile
  * directly above, 480..520.
+ *
+ * **`restW` centres it on the deck** (owner call: "the ANSR powerup is on the right
+ * side of the brick — make it centre on the floating brick"). It stood on the deck's
+ * last column, which was itself an owner-era rule — a mark in the middle can be walked
+ * off the far side by somebody who landed late — but that rule was written for a deck
+ * you arrive at *walking right*, and this one is reached by turning round and jumping
+ * back up-left, so the player arrives at its far end and walks *into* the middle
+ * anyway. `restW` is the width in tiles of the surface it stands on, and the one-tile
+ * pickup is centred in it: a two-tile deck at gx 1 puts the box at 60..100, i.e.
+ * straddling the joint, with its centre exactly on the deck's.
+ *
+ * It is a *field* rather than arithmetic against the solids list because the modules
+ * that read this — the sim, the renderer, the validator and two tests — must all get
+ * the same rectangle, and only the level file knows which solid is the deck.
  */
 export function perchBox(badge: BadgeSpec): AABB {
   const surface = badge.restGy === undefined ? GROUND_TOP : badge.restGy * T;
-  return { x: badge.gx * T, y: surface - T, w: T, h: T };
+  const span = badge.restW ?? 1;
+  return { x: badge.gx * T + ((span - 1) * T) / 2, y: surface - T, w: T, h: T };
 }
 
 /** The mark's centre, for the renderer and for the pickup burst. */

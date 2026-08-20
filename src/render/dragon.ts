@@ -38,12 +38,14 @@
  * the floor is the wreckage of what it was wearing and the five people who were
  * inside it, never a dragon standing there undressed.
  */
-import { RESOLUTION, HAZARDS } from '../data/tuning.config';
+import { RESOLUTION } from '../data/tuning.config';
 import { pxRect, drawPixels, hash2, maxWidth, type Palette } from './PixelArt';
 import { drawText, drawLabelPlaque } from './PixelText';
 import {
   MOUTH_X_FRACTION,
   MOUTH_Y_FRACTION,
+  coneAxisY,
+  coneHalfAt,
   type FireState,
   type CandidateState,
   type DragonState,
@@ -52,15 +54,16 @@ import {
 } from '../world/Hazards/Dragon';
 
 const { TILE: T } = RESOLUTION;
-/**
- * The cone's own thickness, read from the same place the hazard reads it.
- *
- * The renderer paints the flame's real band per column rather than the bounding boxes it
- * arrives in, and the band is a function of these two numbers — so they have to come from
- * the one source, not be copied. `tuning.config.ts` is data and importable anywhere; what
- * may not be duplicated is the arithmetic.
+/*
+ * `const CONE = HAZARDS.DRAGON` used to be here, for `CONE_NEAR_H`/`CONE_FAR_H`: this
+ * module painted the flame's band per column and worked its thickness out from the same two
+ * constants the hazard did. Two copies of one profile is the `badgeFloat` defect waiting
+ * for somebody to change one of them, and the pass that gave the flame a floor run and a
+ * 3.4× taper would have been exactly that occasion. Both the axis and the half-thickness
+ * now come from `coneAxisY`/`coneHalfAt` — the functions the hitbox itself is stepped from —
+ * so this module has no opinion about the fire's shape at all, and no reason to read the
+ * dragon's numbers.
  */
-const CONE = HAZARDS.DRAGON;
 const GROUND_TOP = 15 * T;
 
 // --- palette ---------------------------------------------------------------
@@ -87,10 +90,13 @@ const BONE_DARK = '#BCAE8C';
 const MAW = '#2E070B';
 const EYE = '#FFC24D';
 
-/** The costume: one pair of glasses, and never orange. */
-const GLASS_FRAME = '#16232A';
-const LENS = 'rgba(207,230,236,0.42)';
-const LENS_CRACK = '#0B1418';
+/*
+ * `GLASS_FRAME`/`LENS`/`LENS_CRACK` used to be here — the costume, by the time it was one
+ * pair of glasses. The owner removed them ("remove the spectacles from the Godzilla"), and
+ * the three tones went with them from both places they were painted: the animal's face and
+ * the trophy beside the fallen suit. `dragon.test.ts` names all three as colours that must
+ * not reappear, which is the only form of "the beast wears nothing" that survives a rebuild.
+ */
 
 /** Fire. The one place the value orange is allowed on this screen. */
 const FIRE_CORE = '#FFF2D0';
@@ -237,9 +243,22 @@ export const BEAST_H = BEAST.length * BEAST_SCALE;
 const BEAST_OFFSET_X = -15;
 const BEAST_OFFSET_Y = 0;
 
-/** The eye's cell, and therefore where a pair of glasses has to sit. */
-const EYE_COL = 35;
-const EYE_ROW = 3;
+/**
+ * The jaw, in grid cells: where the mouth line is, where it hinges and where it ends.
+ *
+ * Read off the drawn grid, like `MOUTH_*_FRACTION` in the hazard — the mouth row is the
+ * one carrying the `mhmhmh` teeth and the muzzle tip is its last column. Nothing here may
+ * be guessed: an opening jaw that hinges in the wrong column is a head coming apart.
+ *
+ * The eye's cell (`EYE_COL`/`EYE_ROW`) used to live here too, because a pair of glasses had
+ * to be registered to it. The owner removed the glasses, and the eye is now just part of
+ * the grid like every other feature.
+ */
+const JAW_ROW = 5;
+const JAW_HINGE_COL = 30;
+const JAW_TIP_COL = 40;
+/** Cells the muzzle end of the jaw drops when the mouth is fully open. */
+const JAW_MAX_CELLS = 5;
 
 /**
  * The costume, **lying on the floor with one side unzipped** — 52×13 at scale 5 → 260×65.
@@ -363,17 +382,22 @@ function drawFallenCostume(
     }
   }
 
-  // The glasses, on the floor beside the empty suit: the thing the fight was actually
-  // won against, cracked and off the snout.
+  /*
+   * **The glasses that used to lie beside the suit are gone too** (owner call: "remove the
+   * spectacles from the Godzilla"). They were the trophy — cracked, off the snout, with two
+   * drips still coming off them — and a trophy for an object the player never saw on the
+   * animal is a prop nobody can read.
+   *
+   * What is left in their place is the puddle and the empty suit, which is the whole story:
+   * water won, and five people were inside it. The **hose** is what beat it, so a couple of
+   * cells of standing water is the right souvenir, and the wet patch above already carries
+   * them.
+   */
   const dir = flip ? -1 : 1;
-  const fx = cx + dir * (w / 2 + 24);
-  pxRect(ctx, GLASS_FRAME, fx - 30, GROUND_TOP - 14, 34, 6, 2);
-  pxRect(ctx, GLASS_FRAME, fx - 4, GROUND_TOP - 20, 30, 6, 2);
-  pxRect(ctx, LENS, fx - 26, GROUND_TOP - 12, 24, 10, 2);
-  pxRect(ctx, LENS_CRACK, fx - 18, GROUND_TOP - 12, 3, 10, 1);
-  // Two drips still coming off it, at full alpha and few — the halo lesson.
-  pxRect(ctx, WATER_LIT, fx - 34, GROUND_TOP - 24, 3, 8, 1);
-  pxRect(ctx, WATER, fx + 18, GROUND_TOP - 22, 3, 6, 1);
+  // A last few drips running off the suit's own edge. Few cells at full alpha — the halo
+  // lesson — and on the suit rather than beside it, so they belong to something.
+  pxRect(ctx, WATER_LIT, cx + dir * (w / 2 - 30), GROUND_TOP - 18, 3, 10, 1);
+  pxRect(ctx, WATER, cx + dir * (w / 2 - 58), GROUND_TOP - 14, 3, 7, 1);
 
   ctx.globalAlpha = prev;
 }
@@ -498,73 +522,94 @@ export function drawDragon(
 
   drawPixels(ctx, BEAST, BEAST_PALETTE, drawX, drawY, { scale: BEAST_SCALE, flip });
 
-  // --- the costume ---------------------------------------------------------
-  // One pair of glasses, and nothing else (owner call: no jacket and no tie).
-  // `layers` counts the hits left: each one cracks the glass a little more, and the
-  // last one washes the frame off the snout. A layer is still drawn while it is
-  // dissolving, because the rules take the hit the instant the jet lands and the
-  // picture needs half a second to show it.
-  const dis = state.dissolve;
-  const p = dis ? dis.progress : 0;
-  const finalHit = dis?.layer === 1;
-  if (state.layers > 0 || p > 0) {
-    const slide = finalHit ? p : 0;
-    const dx = (flip ? -1 : 1) * slide * 26;
-    const dy = slide * 74;
-    const at = (c: number, r: number, wc: number, hc: number) => {
-      const rect = cellRect(c, r, wc, hc);
-      return { ...rect, x: rect.x + dx, y: rect.y + dy };
-    };
-    const put = (color: string, c: number, r: number, wc: number, hc: number) => {
-      const rect = at(c, r, wc, hc);
-      pxRect(ctx, color, rect.x, rect.y, rect.w, rect.h, 2);
-    };
-    const alpha = ctx.globalAlpha;
-    ctx.globalAlpha = alpha * (1 - slide * 0.7);
-    /*
-     * A brow bar over the eye, a rim at the front of the lens, and the temple arm
-     * running back along the cheek. The arm is what makes it a pair rather than a
-     * monocle; there is no bridge, because the head is side-on and a bridge does not
-     * survive at any size here.
-     *
-     * Sized to the EYE and not to the head, which has now taken two corrections. The
-     * first version was 8 cells wide with its lower bar on the jaw row and rasterised as
-     * an 80px band strapped across the whole muzzle — a welding mask. On the rebuilt head
-     * the same arithmetic put that lower bar **on the mouth line**, so a dark rule ran
-     * through the teeth and the whole face read as a blindfold. There is no bar under the
-     * lens at all now: on a 38-row head the eye sits two rows above the jaw, and anything
-     * drawn between them lands on the mouth.
-     */
-    put(GLASS_FRAME, EYE_COL - 1, EYE_ROW - 1, 5, 1);
-    put(GLASS_FRAME, EYE_COL + 3, EYE_ROW, 1, 2);
-    put(GLASS_FRAME, EYE_COL - 4, EYE_ROW, 3, 1);
-    // The lens is translucent and the amber eye reads *through* it. An opaque block
-    // over the eye region rasterised as a visor once — a dragon in a gas mask — and
-    // glasses have to sit on a face you can still see.
-    put(LENS, EYE_COL, EYE_ROW, 3, 2);
-    // Cracks accumulate with the damage already taken, so the glass tells the story
-    // of the fight without a bar or a number anywhere on the screen.
-    const cracks = Math.max(0, 4 - state.layers);
-    for (let i = 0; i < cracks; i += 1) {
-      put(LENS_CRACK, EYE_COL + i, EYE_ROW, 1, 2);
-    }
-    // Fogged and running: the water is on the glass before it is off the face.
-    if (p > 0) {
-      const lens = at(EYE_COL, EYE_ROW, 3, 2);
-      pxRect(ctx, `rgba(233,246,250,${0.4 * (1 - p)})`, lens.x, lens.y, lens.w, lens.h, 2);
-      for (let i = 0; i < 2; i += 1) {
+  /*
+   * --- the open jaw ---------------------------------------------------------
+   *
+   * Owner call: "while throwing the flame the Godzilla doesn't open its mouth — make it
+   * open it." So the mouth is a **wedge cut into the head**, hinged at the back of the jaw
+   * and swinging down at the muzzle, and it is drawn in *cell* coordinates so it mirrors
+   * with the grid exactly like the rest of the animal.
+   *
+   * It is a hole rather than a sprite: dark maw, one course of teeth along the upper lip
+   * and one along the dropped lower jaw, and a hot throat at the hinge once the fire is
+   * lit. A separate open-mouthed head grid was the alternative and it is the wrong trade —
+   * two 4,700-cell heads that have to stay in agreement, to say something one wedge says.
+   *
+   * `jawOpen` also carries the whole wind-up telegraph now that the floor marks are gone
+   * (see `drawCone`), which is why it is ramped rather than switched: the jaw parting *is*
+   * the warning.
+   */
+  if (state.jawOpen > 0.02) {
+    const open = Math.min(1, state.jawOpen);
+    const hot = state.phase === 'burning' || state.phase === 'charging';
+    for (let c = JAW_HINGE_COL; c <= JAW_TIP_COL; c += 1) {
+      // The wedge: nothing at the hinge, deepest at the muzzle, so the jaw rotates.
+      const along = (c - JAW_HINGE_COL) / Math.max(1, JAW_TIP_COL - JAW_HINGE_COL);
+      const depth = Math.round(open * JAW_MAX_CELLS * along);
+      if (depth <= 0) continue;
+      const top = cellRect(c, JAW_ROW, 1, depth);
+      pxRect(ctx, MAW, top.x, top.y, top.w, top.h, 2);
+      // The throat, lit from inside while it is charging or burning: light in a mouth is
+      // what makes an open mouth read as an open mouth rather than as a bite taken out
+      // of the head.
+      if (hot && depth > 1) {
+        const glow = cellRect(c, JAW_ROW, 1, Math.max(1, depth - 1));
         pxRect(
           ctx,
-          `rgba(168,236,250,${0.65 * (1 - p * 0.5)})`,
-          lens.x + 4 + i * 18,
-          lens.y + lens.h,
-          4,
-          12 + p * 26,
+          along < 0.4 ? FIRE_CORE : along < 0.75 ? FIRE_MID : FIRE_DEEP,
+          glow.x,
+          glow.y,
+          glow.w,
+          Math.max(BEAST_SCALE, glow.h * 0.55),
           2,
         );
       }
+      // Teeth: one cell on the upper lip and one on the lower, every other column, so the
+      // jaw has a bite rather than two smooth edges.
+      if (c % 2 === 0) {
+        const upper = cellRect(c, JAW_ROW, 1, 1);
+        pxRect(ctx, BONE, upper.x, upper.y, upper.w, upper.h, 2);
+      }
+      const lower = cellRect(c, JAW_ROW + depth, 1, 1);
+      pxRect(ctx, c % 2 === 0 ? BONE : BONE_DARK, lower.x, lower.y, lower.w, lower.h, 2);
     }
-    ctx.globalAlpha = alpha;
+  }
+
+  /*
+   * **There is no costume on the animal at all any more** (owner call: "remove the
+   * spectacles from the Godzilla").
+   *
+   * What was here: a brow bar, a rim, a temple arm and a translucent lens over the eye,
+   * cracking once per hit and sliding off the snout on the fourth. It went through three
+   * corrections of its own (a welding mask, then a blindfold, then a bar that landed on the
+   * mouth line) and it was also the screen's **health bar** — the state of the glass was
+   * how you knew how the fight was going.
+   *
+   * So this deletion and "add a better, more visible life readout" are the same note, and
+   * the readout below is what replaced it. The `layers`/`dissolve` mechanics are untouched:
+   * `dissolve` now paints as **water on the hide** (below), which is the honest picture for
+   * a beast that is being hosed rather than one whose glasses are running.
+   */
+  const dis = state.dissolve;
+  const p = dis ? dis.progress : 0;
+  if (p > 0) {
+    // A hit playing out: the water is on it. A soaked, lit patch where the jet landed,
+    // running down the body and thinning as it goes — drawn over the hide, so the animal
+    // stays the animal.
+    const runX = flip ? box.x + 30 : box.x + box.w - 74;
+    pxRect(ctx, `rgba(168,236,250,${0.5 * (1 - p * 0.6)})`, runX, dis!.hitY - 12, 44, 24, 4);
+    for (let i = 0; i < 3; i += 1) {
+      const n = hash2(i, 53);
+      pxRect(
+        ctx,
+        `rgba(79,190,220,${0.6 * (1 - p)})`,
+        runX + 6 + i * 14,
+        dis!.hitY + 10,
+        6,
+        18 + p * (40 + n * 30),
+        4,
+      );
+    }
   }
 
   ctx.globalAlpha = prev;
@@ -630,18 +675,46 @@ export function drawDragon(
       frame: 'rgba(155,47,56,0.8)',
       alpha: 0.92,
     });
-    // Hits left, in the world rather than in a HUD element — the same reason the
-    // Workplace shows tape layers as pips over the figure.
+    /*
+     * **The health readout: a real bar** (owner call: "remove the life visibility of the
+     * Godzilla and add a better one, a more visible one").
+     *
+     * What it replaces is two things, and they went together. The visible one was four
+     * 8×5 pips under the name plate — 32px of lit cells on a 1280px frame, next to a
+     * 200px animal, which is not a readout so much as a rumour. The *other* one was the
+     * glasses themselves: their cracks were the real health bar, and the same note deleted
+     * them, so this has to carry the whole job on its own.
+     *
+     * Four decisions, all of them measured against the ones the game already made:
+     *
+     *  · **Under the name plate**, in the one window on this screen proven clear of the
+     *    HUD's right-hand column, of the animal, and of the fire lane (see the plate's own
+     *    note). 28px of floor below it, which is why it goes under rather than over.
+     *  · **192px wide**, i.e. six times the pips, and the same width as the beast is tall.
+     *  · **It does not change width as it empties** — the frame and the empty cells stay,
+     *    which is the rule the HUD's lives plaque paid for: a readout that shrinks is a
+     *    readout that moves.
+     *  · **Cyan, filling from the left, with a dark keyline and a lit top rail.** Cyan
+     *    because on this screen it is *water* that takes the beast down, so the bar is the
+     *    same colour as the answer — and orange on this screen means fire.
+     */
+    const barW = 192;
+    const barH = 18;
+    const barX = plateX - barW / 2;
+    const barY = plateY + 30;
+    pxRect(ctx, 'rgba(10,20,26,0.85)', barX - 3, barY - 3, barW + 6, barH + 6, 1);
+    pxRect(ctx, 'rgba(26,10,14,0.9)', barX, barY, barW, barH, 1);
+    const seg = (barW - 5 * 3) / 4;
     for (let i = 0; i < 4; i += 1) {
-      pxRect(
-        ctx,
-        i < state.layers ? WATER_LIT : 'rgba(207,230,236,0.22)',
-        plateX - 21 + i * 11,
-        plateY + 18,
-        8,
-        5,
-        2,
-      );
+      const sx = barX + 3 + i * (seg + 3);
+      const held = i < state.layers;
+      pxRect(ctx, held ? WATER_DEEP : 'rgba(90,110,120,0.28)', sx, barY + 3, seg, barH - 6, 1);
+      if (held) {
+        pxRect(ctx, WATER, sx, barY + 3, seg, barH - 9, 1);
+        // One lit rail along the top of each held segment: the difference between a bar
+        // that is a strip of colour and a bar that reads as a gauge.
+        pxRect(ctx, WATER_LIT, sx, barY + 3, seg, 3, 1);
+      }
     }
   }
 }
@@ -686,89 +759,40 @@ export function drawCone(
   if (fire.phase === 'windup') {
     const p = fire.progress;
     /*
-     * 1. The lane, and it is the most important thing on the frame for 0.65s.
+     * **The floor lane and the sight line are GONE** (owner call: "there are dashed lines,
+     * one on the floor till where the flame will come and one in the path of the flame —
+     * those don't look nice, remove them, only keep the flame").
      *
-     * Dashes marching *away* from the jaw along the floor the fire is about to run
-     * down, lighting up in order so the mark itself reads as travelling outwards —
-     * the same direction the flame will grow. The first version of this drew 12px
-     * cells at 0.18–0.4 alpha and rasterised as a faint smudge on a warm floor.
-     * Cream at 0.55–0.9 over its own shadow is a mark; cream at 0.2 is dirt.
+     * What was there: 32px cream dashes marching out along the floor with orange chevrons
+     * over every other one, eight stepping cells down the axis, and a bracketed bar at the
+     * far end. All three were built to answer the rule that every hazard telegraphs where
+     * the player is looking, and all three of them are dashed lines drawn across the
+     * picture. They went in one note.
+     *
+     * **So the telegraph moved onto the animal, and it had to grow to carry it.** This is
+     * the one place in the game where a tell was deleted rather than moved, and the reason
+     * it is still fair is that the beast is a 200×190 object in plain view doing three
+     * visible things for the whole 0.65s:
+     *
+     *  · its **jaw opens** (`DragonState.jawOpen`, ramped over the wind-up — owner call in
+     *    the same pass, and the two notes turn out to be one change);
+     *  · the **throat charges**, a ring of cells tightening at the mouth;
+     *  · **embers fall out of the open mouth**, which is new here and is what gives the
+     *    tell a vertical extent — a glow inside a head is 30px of change on a busy
+     *    backdrop, and something dropping out of that head is legible at the far end of
+     *    the frame.
+     *
+     * The rhythm is untouched: `BURST_WINDUP` is still 0.65s and the burst still commits
+     * its lane at the start of it, so a player who has read one cycle knows the floor in
+     * front of the beast is about to be on fire. What they no longer get is a diagram of
+     * exactly how far.
      */
-    const from = Math.min(mouth.x, target.x);
-    const to = Math.max(mouth.x, target.x);
-    const cell = 32;
-    for (let x = from; x < to; x += cell) {
-      // Fraction along the lane, measured from the jaw outwards.
-      const f = Math.abs((dir > 0 ? x - mouth.x : mouth.x - x) / Math.max(1, to - from));
-      const lit = p >= f * 0.85;
-      pxRect(ctx, 'rgba(30,10,6,0.55)', x, GROUND_TOP - 4, cell - 10, 12, 2);
-      pxRect(
-        ctx,
-        lit ? `rgba(255,242,208,${0.9 - 0.3 * f})` : 'rgba(255,176,122,0.28)',
-        x,
-        GROUND_TOP - 12,
-        cell - 10,
-        10,
-        2,
-      );
-      // A chevron over every other dash, pointing the way the fire will travel.
-      if (lit && Math.round(x / cell) % 2 === 0) {
-        pxRect(
-          ctx,
-          `rgba(255,84,0,${0.7 - 0.3 * f})`,
-          x + (dir > 0 ? cell - 16 : 0),
-          GROUND_TOP - 22,
-          6,
-          8,
-          2,
-        );
-      }
-    }
-    // 2. The sight line: cells stepping from the jaw along the axis, so a player
-    // watching their own feet still sees something arriving.
-    const steps = 8;
-    for (let i = 1; i <= steps; i += 1) {
-      const f = i / steps;
-      const x = mouth.x + (target.x - mouth.x) * f;
-      const y = mouth.y + (target.y - mouth.y) * f;
-      const lit = p * (steps + 1) >= i;
-      const s = 10 + Math.round(f * 12);
-      pxRect(
-        ctx,
-        lit ? `rgba(255,242,208,${0.55 + 0.35 * p})` : 'rgba(255,176,122,0.22)',
-        x - s / 2,
-        y - s / 2,
-        s,
-        s,
-        2,
-      );
-    }
-    // 3. The far end, bracketed: a bright bar closing inwards to the width the flame
-    // will actually be when it gets there, so the reach is a promise rather than a
-    // surprise.
-    const inset = (1 - p) * 26;
-    pxRect(ctx, 'rgba(30,10,6,0.6)', target.x - 44, GROUND_TOP - 6, 88, 14, 2);
-    pxRect(
-      ctx,
-      `rgba(255,242,208,${0.6 + 0.4 * p})`,
-      target.x - 40 + inset,
-      GROUND_TOP - 14,
-      80 - inset * 2,
-      14,
-      2,
-    );
-    for (const bx of [target.x - 46, target.x + 38] as const) {
-      pxRect(ctx, `rgba(255,84,0,${0.5 + 0.5 * p})`, bx, GROUND_TOP - 28, 8, 28, 2);
-    }
-    // …and the throat charging, so the two ends of the attack are connected. A ring
-    // of cells rather than one filled square: at 28×28 the square rasterised as a
-    // brown box stuck to the dragon's face.
     for (let i = 0; i < 6; i += 1) {
       const ang = (i / 6) * Math.PI * 2 + p * 3;
-      const rr = 8 + p * 8;
+      const rr = 14 - p * 6; // tightening, not spreading: it is drawing breath
       pxRect(
         ctx,
-        `rgba(255,84,0,${0.35 + 0.45 * p})`,
+        `rgba(255,84,0,${0.35 + 0.5 * p})`,
         mouth.x + Math.cos(ang) * rr - 4,
         mouth.y + Math.sin(ang) * rr - 4,
         8,
@@ -776,7 +800,26 @@ export function drawCone(
         4,
       );
     }
-    pxRect(ctx, `rgba(255,242,208,${0.8 * p})`, mouth.x - 6, mouth.y - 6, 12, 12, 4);
+    pxRect(ctx, `rgba(255,242,208,${0.85 * p})`, mouth.x - 8, mouth.y - 8, 16, 16, 4);
+    // Embers falling out of the open jaw. Stable positions (`hash2`), whole cells, and
+    // they only start once the mouth is properly open — before that there is nowhere for
+    // them to come from.
+    if (p > 0.35) {
+      const drip = (p - 0.35) / 0.65;
+      for (let i = 0; i < 5; i += 1) {
+        const n = hash2(i, 17 + (reduced ? 0 : Math.floor(t * 8) % 4));
+        const fall = ((n + drip) % 1) * 70;
+        pxRect(
+          ctx,
+          fall < 34 ? FIRE_HOT : FIRE_DEEP,
+          mouth.x + dir * (4 + n * 18),
+          mouth.y + 8 + fall,
+          6,
+          6,
+          2,
+        );
+      }
+    }
     return;
   }
 
@@ -818,12 +861,19 @@ export function drawCone(
        * inside the hitbox — it just paints the cone instead of the cone's bounding boxes.
        */
       const f = Math.max(0, Math.min(1, (x + cell / 2 - mouth.x) / (axis === 0 ? 1 : axis)));
-      const ay = mouth.y + (target.y - mouth.y) * f;
+      /*
+       * The axis and the half-thickness both come from the **hazard's own functions**
+       * (`coneAxisY`, `coneHalfAt`) rather than from a lerp written out again here. They
+       * were inlined until the pass that gave the flame a touchdown and a 3.4× taper, and
+       * two copies of a hazard's profile is the `badgeFloat` defect with a different
+       * costume: the picture and the hitbox drift and nobody notices until a player is
+       * burnt by empty floor.
+       */
+      const ay = coneAxisY(mouth, target, f);
       // …tapered over the last few columns, so the jet has a NOSE. Cut off square at
       // full thickness it read as a length of pipe rather than as the end of a flame.
       const nose = f > 0.93 ? 1 - ((f - 0.93) / 0.07) * 0.6 : 1;
-      const half =
-        (nose * (CONE.CONE_NEAR_H + (CONE.CONE_FAR_H - CONE.CONE_NEAR_H) * f)) / 2;
+      const half = nose * coneHalfAt(f);
       const k = Math.round(x / cell);
       const n = reduced ? 0.5 : hash2(k, 11 + frame);
       const n2 = reduced ? 0.5 : hash2(k, 29 + frame);
@@ -882,16 +932,39 @@ export function drawCone(
     }
   }
 
-  // The reason for the fire, on a plaque over the middle of the lane. It is fixed
-  // for the whole burst and it does not ride the flame (owner call) — a caption on
-  // the lane, replaced by a different one on the next burst.
-  drawLabelPlaque(ctx, fire.label, fire.labelAt.x, fire.labelAt.y, {
+  /*
+   * The reason for the fire, **written on the fire** (owner call: "the text that depicts
+   * what this flame represents should be an overlay on top of the flame itself, in the same
+   * angle the flame is in, and it should be present on the flame; it should not come
+   * forward with the flame — while the flame is there it is there too").
+   *
+   * Four things that sentence asks for, and each one is a line here:
+   *
+   *  · **on the flame** — `labelAt` is a point on the axis at `LABEL_F`, not a clearance
+   *    above the whole shape. The plaque is gone with it: a framed dark plate over burning
+   *    fire is a sign in front of the fire, which is the picture being replaced.
+   *  · **at the flame's angle** — `ctx.rotate(fire.labelAngle)`, the axis's own descent,
+   *    computed once in the hazard so the words cannot disagree with the shape.
+   *  · **it does not come forward** — the point is committed when the burst commits, so the
+   *    flame grows *through* the words rather than pushing them along.
+   *  · **it is there as long as the flame is** — this is inside the burning branch, and the
+   *    wind-up returns before it.
+   *
+   * Legibility is a keyline rather than a background: near-black type would vanish into the
+   * deep shell and cream type alone would vanish into the core, so it is cream with a dark
+   * outline, which reads on all three courses of the fire.
+   */
+  ctx.save();
+  ctx.translate(fire.labelAt.x, fire.labelAt.y);
+  ctx.rotate(fire.labelAngle);
+  drawText(ctx, fire.label, 0, -7, {
     scale: 2,
-    fg: '#FFF2D0',
-    bg: 'rgba(28,10,4,0.78)',
-    frame: 'rgba(255,84,0,0.65)',
-    alpha: 0.95,
+    color: '#FFF6E2',
+    align: 'center',
+    outline: 'rgba(26,6,2,0.95)',
+    alpha: 0.98,
   });
+  ctx.restore();
 }
 
 /**
@@ -914,18 +987,24 @@ export function drawScorchedGround(
    */
   relief = 0,
 ): void {
-  // A charred field under the roost, densest at the middle, dithered out at the
-  // edges in whole cells so it never reads as a soft gradient.
+  /*
+   * **The charred field is gone** (owner call: "below the Godzilla, on the bricks, there
+   * are some dirty/black spots on the brick — can you clean that").
+   *
+   * It was a 600×24 dither of `#180A08`/`#2A120C` cells over the ground band under the
+   * roost, densest at the middle: a scatter of near-black 8px squares on brickwork. On
+   * paper it is the animal's own history; on the frame it is dirt, and this is the fourth
+   * time this build has been told that low-value loose cells read as dirt rather than as
+   * whatever they were meant to be (the badge's dithered halo, the drifting embers, the
+   * confetti across the frame, now this).
+   *
+   * The lesson generalises, and it is worth writing down in this shape: **a texture that
+   * is a scatter of dark cells over a lit material will always read as dirt on that
+   * material.** Scorch has to be a *change to the brick* — a courseful of darker faces,
+   * say — rather than a layer of spots on top of it. What is left here is the payoff: this
+   * function now draws nothing at all until the beast is beaten, and then it grows grass.
+   */
   const half = 300;
-  const burn = 1 - relief * 0.75;
-  for (let x = roostX - half; x < roostX + half; x += 8) {
-    const f = 1 - Math.abs(x - roostX) / half;
-    for (let y = GROUND_TOP; y < GROUND_TOP + 24; y += 8) {
-      const n = hash2(Math.round(x / 8), Math.round(y / 8));
-      if (n > (0.15 + f * 0.7) * burn) continue;
-      pxRect(ctx, n < 0.25 ? '#180A08' : '#2A120C', x, y, 8, 8, 8);
-    }
-  }
   if (relief <= 0.15) return;
   /*
    * Grass coming through the scorch: three blades a tuft, uneven, with a lit tip — the one
@@ -1148,25 +1227,41 @@ export function drawFloatingBrick(
  * and trigger, and a mouth that **flares in whole-cell steps** to a dark aperture with two
  * lit cells in it. The flare is the ceiling spotlight's lesson pointed at a weapon: a can
  * with parallel sides is a pipe, and a bright plate on the end of one is a flag.
+ *
+ * **…and then made to look DANGEROUS** (owner call: "make the water gun look more
+ * dangerous"), which turned out to be three specific things rather than a mood:
+ *
+ *  · **the bell got a real flare.** It went from two cells of collar to a mouth that
+ *    steps out over four columns and stands 10 cells tall against a 4-cell bore — the
+ *    silhouette of something that lets go of a lot of water at once. A gun looks
+ *    dangerous at the end you are pointing.
+ *  · **the bore went black.** It was `WATER_LIT` across the whole aperture; a lit plate is
+ *    a torch, and a dark hole with pressure lit *inside* it is a barrel.
+ *  · **it got bigger and heavier**: 36×18 at scale 2 (72×36, from 64×34), a full-width
+ *    pressure tank with a valve at each end, and a double keyline where the housing meets
+ *    the barrel. Sized against the drawn hero (48×60) it is now plainly a two-handed tool
+ *    rather than a sidearm — which is the read the owner is after, and it is also honest,
+ *    because it is a hose being held open rather than a trigger being pulled.
  */
 const CANNON: readonly string[] = [
-  '.....KLKKKKKK...................',
-  '....KTTTTtTTTK..................',
-  '....KttttttttK..................',
-  '....KttttttttK................KK',
-  '...KBBBBBBBBBBKK.............KCK',
-  '...KbbbbbbbbbbbbK...........KCcK',
-  '...KbbbbbbbbbbbbbKKKKKKKKKKKCccK',
-  '...KbbbbbbbbbbbbbcccccccccCCccoK',
-  '...KbbbbbbbbbbbbbcccccccccccccoK',
-  '...KbbbbbbbbbbbbbccccccccccccccK',
-  '...KKKbbbbbKbbbbKKKKKKKKKKKKcccK',
-  '......KGGGK.KggKK...........KccK',
-  '......KgggK..KKK.............KcK',
-  '......KggggK..................KK',
-  '.......KgggK....................',
-  '.......KgggK....................',
-  '........KKKK....................',
+  '.....KKKKKKKKKKK....................',
+  '....KLTTTTTTTTTTLK..................',
+  '....KttttttttttttK..................',
+  '....KKttttttttttKK..................',
+  '...KBBBBBBBBBBBBBBBK.........KK.....',
+  '...KbbbbbbbbbbbbbbbK........KCCK....',
+  '...KbbbbbbbbbbbbbbbKKKKKKKKKCCCCK...',
+  '...KbbbbbbbbbbbbbbbKccccccccCaaaaCK.',
+  '...KbbbbbbbbbbbbbbbKccccccccCaooooaK',
+  '...KbbbbbbbbbbbbbbbKccccccccCaooooaK',
+  '...KbbbbbbbbbbbbbbbKccccccccCaaaaCK.',
+  '...KbbbbbbbbbbbbbbbKKKKKKKKKCCCCK...',
+  '...KKKbbbbbKKbbbbbKK........KCCK....',
+  '......KGGGK.KggggK...........KK.....',
+  '......KgggK.KKKKKK..................',
+  '.......KgggK........................',
+  '.......KgggK........................',
+  '........KKKK........................',
 ];
 
 const CANNON_PALETTE: Palette = {
@@ -1178,7 +1273,13 @@ const CANNON_PALETTE: Palette = {
   L: WATER_LIT, // its valve
   c: WATER_DEEP, // barrel, collar and the flared bell
   C: WATER,
-  o: WATER_LIT, // the two lit cells inside the aperture
+  /*
+   * The bore itself, and it is **dark**. A hole seen side-on is a hole: the version this
+   * replaced painted the whole aperture in `WATER_LIT`, which is a bright plate on the end
+   * of a tube, i.e. a flag on a stick. Same rule the ceiling spotlight's aperture paid for.
+   */
+  a: '#06131A',
+  o: WATER_LIT, // the lit cells *inside* the bore, where the pressure is
   g: '#233A44', // grip
   G: '#3C5C69',
 };

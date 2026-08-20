@@ -169,16 +169,25 @@ export function drawBadgePerch(
 
   drawAnsrBadgeMark(ctx, v.cx, v.cy, BADGE_MARK_D, Math.floor(v.phase * 8) % 2 === 0 ? 0 : 1);
 
-  // Four flare cells off the mark, at full alpha and few — the halo lesson. They are
-  // what carry the read from the far side of the frame, where the mark itself is 40px.
-  for (const [dx, dy] of [
-    [-26, -6],
-    [26, -6],
-    [-14, -26],
-    [14, -26],
-  ] as const) {
-    pxRect(ctx, RAY_LIT, v.cx + dx - 2, v.cy + dy - 2, 5, 5, 1);
-  }
+  /*
+   * **Nothing is drawn out beyond the mark, and the flare cells were the sixth and last
+   * attempt at something out there** (owner call: "there are two dots around the ANSR
+   * powerup — remove that").
+   *
+   * There were four of them, at (±26,−6) and (±14,−26), 5px and at full alpha, added on
+   * the reasoning that "few cells at full alpha say light" — which is true, and was the
+   * lesson the dithered halo taught. What it does not survive is the *count*: two cells
+   * either side of a 40px mark, level with its middle, are the two the eye actually
+   * finds, and two dots flanking a logo read as two dots. The pair above them fall in
+   * the mark's own rays and are invisible, which is why the owner saw **two**.
+   *
+   * So this is the fourth ring, the four dots, the corona, the dashed ring and now the
+   * flare: the answer round this mark has been "nothing" every single time. What says
+   * "pickup" on a perch is the lit plinth under it and the contact shadow that puts it
+   * ON the masonry — both of which are on the wall, where a still object's read belongs.
+   * `badge.test.ts` counts cells in the 24-34px annulus and now expects **zero** on a
+   * perch, so the next thing added out here fails immediately. Do not add a seventh.
+   */
 }
 
 /**

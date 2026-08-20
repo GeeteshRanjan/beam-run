@@ -99,10 +99,22 @@ export interface FireState {
   /** The taunt fixed to this burst. The next burst carries the next one. */
   label: string;
   /**
-   * Where that taunt is painted. Committed with the burst and **stationary** — the
-   * label is a caption on the lane, not a passenger on the flame (owner call).
+   * Where that taunt is painted: **on the flame**, at a fixed point along its axis
+   * (owner call). Committed with the burst and stationary — the label is written on the
+   * lane the fire is filling, not carried on the front of it.
    */
   labelAt: Point;
+  /**
+   * Radians the taunt is set at, so it lies **along** the flame instead of across it
+   * (owner call: "the text should be an overlay on top of the flame itself, in the same
+   * angle the flame is in").
+   *
+   * Derived from the axis's own descent rather than authored, and normalised to reading
+   * direction: for a flame thrown left the line rises left-to-right, so the angle is
+   * negative. It is committed with the burst like everything else here, which is what
+   * keeps the caption still while the fire grows underneath it.
+   */
+  labelAngle: number;
   /** The lethal boxes: the cone, cut into `CONE_SEGMENTS` steps. */
   boxes: AABB[];
 }
@@ -197,6 +209,17 @@ export interface DragonState {
    * once it has vanished.
    */
   costume: CostumeState | null;
+  /**
+   * 0..1 — how far the jaw is open (owner call: "while throwing the flame the Godzilla
+   * doesn't open its mouth — make it open it").
+   *
+   * A dial rather than a flag, because it has to *open*: it ramps through the wind-up so
+   * the jaw parting is itself part of the telegraph, holds wide for the whole burn, and
+   * shuts afterwards. That matters more than it sounds, because the floor marks that used
+   * to carry the wind-up are gone (owner call, same pass) — the animal's own head is now
+   * the telegraph, so the head has to be doing something.
+   */
+  jawOpen: number;
 }
 
 interface Water {
@@ -246,6 +269,69 @@ export const MOUTH_Y_FRACTION = 0.15;
 const AXIS_END_LIFT = 20;
 
 /**
+ * Half the flame's thickness at fraction `f` along the reach.
+ *
+ * **Exported, because the renderer needs the same number.** It used to inline the same
+ * lerp; two copies of a hazard's own profile is the `badgeFloat` defect waiting to
+ * happen, and it very nearly did on the pass that changed `CONE_NEAR_H`.
+ */
+export function coneHalfAt(f: number): number {
+  return (D.CONE_NEAR_H + (D.CONE_FAR_H - D.CONE_NEAR_H) * f) / 2;
+}
+
+/**
+ * The flame's axis height at fraction `f` — **a throw and then a floor run**, not one
+ * straight line (owner call: "make the flame look more realistic").
+ *
+ * A single lerp from the jaw to a point just above the far end is a *ramp*: the flame is
+ * lowest and thickest at the same instant, which rasterises as a girder leaned against the
+ * floor. Fire thrown down at the ground hits it and then runs along it, so there are two
+ * segments — descending until `CONE_TOUCHDOWN`, then level.
+ *
+ * The level part is `GROUND_TOP − coneHalfAt(f)`, i.e. the flame's *underside* sits on the
+ * floor for the whole run rather than its centre line sitting a fixed 20px above it. That
+ * is what makes the far half of the lane read as burning ground, and it means the shape
+ * gets taller as it widens **upwards**, which is where a fire on a floor goes.
+ *
+ * Continuous by construction: the descent's end point is `GROUND_TOP − coneHalfAt(TD)`, so
+ * the two segments meet.
+ *
+ * `_target` is unused and kept in the signature deliberately: every other function that
+ * describes this cone takes `(mouth, target, f)`, and a sibling with a different shape is
+ * the sort of asymmetry that makes a caller pass the arguments in the wrong order. The
+ * floor run is *derived*, so the axis's far end is no longer authored anywhere.
+ */
+export function coneAxisY(mouth: Point, _target: Point, f: number): number {
+  const td = D.CONE_TOUCHDOWN;
+  const floorAxis = (g: number) => GROUND_TOP - coneHalfAt(g);
+  if (f >= td) return floorAxis(f);
+  const landed = floorAxis(td);
+  return mouth.y + (landed - mouth.y) * (f / td);
+}
+
+/**
+ * Fraction along the reach the taunt is written at.
+ *
+ * On the descending leg (`CONE_TOUCHDOWN` is 0.55), because that is the part of the flame
+ * that has an angle for the words to follow — and far enough along it that the shape is
+ * deep enough to hold a line of scale-2 type.
+ */
+export const CONE_LABEL_F = 0.45;
+
+/**
+ * The angle the taunt is set at: the axis's descent, normalised to reading direction.
+ *
+ * Text runs left to right whichever way the beast is facing, so a flame thrown *left*
+ * gives a line that rises left to right and the angle is negative. Getting this backwards
+ * writes the taunt upside down, which is a defect nothing in the code can show.
+ */
+function labelAngleFor(mouth: Point, target: Point, dir: -1 | 1): number {
+  const landed = coneAxisY(mouth, target, D.CONE_TOUCHDOWN);
+  const run = Math.abs(target.x - mouth.x) * D.CONE_TOUCHDOWN;
+  return Math.atan2(dir * (landed - mouth.y), Math.max(1, run));
+}
+
+/**
  * The cone's lethal geometry: `CONE_SEGMENTS` stepped boxes along the axis.
  *
  * Exported because the renderer paints exactly these boxes. A cone is not an AABB
@@ -261,9 +347,9 @@ export function coneBoxes(mouth: Point, target: Point, extent: number): AABB[] {
   const boxes: AABB[] = [];
   const e = Math.max(0, Math.min(1, extent));
   if (e <= 0) return boxes;
-  const half = (f: number) => (D.CONE_NEAR_H + (D.CONE_FAR_H - D.CONE_NEAR_H) * f) / 2;
+  const half = coneHalfAt;
   const ax = (f: number) => mouth.x + (target.x - mouth.x) * f;
-  const ay = (f: number) => mouth.y + (target.y - mouth.y) * f;
+  const ay = (f: number) => coneAxisY(mouth, target, f);
   for (let i = 0; i < D.CONE_SEGMENTS; i += 1) {
     const f0 = i / D.CONE_SEGMENTS;
     if (f0 >= e) break;
@@ -313,6 +399,7 @@ export class Dragon implements Hazard {
     dir: -1 | 1;
     label: string;
     labelAt: Point;
+    labelAngle: number;
     phase: FirePhase;
     t: number;
     /** Seconds of burn removed by water. */
@@ -338,6 +425,8 @@ export class Dragon implements Hazard {
   }[] = [];
 
   private armed = false;
+  /** The valve is open this step — the hose's own state, so its edges can be found. */
+  private spraying = false;
   private cooldown = 0;
   /** Seconds since the cannon last fired — the host draws the muzzle from it. */
   private sinceShotT = Number.POSITIVE_INFINITY;
@@ -427,7 +516,28 @@ export class Dragon implements Hazard {
     this.cooldown = Math.max(0, this.cooldown - dt);
     this.sinceShotT += dt;
 
-    if (ctx.assisted && ctx.shoot === true) this.fire(player);
+    /*
+     * **The cannon is a hose** (owner call): held, not tapped. `shootHeld` opens the valve
+     * and `shoot` is kept as a fallback so a single tap still produces a segment — a
+     * player who taps the button on a phone must not be handed nothing.
+     *
+     * The rate limit is the same `cooldown` the trigger used; what changed is that it is
+     * now the stream's *spacing* rather than a weapon's recovery (`WATER_COOLDOWN` 0.24 →
+     * 0.045). Everything that made this a fight is untouched, because none of it was ever
+     * in the fire rate: the beast can only be hit between bursts and every hit provokes
+     * one, so a held button still lands exactly one hit per gap.
+     */
+    // "Spraying" has to mean water actually leaving the cannon, not the button being
+    // down: it refuses once the fight is over, and a counter that ticked anyway would
+    // report a jet fired at five people who have just been hired.
+    const canSpray = this.phase !== 'stripping' && this.phase !== 'beaten';
+    const spraying =
+      ctx.assisted && canSpray && (ctx.shootHeld === true || ctx.shoot === true);
+    if (spraying) this.fire(player);
+    // Rising edge only, for the audio cue and for the muzzle: 22 "a jet left the cannon"
+    // events a second is a click, not a sound.
+    if (spraying && !this.spraying) this.jetsFired += 1;
+    this.spraying = spraying;
 
     this.advancePhase(dt, player, ctx.extraTelegraph);
     this.advanceJets(dt);
@@ -596,19 +706,28 @@ export class Dragon implements Hazard {
       dir,
       label: this.taunts[this.tauntIndex % this.taunts.length]!,
       /*
-       * Over the middle of the lane, and high enough to clear the flame anywhere
-       * along it. The caption stays put for the whole burst, which is the point of it.
+       * **On the flame, at `CONE_LABEL_F` along its axis, set to the axis's own angle** (owner
+       * call: "the text that depicts what this flame represents should be an overlay on
+       * top of the flame itself, in the same angle the flame is in, and it should be
+       * present on the flame; it should not come forward with the flame — while the flame
+       * is there it is there too").
        *
-       * The clearance is derived rather than guessed: the cone's top edge is highest
-       * at the **jaw** (the axis starts there and the flame only spreads downwards
-       * relative to it as it falls), so `mouth.y − CONE_NEAR_H / 2` is the top of the
-       * whole shape and the plaque sits above that. Set from the far end instead, it
-       * rasterised 4px inside the flame at the near end.
+       * It used to be a plaque held 44px *above* the whole shape, clear of the fire, on the
+       * reasoning that a caption has to be legible. That clearance was derived carefully
+       * and it is now the wrong picture: a plaque floating over the lane is a label about
+       * the fire, where the owner wants the fire to be carrying the words.
+       *
+       * `CONE_LABEL_F` sits on the **descending** part of the axis on purpose: that is the only
+       * part with an angle to match, and it is deep enough there (2 × `coneHalfAt` ≈ 58px)
+       * to hold a scale-2 line inside the flame. Committed here with everything else, so it
+       * is stationary while the fire grows through it — which is the whole of "it should not
+       * come forward with the flame".
        */
       labelAt: {
-        x: (mouth.x + target.x) / 2,
-        y: mouth.y - D.CONE_NEAR_H / 2 - 44,
+        x: mouth.x + (target.x - mouth.x) * CONE_LABEL_F,
+        y: coneAxisY(mouth, target, CONE_LABEL_F),
       },
+      labelAngle: labelAngleFor(mouth, target, dir),
       phase: 'windup',
       t: 0,
       quench: 0,
@@ -649,7 +768,6 @@ export class Dragon implements Hazard {
     const len = Math.max(1, Math.hypot(this.cx - from.x, this.cy - from.y));
     this.cooldown = D.WATER_COOLDOWN;
     this.sinceShotT = 0;
-    this.jetsFired += 1;
     this.jets.push({
       x: from.x,
       y: from.y,
@@ -678,7 +796,14 @@ export class Dragon implements Hazard {
       // 1. The burning cone. Water beats it back rather than cancelling it.
       const b = this.burst;
       if (b && b.phase === 'burning' && this.fireBoxes().some((f) => aabbOverlap(box, f))) {
-        b.quench += D.QUENCH_TIME;
+        /*
+         * A **rate**, not a per-jet figure. The stream is chopped into segments 0.045s
+         * apart, so what each one is worth has to be derived from that spacing or the
+         * contest changes every time the spacing does — which is precisely what happened
+         * when the trigger became a hose: three 0.42s jets became twenty-two of them a
+         * second and a burst went out in three frames.
+         */
+        b.quench += D.QUENCH_RATE * D.WATER_COOLDOWN;
         this.quenchCount += 1;
         this.steam.push({ x: j.x, y: j.y, t: 0 });
         spent = true;
@@ -824,6 +949,7 @@ export class Dragon implements Hazard {
     this.steam.length = 0;
     this.candidates.length = 0;
     this.armed = false;
+    this.spraying = false;
     this.cooldown = 0;
     this.sinceShotT = Number.POSITIVE_INFINITY;
     this.jetsFired = 0;
@@ -843,7 +969,26 @@ export class Dragon implements Hazard {
       layers: this.layers,
       dissolve: this.dissolveState(),
       costume: this.costumeState(),
+      jawOpen: this.jawOpen(),
     };
+  }
+
+  /**
+   * How far the jaw is open, 0..1.
+   *
+   * The roar is wide (it is a roar). The wind-up **ramps** it, so the mouth parting is the
+   * beat before the fire and not simultaneous with it — which is the whole reason this is a
+   * number and not a boolean. The burn holds it wide. Everything else is shut, including
+   * the topple: a beast that has just gone down is not mid-bellow.
+   */
+  private jawOpen(): number {
+    if (this.phase === 'roar') return 0.85;
+    if (this.phase === 'burning') return 1;
+    if (this.phase === 'charging') {
+      const b = this.burst;
+      return b ? Math.min(1, b.t / Math.max(0.0001, D.BURST_WINDUP)) : 0;
+    }
+    return 0;
   }
 
   private dissolveState(): DissolveState | null {
@@ -883,6 +1028,7 @@ export class Dragon implements Hazard {
       quenched: Math.min(1, b.quench / D.BURST_TIME),
       label: b.label,
       labelAt: { ...b.labelAt },
+      labelAngle: b.labelAngle,
       boxes: coneBoxes(b.mouth, b.target, extent),
     };
   }
@@ -948,6 +1094,11 @@ export class Dragon implements Hazard {
   /** Seconds since the cannon fired (`Infinity` before the first jet). */
   get sinceShot(): number {
     return this.sinceShotT;
+  }
+
+  /** The valve is open: water is leaving the cannon right now. */
+  get isSpraying(): boolean {
+    return this.spraying;
   }
 
   /** The opening beat: nothing it does can cost anything yet. */

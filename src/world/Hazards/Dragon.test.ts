@@ -570,10 +570,22 @@ describe('the hiring dragon', () => {
       });
 
       it('quenching cuts the burst short instead of cancelling it outright', () => {
-        // Three jets are needed to end a 1.2s burst early, which is what makes the
-        // exchange a contest rather than a switch.
-        expect(D.QUENCH_TIME).toBeLessThan(D.BURST_TIME);
-        expect(D.QUENCH_TIME * 3).toBeGreaterThanOrEqual(D.BURST_TIME);
+        /*
+         * Stated as **seconds of water on the flame** now that the cannon is a hose (owner
+         * call), which is the only form of this claim that survives a change to the
+         * stream's spacing. It used to be "three jets end a 1.2s burst", i.e. a per-jet
+         * figure against a 0.24s trigger; chop the stream finer and that sentence quietly
+         * becomes "a burst goes out in three frames".
+         *
+         * 0.72s of contact to end a 1.2s burst is the same contest as before, expressed
+         * as a rate, and one segment is worth `QUENCH_RATE × WATER_COOLDOWN` whatever that
+         * spacing happens to be.
+         */
+        const secondsToQuench = D.BURST_TIME / D.QUENCH_RATE;
+        expect(secondsToQuench).toBeGreaterThan(0.5);
+        expect(secondsToQuench).toBeLessThan(D.BURST_TIME);
+        // One segment on its own must never be enough: that would be a switch.
+        expect(D.QUENCH_RATE * D.WATER_COOLDOWN).toBeLessThan(D.BURST_TIME / 4);
       });
 
       it('a jet reaching the dragon between bursts takes a hit off the costume', () => {
