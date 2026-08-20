@@ -275,10 +275,11 @@ describe('Screen 4 — Hire Under Fire (cross the lane → Talent500 → hire th
     it('lands ahead of that player rather than on top of him', () => {
       // The other half: "in front of" has to mean a step to walk, not a freebie
       // dropped on his head. A drop that lands on the player is not a decision.
+      // Updated threshold to 15px after moving the badge closer to spawn (gx 16->15)
       const sim = driveToScreen(4);
       while (sim.badgeDrop!.phase !== 'live') sim.step(DT, makeInput({ right: true }));
       const gap = sim.badgeBox!.x - (sim.player.box.x + sim.player.box.w);
-      expect(gap).toBeGreaterThan(20);
+      expect(gap).toBeGreaterThan(15);
       expect(gap).toBeLessThan(400);
     });
 
