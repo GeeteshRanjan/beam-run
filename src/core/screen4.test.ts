@@ -76,10 +76,16 @@ describe('Screen 4 — Hire Under Fire (cross the lane → Talent500 → hire th
     }
   });
 
-  it('has no mid-screen hurdle any more, and three floating bricks instead', () => {
+  it('has no mid-screen hurdle any more, and ONE floating brick instead', () => {
     const sim = driveToScreen(4);
-    // The paper heap is gone (owner call). What is authored as the screen's own props
-    // now is one floating brick per drop column — real geometry the badge lands on.
+    /*
+     * The paper heap is gone (owner call). What is authored as the screen's own props
+     * now is one floating brick per drop column — real geometry the badge lands on — and
+     * there is exactly **one** of each (owner call: "remove the 3 brick structures where
+     * the ANSR powerup drops, remove the 2 and just keep 1"). Three bricks were three
+     * separate promises the drone only ever kept one of per pass.
+     */
+    expect(sim.screen.data.badge!.drops).toHaveLength(1);
     expect(sim.screen.data.solids.filter((s) => s.role?.includes('hurdle'))).toHaveLength(0);
     const bricks = sim.screen.data.solids.filter((s) => s.role?.includes('pedestal'));
     expect(bricks).toHaveLength(sim.screen.data.badge!.drops!.length);
@@ -197,10 +203,10 @@ describe('Screen 4 — Hire Under Fire (cross the lane → Talent500 → hire th
       expect(sim.badgeBox).toBeNull();
       expect(sim.powerups.collected).toBe(false);
 
-      // The next delivery arrives, on the next authored column: missing one costs the
-      // player seconds, never the capability.
+      // The next delivery arrives — on the same column, because there is only one brick
+      // now (owner call): missing a drop costs the player seconds, never the capability.
       while (sim.badgeDrop!.phase !== 'live') sim.step(DT, makeInput());
-      expect(sim.badgeDrop!.dropGx).toBe(badge.drops![1]);
+      expect(sim.badgeDrop!.dropGx).toBe(badge.drops![0]);
       expect(sim.badgeBox).not.toBeNull();
     });
 
@@ -286,13 +292,22 @@ describe('Screen 4 — Hire Under Fire (cross the lane → Talent500 → hire th
       }
     });
 
-    it('is the only screen whose badge works this way', () => {
-      // Reception (0) is not in this list: it has no badge at all now (owner call),
-      // so it reports neither a delivery nor a box, and asserting a pickup exists
-      // there would fail for being correct.
+    it('is the only screen whose badge is FLOWN in', () => {
+      /*
+       * Reception (0) is not in this list: it has no badge at all now (owner call), so it
+       * reports neither a delivery nor a box, and asserting a pickup exists there would
+       * fail for being correct.
+       *
+       * The Workplace (3) is in the list but only for `badgeDrop`, because it is the one
+       * other screen whose badge is **not always collectable**: its mark falls out of a
+       * ceiling spotlight and expires (owner call), so `badgeBox` is null for most of
+       * every cycle. "There is always a pickup somewhere" is a claim about rails and
+       * perches, and it has to say so.
+       */
       for (const id of [1, 2, 3, 5]) {
         const sim = driveToScreen(id);
         expect(sim.badgeDrop).toBeNull();
+        if (sim.badgeCeiling) continue;
         expect(sim.badgeBox).not.toBeNull();
       }
       const reception = driveToScreen(0);
@@ -362,11 +377,24 @@ describe('Screen 4 — Hire Under Fire (cross the lane → Talent500 → hire th
     expect(seconds).toBeGreaterThan(4);
     expect(seconds).toBeLessThan(20);
 
-    stepN(sim, Math.ceil((D.CANDIDATE_FALL_TIME + 0.5) / DT));
+    /*
+     * …and they WALK OUT of the fallen costume one by one (owner call), so the wait is the
+     * whole sequence rather than one fall: the zip, then five staggered walks.
+     */
+    const allOut =
+      D.COSTUME_OPEN + (D.CANDIDATES - 1) * D.CANDIDATE_STAGGER + D.CANDIDATE_WALK_TIME;
+    stepN(sim, Math.ceil((allOut + 0.2) / DT));
     for (const c of dragon.candidateStates()) {
       expect(c.landed).toBe(true);
+      // They walk, so they are on the ground for every frame of it.
       expect(c.y).toBeCloseTo(15 * T, 5);
     }
+    // The empty suit is still lying there at that point, and it goes on its own clock.
+    expect(dragon.costumeState()).not.toBeNull();
+    stepN(sim, Math.ceil((D.COSTUME_HOLD + D.COSTUME_FADE + 0.2) / DT));
+    expect(dragon.costumeState()).toBeNull();
+    // …and the environment has come good with them.
+    expect(dragon.relief).toBe(1);
   });
 
   it('is crossable unassisted by reading the lane — nothing here is a wall', () => {

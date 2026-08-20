@@ -166,9 +166,21 @@ export interface MonsterSpec {
    * same defect the `badgeFloat` rule exists to prevent.
    */
   slopeRun?: number;
+  /**
+   * This monster's surface is the clearance **hoist**, not a row in this file.
+   *
+   * The Compliance maze's fifth level is a moving plate (the owner replaced the long
+   * brown platform that used to stand at gy 8 with it), and a level with no monster
+   * on it is a free walk — which is the one thing this screen is not. So `gy` becomes
+   * documentation (the plate's parking row) and `ComplianceMaze` reads the plate's
+   * live top instead, exactly the way the plate's own collision box is read: one
+   * source for a moving surface, never two.
+   */
+  hoist?: boolean;
   /** Seeds the monster's own generator — `step()` never calls Math.random. */
   seed: number;
   zone?: Zone;
+  note?: string;
   /**
    * The way home, once the badge is taken: surface cells it walks through, corner
    * by corner, ending at the gather cell.
@@ -205,6 +217,23 @@ export interface LiftSpec {
 }
 
 /**
+ * The clearance **hoist** — the same machine as the lift, pointing the other way.
+ *
+ * It replaced the long brown platform that used to stand across gx 9-14 at gy 8
+ * (owner call: "make this a floating platform like the yellow one on the other side
+ * but make it go up and down so the user can jump on this and get on the top brick
+ * floor easily"). One spec shape for both plates, because the *direction* is data:
+ * `gy` is where it parks and `toGy` is where it travels to, so `toGy < gy` rises and
+ * `toGy > gy` descends. `ComplianceMaze` owns the live box for the same reason it
+ * owns the lift's.
+ *
+ * Its parking row is load-bearing and not a taste decision — see the screen note in
+ * `levels.json`: the plate's underside has to leave a jumpable 84px over the highest
+ * tread beneath its span, or it seals the only route up.
+ */
+export type HoistSpec = LiftSpec;
+
+/**
  * A badge is a pickup and nothing else — it contributes no geometry.
  *
  * It used to be able to lay a tile (`placesTileAt`): 1Wrk bridged Setup Delays'
@@ -234,16 +263,39 @@ export interface BadgeSpec {
    * on the one screen where standing still is how you get burnt, and it is why that
    * screen's badge is the only one that can be *missed by doing nothing* rather than
    * only by mistiming.
+   *
+   * `'perch'` (Compliance, owner call) is the third: the mark simply **stands on the
+   * top course of a brick wall** at `gx`, on the row given by `restGy`. No rail, no
+   * drone, no clock — jump onto the wall and it is yours. It is the least demanding
+   * of the three on purpose: the badge it carries is the one that turns a whole maze
+   * from a timing test into a staircase, and the screen's difficulty belongs in the
+   * maze rather than in the pickup. The rail's "jumpable, not walkable" rule still
+   * holds, and it holds by construction — the wall is two courses tall, so the mark
+   * is 36px over a standing head.
+   *
+   * `'ceiling'` (the Workplace, owner call) is the fourth and the only one tied to
+   * its own screen's picture: the mark hangs in the beam of the first ceiling
+   * spotlight at `gx`/`gy`, drops straight down onto the overhead cabinet at
+   * `restGy` after `POWERUPS.CEILING.HOLD` seconds, rests there for `LIFETIME`, and
+   * is gone until the next cycle (`world/badgeCeiling.ts`). It is the only delivery
+   * that is *visible before it is takeable*, which is the whole point of it — the
+   * offer is on screen from frame one and being ready for it is a decision.
    */
-  delivery?: 'rail' | 'airdrop';
+  delivery?: 'rail' | 'airdrop' | 'perch' | 'ceiling';
   /**
-   * Airdrop only: the row whose **top** the badge comes to rest on.
+   * Airdrop, perch **or ceiling drop**: the row whose **top** the badge comes to
+   * rest on.
    *
    * Authored because the thing it lands on is authored: each drop column carries a
    * floating brick (`role: "pedestal"`) and the badge sits on its top face, so the
    * player has to jump for it (owner call — it used to lie on the floor, where an
    * auto-running player collected it without ever leaving the ground). Omit it and
    * the badge rests on the ground band, which is what the mechanic used to do.
+   *
+   * A perch reads it the same way, against the top course of its brick wall
+   * (`world/badgePerch.ts`), and so does a ceiling drop, against the top of the
+   * floating overhead cabinet it falls onto (`world/badgeCeiling.ts`) — so "the
+   * pickup sits on a surface authored in this file" has one meaning across all three.
    */
   restGy?: number;
   /**
@@ -299,6 +351,8 @@ export interface ScreenData {
   mummies?: MummySpec[];
   monsters?: MonsterSpec[];
   lift?: LiftSpec;
+  /** The rising plate on the Compliance maze (see {@link HoistSpec}). */
+  hoist?: HoistSpec;
   /**
    * The sparking terminal on the Workplace screen — where the freed colleague
    * runs to, and the thing that puts the room right. Pure art plus one target

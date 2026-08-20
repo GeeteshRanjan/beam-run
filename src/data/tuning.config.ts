@@ -169,23 +169,43 @@ export const POWERUPS = {
   DROP: {
     /**
      * s for the drone to cross the frame, from `MARGIN` off the left edge to
-     * `MARGIN` off the right. 1,440px in 2.6s ≈ 554 px/s.
+     * `MARGIN` off the right. 1,440px in 3.4s ≈ 424 px/s.
      *
-     * **This number is set by one-tap play, not by feel.** On touch the move pad is
-     * hidden and the hero runs right on his own, so a badge lying on the floor is only
-     * collectable if it lands *in front of* him. A drone at 277 px/s (the first value,
-     * barely over the player's 260) can never get far enough ahead to do that: it
-     * released over gx 6 while the auto-runner was already at x≈480, and a probe of the
-     * whole stage never picked the badge up once. At 554 the drone overtakes, drops the
-     * mark ~90px ahead of him, and he walks onto it a third of a second later.
+     * **This number is set by one-tap play, not by feel** — in both directions, and it
+     * has now been pushed from each end. On touch the move pad is hidden and the hero
+     * runs right on his own, so the badge is only collectable if it lands *in front of*
+     * him. A drone at 277 px/s (the first value, barely over the player's 260) never got
+     * far enough ahead to do that and a probe of the whole stage never picked the badge
+     * up once; 554 px/s (2.6s) fixed that and shipped. The owner then asked for the
+     * drone to be **slower**, which is a fairness change disguised as a pace note: a
+     * slower drone is overhead later, releases later and lands the mark later, so the
+     * badge can arrive *behind* the auto-runner instead of in front of him.
+     *
+     * 3.4 is the measured answer, taken with the drop column as the second variable
+     * (they are one decision — see `levels.json`). Sweeping every tap frame at every
+     * candidate column: the one-tap window holds at the full 0.40s for gx15 all the way
+     * to a 3.6s crossing and collapses to 0.10s at 4.0, while the old gx13 falls off the
+     * cliff at 3.6. So the pair is **gx15 at 3.4s**, two probe steps inside the cliff and
+     * 23% slower than the drone that shipped. Re-run `src/core/screen4.test.ts` after
+     * touching either number.
      */
-    CROSS_TIME: 2.6,
+    CROSS_TIME: 3.4,
     /** px it starts and finishes off-frame, so it enters and leaves rather than appearing. */
     MARGIN: 80,
     /** s of quiet after it leaves before the next one comes in. */
     GAP: 2.2,
-    /** s the parcel takes to reach the ground once released. */
-    FALL_TIME: 0.55,
+    /**
+     * s the parcel takes to reach the brick once released.
+     *
+     * 0.35 rather than 0.55, and it came down with the drone's speed because **the fall
+     * spends exactly the lead the crossing bought**. At 424 px/s the drone is ~137px
+     * ahead of an auto-runner when it releases over the brick, and a 0.55s fall gives him
+     * 143px of walking in the meantime — so the mark landed *level with his shoulder*
+     * instead of in front of him, which is the one thing this delivery is not allowed to
+     * do. A shorter fall is also the honest picture: a crate let go by a drone
+     * accelerates, and 280px in 0.35s is a drop rather than a lowering.
+     */
+    FALL_TIME: 0.35,
     /**
      * s the badge lies on the ground before it is gone.
      *
@@ -197,6 +217,52 @@ export const POWERUPS = {
     LIFETIME: 4,
     /** s of blinking at the end of the lifetime — the "now or never" tell. */
     WARN_TIME: 1.4,
+  },
+  /**
+   * CEILING-DROPPED badges (owner call, the Workplace only).
+   *
+   * The fourth delivery model, and the one that is tied to the *picture* of its own
+   * screen: the Workplace's badge rail is gone and the mark now hangs in the beam of
+   * the first of the four ceiling spotlights, drops out of it onto the overhead
+   * storage cabinet before the partition wall, sits there for a few seconds, and is
+   * gone until the next cycle (owner call: "remove the rail and add — from the
+   * spotlight — an ANSR powerup that falls and stays for a few seconds, and the user
+   * has to take it otherwise it's gone, and this happens at regular intervals").
+   *
+   * Two things make it different from the air-drop it is closest to. There is **no
+   * carrier**: the source is a fitting the room already has, which is why this
+   * delivery only makes sense on a screen whose lights are part of its argument. And
+   * it is **visible before it is takeable** — the mark is up there from frame one and
+   * the player watches it for `HOLD` seconds before it falls, which is the owner's
+   * "doesn't drop immediately, it's visible as the user comes to this screen but
+   * drops after a few seconds". Both halves are one pure function of (spec, sim
+   * time) in `world/badgeCeiling.ts`, for the same reason the other three are.
+   */
+  CEILING: {
+    /**
+     * s the mark hangs in the spot before it lets go — every cycle, not just the
+     * first, so the whole thing is `t mod cycle` and nothing has to be remembered.
+     *
+     * 3.2s is measured against the walk: the spawn is ~170px from the drop column, so
+     * a player who runs straight there waits ~2.5s under it, which is the beat the
+     * owner asked for. Longer and the screen opens by making you stand still; shorter
+     * and it is not a wait at all.
+     */
+    HOLD: 3.2,
+    /** s the mark takes to fall from the fitting to the cabinet top. */
+    FALL_TIME: 0.5,
+    /**
+     * s it rests on the cabinet before it is gone.
+     *
+     * The jump onto that cabinet needs the button held for ~20 frames (0.33s) and one
+     * run-up, so 4.5s is room for two attempts and a mistake. It is deliberately not
+     * generous enough to walk away and come back.
+     */
+    LIFETIME: 4.5,
+    /** s of blinking at the end of the lifetime — the "now or never" tell. */
+    WARN_TIME: 1.4,
+    /** s of nothing at all before the next one appears in the fitting. */
+    GAP: 2.4,
   },
 } as const;
 
@@ -381,17 +447,26 @@ export const HAZARDS = {
      * box a water jet has to reach, so it is the target, not a threat.
      *
      * Sized against the drawn hero (48×60), the same rule the Workplace figure
-     * taught us: at 200×190 it is four heroes wide and three tall, which is the
-     * smallest size at which this reads as a boss rather than as a large lizard.
+     * taught us: at 200×190 it is four heroes wide and three tall.
+     *
+     * **Down from 260×240** (owner call: "decrease the size, it's too big"), and the two
+     * halves of that note — smaller *and* more refined — are answered by the same change:
+     * `render/dragon.ts` halved the cell (10px → 5px) while shrinking the animal, so the
+     * beast lost 23% of its width and gained 1,000 cells. Four heroes wide is still a
+     * boss; what it no longer does is fill a third of the frame.
+     *
+     * Everything about the fire is measured off this box, so moving it moves the level
+     * design: the jaw sits at `BODY_H × MOUTH_Y_FRACTION` from the top, which decides how
+     * far down the lane the flame takes to reach a standing head, which decides
+     * `CONE_REACH`. Re-measure that chain, do not nudge one number.
      *
      * The box's **bottom sits on the ground band** — it stands, it no longer flies
      * (owner call), so there is no hover row in level data any more and nothing
-     * derives its height from one. Its head is drawn *above* the box, the way the
-     * tail and the feet are drawn slightly outside it: the box is what water has to
-     * hit, not an outline of the animal.
+     * derives its height from one. Its tail, muzzle and claws are drawn slightly outside
+     * it: the box is what water has to hit, not an outline of the animal.
      */
-    BODY_W: 260,
-    BODY_H: 240,
+    BODY_W: 200,
+    BODY_H: 190,
     /**
      * px it shifts along the ground either side of its roost centre, and px/s of
      * that shift.
@@ -435,22 +510,28 @@ export const HAZARDS = {
      *
      * This one number is the level design, and it is measured from both ends.
      *
-     * The beast stands over gx 23–29 with its jaw around x≈1014 and 138px off the
-     * floor (`MOUTH_Y_FRACTION` — it is a Godzilla, so the skull is the top of the
-     * silhouette), so 600px puts the far end of the fire at x≈414 and still leaves
-     * the spawn and the first two drop columns as the place the pattern is read from.
+     * The beast stands over gx 23–29, so with a 200px body its jaw is at x≈968 and
+     * 161px off the floor (`MOUTH_Y_FRACTION` — it is a Godzilla, so the skull is the top
+     * of the silhouette). 620px puts the far end of the fire at x≈348, which still leaves
+     * the spawn 280px clear as the place the pattern is read from.
      *
      * The part of that lane which is lethal to a *standing* player starts where the
-     * cone's lower edge drops past a standing head — about 37% of the way out, because
-     * the jaw is high and the flame takes that long to come down — so the dangerous
-     * floor is roughly x 414–793: 379px, or ~1.57s to walk clear of with the player's
-     * own width. Against 1.75s of safe floor per cycle (`BURST_GAP` + `BURST_WINDUP`)
-     * that is a dash a reading player wins and a blind sprint loses, which is the
-     * balance two earlier tunings of this screen failed in the other direction,
-     * clearing it 8/8 with no delays. **A high jaw makes the lane shorter, not
-     * longer**: raise `MOUTH_Y_FRACTION` and this number has to go up with it.
+     * cone's lower edge drops past a standing head. Solve it: the axis falls from 438 to
+     * 580 over the reach and the flame's half-thickness grows from 35 to 60, so
+     * `438.5 + 141.5f + 35 + 25f ≥ 556` → **f ≥ 0.495**. Everything before that passes
+     * overhead, so the dangerous floor is x 348–661: 313px, or ~1.31s to walk clear of
+     * with the player's own width. Against 1.60s of safe floor per cycle (`BURST_GAP` +
+     * `BURST_WINDUP`) plus the 0.3s the flame takes to grow, that is a dash a reading
+     * player wins and a blind sprint loses — the balance two earlier tunings of this
+     * screen failed in the other direction, clearing it 8/8 with no delays.
+     *
+     * **This number went UP (560 → 620) as the fire got NARROWER**, which is the whole
+     * arithmetic in one line: a thinner cone meets a standing head later along the axis,
+     * so a shorter lane would have handed the screen back to the sprinter. **A high jaw
+     * makes the lane shorter, not longer** for the same reason — move `MOUTH_Y_FRACTION`,
+     * `CONE_NEAR_H` or `CONE_FAR_H` and all of this has to be solved again together.
      */
-    CONE_REACH: 560,
+    CONE_REACH: 620,
     /**
      * s for the cone to grow from the jaw to its full reach.
      *
@@ -464,19 +545,26 @@ export const HAZARDS = {
     /**
      * px: the flame's thickness at the jaw and at full reach.
      *
-     * "Slightly diverging" in numbers — a 2.1× spread over 600px, i.e. under 4° off
-     * the axis either side. Wide enough that the far end of the cone covers the whole
-     * of a standing player (44px) with margin, narrow enough that it still reads as a
-     * *jet* rather than as a fan: this is an atomic breath, not a flamethrower fan.
+     * **Down from 120/190** (owner call: "the fire it throws is too bad — it's too wide
+     * right now"). 190px of flame at the far end is three standing players tall, which is
+     * not a breath, it is weather; at 70 → 120 the jet is a little over one player deep
+     * where it lands and reads as something thrown from a mouth. The divergence is
+     * unchanged in character — a 1.7× spread over 620px, under 3° off the axis either
+     * side — so it is still a jet rather than a flamethrower's fan.
+     *
+     * Narrowing it is a **fairness** change before it is a picture: a thinner cone meets
+     * a standing head later along the axis, which shortens the lethal strip, which is why
+     * `CONE_REACH` went up in the same pass. The far figure still has to cover a standing
+     * player (44px) with margin, or a burst could be walked through.
      *
      * The near figure is also why the strip under the jaw is safe. The axis starts
-     * 138px up and only meets the floor at the end of its reach, so the near end of
+     * 161px up and only meets the floor at the end of its reach, so the near end of
      * the cone passes over a standing head — and that pocket is deliberate. A beast
      * that sets fire to its own feet is a beast whose fire nobody believes, and it
      * gives "get in close" a meaning on a screen whose body is not a hitbox.
      */
-    CONE_NEAR_H: 120,
-    CONE_FAR_H: 190,
+    CONE_NEAR_H: 70,
+    CONE_FAR_H: 120,
     /**
      * Segments the cone's hitbox is cut into, and therefore exactly what is drawn.
      *
@@ -528,7 +616,15 @@ export const HAZARDS = {
      * beast and the state of the glass are the same health bar they always were.
      */
     HITS_TO_STRIP: 4,
-    /** s the costume takes to come apart once the last jet lands. */
+    /**
+     * s the beast takes to GO DOWN once the last jet lands (owner call: "it dies on the
+     * ground").
+     *
+     * It used to dissolve on the spot over this beat. It topples now — the drawn grid
+     * shears over and sinks while the empty suit builds up under it — because a creature
+     * that fades leaves nothing that can then be *opened*, and the opening is the ending.
+     * 1.1s is long enough to read as a fall and short enough that nobody waits for it.
+     */
     STRIP_TIME: 1.1,
     /**
      * s one hit's worth of damage takes to play out on the glasses (owner call).
@@ -539,9 +635,41 @@ export const HAZARDS = {
      * booked in the *rules* the frame the jet lands (see `Dragon.strike`).
      */
     DISSOLVE_TIME: 0.55,
-    /** Candidates inside the costume, and how long they take to land. */
+    /**
+     * The ending, in five numbers (owner call): "on one side the Godzilla's costume opens
+     * up and from there the 5 candidates come out ONE BY ONE saying HIRED, and the costume
+     * after some time vanishes."
+     *
+     * The whole sequence is a function of one clock — the seconds since the beast went
+     * down — so `Dragon` remembers nothing and a replay lands on the same frame. It reads
+     * in order: the zip runs back (`COSTUME_OPEN`), then one person leaves the suit every
+     * `CANDIDATE_STAGGER` and takes `CANDIDATE_WALK_TIME` to reach their place in the
+     * line-up, and once the last of them is standing the empty suit lies there for
+     * `COSTUME_HOLD` before fading over `COSTUME_FADE`.
+     *
+     * 0.55s of stagger is what makes it "one by one" rather than a crowd: it is longer than
+     * a person's own walk-out is *visible* for, so at any moment early in the sequence there
+     * is exactly one figure in the doorway. All five are out at 3.15s and the suit is gone
+     * at 5.95s, which is inside the time it takes to walk from the roost to the exit — the
+     * payoff finishes while the player is still on the screen it happened on.
+     */
     CANDIDATES: 5,
-    CANDIDATE_FALL_TIME: 0.8,
+    COSTUME_OPEN: 0.7,
+    CANDIDATE_STAGGER: 0.55,
+    CANDIDATE_WALK_TIME: 0.85,
+    COSTUME_HOLD: 1.6,
+    COSTUME_FADE: 1.2,
+    /**
+     * s for the environment to come good once it is beaten (owner call: "make the
+     * environment beautiful and well lit up — from the dangerous environment it turns all
+     * bright and happy").
+     *
+     * Slower than the costume opening on purpose: the light comes up *while* the five are
+     * walking out, so the two payoffs are one event rather than a sequence of two. Read as
+     * `Dragon.relief` and handed to `scenery.ts` as a plain number, exactly like the maze's
+     * weather dial.
+     */
+    RELIEF_TIME: 2.2,
   },
   /**
    * The Compliance maze (Screen 2 — owner-specified rebuild of the screen).
@@ -646,6 +774,30 @@ export const HAZARDS = {
     LIFT_DOWN_SPEED: 150,
     /** px/s back up once the player steps off. Only ever moves up while empty. */
     LIFT_UP_SPEED: 110,
+    /**
+     * The clearance HOIST — the same plate pointing the other way (owner call: the
+     * long brown platform at gy 8 is gone, "make it go up and down so the user can
+     * jump on this and get on the top brick floor easily").
+     *
+     * px/s up while it is carrying somebody. Its travel is two rows (80px), so a ride
+     * is ~0.65s: long enough to read as a machine doing the work, short enough that
+     * nobody stands there wondering whether they have to jump after all. Bracketed by
+     * the speeds already on this screen, like every other pace here: a little under
+     * the monsters' own top speed (132) and a long way under the player's walk (260),
+     * so it reads as machinery rather than as a launch.
+     */
+    HOIST_UP_SPEED: 120,
+    /** px/s back down to its park once it is empty. Slower, because nobody is waiting on it. */
+    HOIST_DOWN_SPEED: 90,
+    /**
+     * s for the weather to clear once GCC-BOT is engaged.
+     *
+     * This screen does not put the ANSR bubble on the player (owner call) — it lifts
+     * the gloom off the market instead. 1.6s is slower than the arms coming up
+     * (`ARM_LIFT_TIME` 0.45) and faster than the exodus (~4s), so the three beats of
+     * the payoff land in an order: the arms, the sky, the walk home.
+     */
+    CLEAR_SKY_TIME: 1.6,
   },
   /**
    * The Workplace (Screen 3 — owner-specified, and the screen that replaced Local
@@ -655,9 +807,11 @@ export const HAZARDS = {
    * everything, and one figure mummified in three layers of that same tape
    * trudging the floor. Two things make this screen unlike anything else here:
    *
-   *  - **The obstacle is a metronome, not a patrol.** He walks one way only, at a
-   *    single constant speed, and loops back to his starting column instead of
-   *    turning around. A compliance monster is unreadable on purpose (§4.9); this
+   *  - **The obstacle is a metronome.** He paces his corridor **to and fro** at a
+   *    single constant speed, pausing to turn at each end (owner call: he used to
+   *    loop back to his start column, and a figure that vanishes at one end and
+   *    reappears at the other reads as a respawn bug rather than as a person). A
+   *    compliance monster is unreadable on purpose (§4.9); this
    *    figure is the opposite — the whole point is that you *can* read him from
    *    behind the partition wall and decide when to move. Which is also why the
    *    player spawns behind that wall: he is out of reach on frame one.
@@ -670,8 +824,17 @@ export const HAZARDS = {
   WORKPLACE: {
     /**
      * px/s. Deliberately well under the player's 260 so the pass is a decision
-     * rather than a race, and high enough that waiting for the loop is a beat
-     * (~5s over the authored corridor) rather than a wait.
+     * rather than a race: one length of the authored corridor is ~4.7s, so reading
+     * one leg from behind the partition is a beat rather than a wait.
+     *
+     * Now that he paces **to and fro**, this number also decides whether the screen
+     * can be crossed at all unassisted. It can, and the move is to meet him head on:
+     * a jump clears his 78px crown for 0.455s, and against an oncoming figure the
+     * closing speed is 260 + 150 = 410 px/s, so the 88px that have to pass under the
+     * player take 0.21s. Overtaking him from behind is deliberately *not* possible
+     * (110 px/s of relative speed needs 0.8s of air), which is what stops "hold
+     * right" from being an answer. Raising this narrows the head-on window; lowering
+     * it makes overtaking possible. Either way, re-run `screen3.test.ts`.
      */
     WALK_SPEED: 150,
     /**
@@ -693,17 +856,127 @@ export const HAZARDS = {
     /** Layers of caution tape, i.e. hits needed to free him. */
     TAPE_LAYERS: 3,
     /**
-     * s spent looping back to the start column. He is **harmless** for this whole
-     * beat and drawn fading in where he restarts, because materialising a lethal
-     * body on top of a player standing at the start of the corridor is the
-     * unfair-not-hard failure the DENIED stamps already taught us. 0.6s is 156px
-     * of escape at walk speed.
+     * s he stands at each end of his corridor before setting off the other way.
+     *
+     * This replaced `RETURN_TIME`, the beat he used to spend *snapping back* to his
+     * start column, and the swap deletes a whole class of unfairness rather than
+     * tuning it: nothing teleports any more, so there is no frame on which a lethal
+     * 60×78 body can materialise on top of a standing player, and the phase does not
+     * have to be harmless to be fair. What it buys instead is a **telegraph for the
+     * reversal** — he is the one hazard on this floor you are meant to be able to
+     * read, and a body that pivots on the spot for a third of a second announces the
+     * turn where an instant flip would hide it.
      */
-    RETURN_TIME: 0.6,
-    /** px/s the cutter's pulse travels. Fast enough to feel like a tool, slow enough to watch. */
+    TURN_TIME: 0.3,
+    /*
+     * ---------------------------------------------------------------------
+     * The thrown bandage (owner call: "add a capability for the mummy to throw
+     * the bandages at the player capturing him").
+     * ---------------------------------------------------------------------
+     *
+     * He unwinds a length of his own tape and throws it down the floor. It is the
+     * only ranged attack on the screen, and the only reason the figure is now a
+     * threat before you are next to him — which is what makes the partition a place
+     * to *read* him from rather than a place to be safe in.
+     *
+     * Every number below is set by one requirement: **the answer is to jump it, and
+     * the jump has to be available.** The roll flies at the player's shins
+     * (`THROW_FLOOR_OFF`), so clearing it needs 41px of a 140px jump; he stands
+     * still for the whole wind-up *and* the throw, so every attempt costs him
+     * ground; and only one roll is ever in the air, so the floor is never a wall.
+     */
+    /**
+     * s between throws, measured from the frame one leaves his hand.
+     *
+     * Bracketed, like every other pace on this build: a jump is 0.75s of air and a
+     * roll crosses his whole corridor in ~2.4s, so anything under ~2s would put a
+     * second roll in front of a player still landing from the first. Raising it makes
+     * him decoration again; lowering it makes the corridor a wall. Re-run
+     * `screen3.test.ts`, which plays the screen.
+     */
+    THROW_INTERVAL: 2.9,
+    /**
+     * s before his FIRST throw of an attempt.
+     *
+     * The screen has to be readable before it is played (the same debt the dragon's
+     * roar pays on screen 4): the player arrives behind the partition, watches one leg
+     * of the patrol, and only then has something thrown at them.
+     */
+    THROW_FIRST_DELAY: 2.2,
+    /**
+     * s of wind-up, standing still, before the roll leaves his hand.
+     *
+     * This is the telegraph, and it is long on purpose — 0.55s is longer than the
+     * stamps' 0.34s warning, because the tell is 500px away from the player rather
+     * than directly over them. He raises the coil over the shoulder of whichever
+     * side he is facing, so the tell is on the thing that is about to act.
+     */
+    THROW_WINDUP: 0.55,
+    /**
+     * px/s the roll travels. **Under** the player's 260 on purpose: a projectile
+     * faster than the player is one you can only jump, and this one can also be
+     * backed away from, which is what keeps "read him and pick your moment" the
+     * skill of the screen rather than reaction time.
+     */
+    THROW_SPEED: 210,
+    /**
+     * px: the roll's hitbox, and exactly what is drawn (`render/workplace.ts`).
+     * A hazard sprite is its hitbox — no exceptions, and the streamers trailing
+     * behind it are drawn outside the box and are inert.
+     */
+    THROW_W: 26,
+    THROW_H: 22,
+    /**
+     * px the roll's CENTRE flies above the floor line.
+     *
+     * 30 puts its box at 559..581 against a standing player's 556..600, so standing
+     * still is a capture and 41px of rise clears it. It is deliberately low rather
+     * than at chest height: a chest-high projectile is dodged by doing nothing on a
+     * screen with no crouch, and a head-high one is invisible behind the props.
+     */
+    THROW_FLOOR_OFF: 30,
+    /**
+     * px: he only throws at a player this close, and only at one he is facing.
+     *
+     * 620 is a shade under the corridor's own length, so a player standing behind the
+     * partition at the far end can still be reached — the point of the attack is that
+     * the partition stops being a place to wait — while a player who has already run
+     * past him is left alone rather than shot in the back from off-frame.
+     */
+    THROW_RANGE: 620,
+    /**
+     * px: he will NOT throw at a player closer than this.
+     *
+     * At point-blank the roll spawns already overlapping the player, which is a hit
+     * with no telegraph — the unfair-not-hard failure the stamps' `WARN_TIME` exists
+     * to prevent. Inside this distance his body is the threat, which is the fight the
+     * screen was already about.
+     */
+    THROW_MIN_RANGE: 150,
+    /** px/s the fire orb travels. Fast enough to feel like a tool, slow enough to watch. */
     SHOT_SPEED: 620,
-    SHOT_W: 18,
-    SHOT_H: 6,
+    /**
+     * px: the orb's hitbox, and exactly what is drawn.
+     *
+     * It was an 18×6 sliver — a bullet — and the owner asked for "small orbs of fire
+     * that burn the bandages". An orb has to be roughly square to read as one at
+     * all, and 20×16 is the smallest that carries a white-hot core, a body and a
+     * dark rim in 4px cells. Widening it is a gameplay change in the player's
+     * favour, which is the right direction for the one screen where the badge hands
+     * over a verb rather than a shield.
+     */
+    SHOT_W: 20,
+    SHOT_H: 16,
+    /**
+     * s a stripped layer spends burning off him.
+     *
+     * The layer is gone from the simulation the instant the orb lands (the hit is
+     * the hit), so this only drives the picture: embers running along the band it
+     * came off, the band charring, and ash falling away. It is deliberately shorter
+     * than `SHOT_COOLDOWN × 2` so a burn can never still be running when the layer
+     * *after* it comes off — two overlapping burns read as one smear.
+     */
+    BURN_TIME: 0.42,
     /** s between shots — enough that three hits read as three separate acts. */
     SHOT_COOLDOWN: 0.22,
     /** Live pulses at once. Bounded so the array can never grow without limit. */

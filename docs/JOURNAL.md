@@ -1497,3 +1497,993 @@ Bundle **IIFE 60.4 KB / ESM 60.0 KB gzip**, site payload **63.2 KB** (was 58.1 /
 (broken · restored · 1 layer with the cutter · working · unravelling · the figure at his start column ·
 plus ceiling/figure/terminal crops at 2×) and every single change above was made because of one of
 them, not because of a code review.
+
+---
+
+## Pass: Compliance — the mark stands on a wall, the platform became a hoist, and the weather is the payoff
+
+**The brief, three owner notes on one screen.** (1) "Remove the ANSR powerup rail we have and instead
+make a 4 or 8 brick wall which will have an ANSR powerup on it — so the user can jump and grab it —
+and when the user grabs it there is *not* the effect we have right now on the character, i.e. the
+orange halo circle. Instead, just when the user takes the powerup, make the gloomy weather brighter,
+signalling happiness and change and that the environment is fresh." (2) "The floating horizontal
+platform made of brown blocks: make this a floating platform like the yellow one on the other side but
+make it go up and down so the user can jump on this and get on the top brick floor easily. And after
+you add this make a brick wall on the left side of it — this is so that the user can't jump from the
+powerup brick we are having now onto this platform." (3) "See what we can do to make the visual
+appearance more refined and less cognitive overload; you do not have to stick to the other screens'
+colours — the only thing is we stay 8-bit."
+
+**What shipped.** `wall-ansr-mark` (gx 3-6, gy 13-14 — four blocks wide, two courses tall, i.e. eight)
+with the mark standing on its **last** column; `delivery: "perch"`, a third pickup model in
+`world/badgePerch.ts`. `platform-registers` is **deleted** and the clearance **hoist** stands in its
+span (gx 9-14, parks gy 9, rises to gy 7) — the same yellow machine as the lift with the direction
+taken from data. `wall-hoist-guide` (gx 8, gy 6-9) is the owner's left-hand wall. `ComplianceMaze` no
+longer sets `shieldsPlayer`; it owns a `skyClear` dial instead, and screen 2 has weather: an overcast
+lid with rain that opens into daylight with a sun over the ANSR wall. **476 tests** (was 462), IIFE
+**61.8 KB** gzip of 90, site payload **64.0 KB**, validator green, 0 trapped states of 70,062 in the
+re-run pocket probe.
+
+### The geometry, and the three things that nearly went wrong
+
+**1. A blocking wall on the ground severs the corridor it is meant to guard.** The owner's wall has a
+job with a number attached: a player standing on the ANSR wall (top 520) has an apex of feet-380, and
+the hoist parks at 360 — 20px, which is nothing. So the shortcut is real and had to be blocked. But
+every wall tall enough to stop that jump (top above 380, i.e. gy ≤ 9) also stops the *walk* from spawn
+to the staircase, and the screen becomes impossible; every wall low enough to walk past is low enough
+to climb, stand on and jump from, which moves the shortcut rather than closing it. Three layouts died
+here before the answer: a **pier in the air**, spanning only the heights the shortcut passes through
+(gy 6-9 = 240-400), with the whole ground corridor open beneath it. It is flush with the hoist's left
+edge, so it reads as the machine's guide column instead of as a floating block — and rasterised, that
+is exactly what it looks like.
+
+**2. The hoist's parking row is load-bearing, and nothing in the build could have caught it.** The
+first cut parked the plate at gy 10 (top 400, underside 416). The tread beneath it, `stair-gst` at
+gy 12, has its top at 480 — 64px of headroom, where a 44px player needs **84** to make the 40px hop up
+to `stair-tds`. A player on that tread could still *walk* under the plate and could no longer get off
+it, and since the plate is a rider-driven machine, it would sit there parked for ever: **the only
+route up the maze, sealed.** The reachability flood would not have noticed, because the plate is
+deliberately absent from `solids` (the hazard owns the live box), and neither would any raster. Parked
+at gy 9 the underside is 376 and the headroom is 104. It is now checked twice — `validatePlates()` in
+the validator measures the plate's park position against every solid under its span, and
+`screen2.test.ts` measures the same thing against the live hazard.
+
+**3. A rising plate has to carry its rider — and that is the first time the world moves the player.**
+The lift got away with "moves only while carrying" because it *descends*: the player falls onto it
+every frame and gravity does the work. A hoist cannot. `moveAndCollide` is driven by the player's
+motion, so a plate rising under a standing body passes straight through it and drops them. `runPlate`
+therefore offsets the rider's box by exactly the plate's own delta. Two rules come out of that and are
+now in `docs/INVARIANTS.md`: **nothing may be authored over a hoist's travel** (there is no ceiling
+test in that code path), and the rider-driven rule still holds in both directions, which is what
+guarantees a plate never moves into a body it is not carrying.
+
+**One `Plate`, two machines.** Direction is data — `toGy < gy` rises, `toGy > gy` descends — so the
+lift and the hoist share the update, the state getter and the renderer (`drawPlate`, with the chevrons
+and the rail mirrored). This was worth doing for a reason beyond code size: a player who learns what
+the yellow plate does on the way *out* of this maze should recognise it on the way in, and two
+vocabularies for one idea would be worse than none.
+
+**LEGAL rides the hoist.** Deleting the platform deleted a level of the maze, and a level with no
+monster on it is a free walk — which is the one thing this screen is not. `MonsterSpec.hoist` makes a
+monster's surface the plate's live top rather than a row in `levels.json` (the `badgeFloat` rule
+applied to a monster's feet: a moving surface has one author). Its authored row survives as
+documentation and the uniqueness test still passes, because the plate parks on a row nothing else uses.
+
+### The badge on the wall
+
+`world/badgePerch.ts` is 60 lines and one rectangle, and it exists for the same reason the other two
+delivery modules do: the sim collides against it, the renderer paints from it and the validator
+measures it, so the pickup cannot be visible where the collision is not. No clock, no expiry — the
+mark that turns a whole maze into a staircase should not also be a reflex test, and the screen's
+difficulty is the maze.
+
+**It sits on the wall's LAST column, and that is a fairness decision, not a composition one.** On a
+four-wide wall, a mark in the middle can be jumped clean past by a one-tap auto-run player who cleared
+the wall late and walked off the far end. On the last column, anybody who lands anywhere on the wall
+and keeps going right walks into it. Two courses of brick is what keeps it out of a standing player's
+reach: 36px over a standing head, the same clearance the air-drop's floating brick leaves.
+
+**Three deliveries now, and the third one broke four rules phrased in terms of the first.** Same bill
+this build has already paid for the rail/drop split and for the screen with no badge at all:
+`badgeLowestBox` applied to a perch reads the wall's own row as a float anchor and puts the "band"
+155px underground — correct code, meaningless measurement. `badgeReach.test.ts` and
+`setbackLog.test.ts` both split on `delivery` now, and the perch has its own three proofs (out of
+standing reach and inside one hop · four seconds of holding *right* without jumping never collects it ·
+a one-tap pass takes it inside a contiguous window ≥0.3s).
+
+### No halo, weather instead
+
+`ComplianceMaze` is now the one hazard that **declines** a bubble it is entitled to. Contact really is
+harmless once GCC-BOT has filed everything, so the rule ("only where contact is harmless") is not being
+bent — the owner asked for the news to be on the world rather than on the hero. `shieldsPlayer` is
+simply absent, and there is a test that says so **in words**, because a missing flag reads as an
+omission and the next person would put the halo back.
+
+What replaced it is a dial, `skyClear`, moved by simulation time over `CLEAR_SKY_TIME` (1.6s — slower
+than the arms coming up at 0.45s, faster than the ~4s exodus, so the payoff has an order to it). And
+the weather is **two layers**, which is the lesson the Workplace's `restore` already taught in a
+different costume: brightening the sky alone rasterised as a bright sky in front of an unchanged dark
+maze, because the sky is *behind* the level and the level is most of the frame. So `scenery.ts` paints
+sky, cloud, rain and sun from a plain `weather` number (it still knows nothing about hazards or
+badges) and `render/maze.ts`'s `drawWeatherWash` paints the veil-and-wash over the masonry and under
+the cast — `0.22 × (1 − clear)` cool dark, `0.07 × clear` pale, exact inverses.
+
+**Four raster findings on the weather, none of them visible in the code.**
+- **The sun was behind the pier.** Placed at x=322 it sat exactly on the guide column and read as a
+  lamp on a post — the occluded-sun defect, twice paid for now. Moved to 262/168, which is measured
+  against the pier, the HUD's left column (x≈194) and the stage sign.
+- **A shaded sun is a light bulb.** The stepped disc's bottom two rows in the rim tone read as a stem;
+  a rim course *under* the disc landed on its own bottom ray and did the same with a gap in it. The
+  sun is the light source on the frame, so it is the one round object here that gets no lit side.
+- **Clouds must shrink, not fade.** Fading them out reads as a rendering fault. The lid contracts to
+  55% towards each cloud's own centre and lifts 24px as it lightens, so the sky *opens*.
+- **Rain has to be few and bright.** A dense low-alpha field is the dithered-halo trap again (grime on
+  the screen). Sparse slanted two-cell drops at 0.55/0.30.
+
+### The refinement pass on the material
+
+The brickwork was a 20×20 course at 0.1 speckle. Over the 240px filings block that is twelve rows of
+joint, and it rasterised as a mesh laid across the entire climb — on the screen with more stone in it
+than any other. Now a 40×20 course at 0.05 with per-brick `faces` and a `bevel`, exactly the three
+moves that quietened screen 1's clay: half the joints, variation between bricks rather than inside
+them, and a shadow per course, which is what carries depth now there is a bright sky to silhouette
+against. The skyline's windows came down two values as well (they were `#8FCAD6` — brighter than the
+monsters standing in front of them, which is the defect screen 1 was rebuilt to fix) and both its
+tones now lerp with the weather, so lit windows dominate at night and disappear in daylight.
+
+Two smaller reads from the raster: a 240px 16px-thick plate is a **yellow ruler**, so both plates got
+carriage shoes hanging under each end (below the top face, never above it — art over a platform
+promises footing the box does not have) and a chevron per 80px of width.
+
+### Probes
+
+- **Pocket / soft-lock probe rebuilt** (`/tmp/brrender/pocket.mts`; the old one was gone). Full
+  geometry with the plates parked: **0 trapped of 70,062 states**, every authored surface reachable
+  (600 → 560 → 520 → 480 → 440 → 400 → 360 → 280 → 240 → 200). Plates at the far end of their travel:
+  0 trapped. Control run with the climbable geometry removed: furthest x **960**, the statutory wall's
+  face, so "you cannot cross on one level" is still proved rather than asserted. The 381 states past
+  the ends of the ground band are **falls, not pockets** — the same distinction the last pass on this
+  screen had to teach the probe, and it had to be taught again because the probe was rewritten.
+- **Validator**: the two-flood rule for a plate that is part of the route (board it parked · continue
+  from the top of its travel). Modelling the plate at both ends in one flood proves a jump nobody can
+  make; leaving it out reports the screen as impossible.
+
+### Ordinary bookkeeping
+
+`hoist` joins the strip-level-notes plugin (its note is 600 characters of why the parking row is what
+it is, and it was going to ship). `src/data/{levels.json,tuning.config.ts}` mirrored to the root
+copies. `npm run analyze` still reads 120.2 KB of 90 for the reason in `docs/OPEN.md` §1 — it sums the
+ESM and IIFE builds; the real download is 61.8 KB. Four rasters were used (gloom · riding the plate ·
+half way through the change · daylight, plus wall/hoist/sun crops at 2×) and every art decision above
+came out of one of them.
+
+### Addendum, same pass: the perch had to leave the path
+
+The owner read the first cut back immediately: *"the powerup is easily available and is on the way, so
+the player would anyway take it — we need to keep it somewhere that it's on the user to take it or not,
+maybe add a floating brick structure where it would reside, and the player jumps to that, takes it and
+then comes back to the normal path."*
+
+**They were right, and it is a model problem rather than a difficulty one.** `wall-ansr-mark` stood on
+the floor of the left corridor, two courses tall, so it was a hurdle across the only route: every
+player cleared it, and clearing it *is* collecting the mark. A badge nobody can decline is a badge
+nobody decides to take — and the run's whole argument is the difference between the player who took
+ANSR and the player who did not. It also quietly made the delay log a formality, because the unassisted
+maze had become unreachable by accident.
+
+So the structure is a **floating deck** now: `gx 4-6, gy 12`, three blocks, one course thick, 120px
+over the corridor with **36px of clear air under it over a standing head**. Holding right walks
+straight underneath, past the mark, into the maze. The rule is in the validator: a perch's support may
+not reach the floor.
+
+**Two numbers came out of the change, and both are measurements rather than choices.**
+- **The deck is three blocks, not four.** It is 120px up, so it has to be cleared in a single arc, and
+  every column added to its *left* end eats run-up. At gx 3-6 a one-tap auto-run player had **12
+  working taps (0.20s)**; at gx 4-6 it is **21 (0.35s)**, against the 0.30s budget the rail and the
+  air-drop are both held to. The right end cannot move instead: gx 6 is the last column the badge may
+  use at all, because TAX's corridor starts at gx 7 and the badge has to precede every obstacle.
+- **A pickup standing on a solid needs the button held for ~20 frames, where a rail needs 12.** Exactly
+  the figure the air-dropped brick forced on screen 4, arrived at again from the other direction: at a
+  12-frame hold jump-cut caps the rise at ~121px against a deck top 120px up, so the player lands on
+  the deck's face instead of on its top. `oneTapRun` takes a hold length now.
+
+**And "optional" had to be prevented from meaning "impossible on a phone".** One-tap auto-run is the
+default on touch, so the deck is proved twice: the auto-runner who never jumps walks past it (the whole
+point), and the auto-runner who taps once takes it (or executives on phones would simply never see
+GCC-BOT). Both are in `badgeReach.test.ts`.
+
+**Lifting the deck also promoted the guide pier from belt-and-braces to load-bearing.** From a deck at
+480 the apex is feet-340 — *above* the parked hoist's top of 360, 80px away horizontally — so without
+`wall-hoist-guide` the entire lower maze could be skipped deck → plate → upper flight. The probe now
+answers that directly: with every stair, step and block removed, the only surfaces the flood can stand
+on are the ground (600) and the deck (480). The plate is unreachable, so the skip does not exist.
+**478 tests**, 0 trapped of 71,353 states, validator green.
+
+### Addendum 2, same pass: "the sun and clouds are way too pixelated"
+
+Owner, on the first weather build: *"Make the sun and clouds look a bit better — it's way too
+pixelated and looks not refined. Stick to 8-bit but make it look better."*
+
+**The diagnosis was the same for both, and it was not the cell size.** Each cloud was three wide
+`pxRect`s (a base, a shoulder, a cap) and the sun was eight 8px rows following a half-width profile.
+Both were snapped to 4px, so they were *technically* pixel art — and both read as slabs, because every
+step in the outline was 20-40px long. **8-bit is a cell size plus a silhouette**, and what was missing
+was the silhouette: an 8-bit machine would have drawn these from a tile mask with a step every cell,
+not from three rectangles.
+
+So neither shape got a smaller cell (4px is the same cell the rain, the badge halo and the ground
+chevron use — dropping to 2px would have made it *less* consistent, not more refined). What both got
+was **more steps of the same cell**:
+
+- **The cloud is a height per column.** Three authored lobe sets (`CLOUD_LOBES` — `dx`, `r`, `h` per
+  lobe), summed as a max, quantised to the cell, one fill per 4px column. A tall lobe off-centre, two
+  shoulders and a low one trailing away is what makes a cumulus; one lobe is a hill and two symmetrical
+  ones are a bow tie. On top of the run: a lit crown cell, a second crown cell wherever the silhouette
+  is *climbing* (which puts the light up-left, where every other object on these screens is lit from),
+  and a shaded cell along the base so the cloud has an underside instead of ending on nothing. Five
+  clouds, three shapes, ~75 fills each — cheaper than the skyline it sits behind.
+- **The sun is a real pixel circle.** Every 4px cell whose centre is inside R=32, in three concentric
+  bands (core, face, rim) with the core pushed 5px up-left, plus twelve tapering rays starting one cell
+  clear of the rim (three cells on the cardinals, two on the rest). A 64px disc on a 4px cell has
+  sixteen rows instead of eight, and sixteen is where a stepped circle stops reading as a polygon. The
+  rays replaced four long bars that sat 34-48px out with a hole between them and the disc, so they read
+  as four detached dashes rather than as light coming off a sun.
+
+The two rules that came out of it are in `docs/INVARIANTS.md`: **count the steps in an outline before
+reaching for a smaller cell**, and **the light source on a frame cannot itself be lit from somewhere
+else** — a sun gets concentric bands and an off-centre core, never a shaded lower half (which is what
+made the last two attempts light bulbs).
+
+`render/scenery.test.ts` is new and pins exactly this, because it is the part a code review cannot see:
+one cell size throughout, ≥16 rows and ≥8 distinct row widths in the disc, >40 columns and ≥6 distinct
+heights along a cloud's top edge, a single base line per cloud, the bank contracting *and* lifting as
+the dial rises, every tone at ≥0.45 alpha (few and bright, never a wash), and no value orange anywhere
+in the weather. **487 tests across 44 files**; IIFE 62.1 KB gzip of 90, site payload 64.5 KB.
+
+### Addendum 3, same pass: the rain was rewinding, and the badge was still on the path
+
+Two owner notes. *"The rain doesn't look nice right now — it looks like a boomerang loop that's going
+on and not continuous."* And: *"The brick the ANSR powerup rests on is good but still is too reachable
+— add one more floating brick structure that will have the powerup, maybe on the left side of this
+existing floating brick so the user has to go on and jump the opposite direction to get it."*
+
+#### The rain was a bug, not a look
+
+`drift = (t * 620) % 240`, added to every drop. So the whole sheet advanced 240px and then **all of it
+jumped back to the start at the same instant**, 2.6 times a second. That is exactly the boomerang the
+owner described, and it is worth stating as a rule because the code read as reasonable: **a scrolling
+field must wrap per particle, over its own full span, never as a shared offset over a shorter one.**
+Each drop now has its own phase and sits at `(phase + t × speed) mod span`, where `span` is the whole
+fall — so wraps are staggered and each one is a drop leaving at the bottom and re-entering at the top,
+which is what rain does.
+
+Three things came with the fix:
+- **Two sheets.** Near (880 px/s, 18px streaks, 0.50 alpha, brighter leading cell) over far (520 px/s,
+  11px, 0.28). One sheet is a pattern; two are depth, and the parallax is what stops the eye locking
+  onto individual drops and noticing the loop at all.
+- **The streaks travel along their own slant** (`RAIN_TILT` 0.16, ~9° off vertical), rather than being
+  tilted sprites falling straight down — which reads as stripes, not as rain.
+- **The span covers the frame plus one streak, so nothing is culled.** That was a side effect worth
+  keeping: the sheet has a *fixed* number of streaks, which is what lets `scenery.test.ts` follow one
+  drop by index from frame to frame and assert it either fell or wrapped a whole span. Over 40
+  consecutive frames, every streak moves down except <10% that wrap — the old field would have failed
+  that test on every fourth frame with 100% moving up.
+
+`wet` still thins the sheets by dropping whole lanes as the sky clears, so the rain *stops* instead of
+fading to a ghost, and reduced motion draws the same drops at their phase with no time term (a still
+sheet of rain: this screen's weather is information, so holding it is honest where hiding it is not).
+
+#### "Still too reachable" is a statement about direction, not height
+
+The single deck was one hop off the floor on the forward line: a player running right taps once, lands
+on it and walks into the mark. The detour cost nothing and therefore decided nothing — the same defect
+as the floor-standing version, one row up. **What makes a pickup a decision is having to go the other
+way.**
+
+So there are two structures now. `step-ansr-approach` (gx 4-6, gy 12) is only the stepping stone, and
+the mark stands on `wall-ansr-mark` (gx 1-2, gy 9): 120px higher, 40px back to the **left** across a
+gap, and **out of reach of the ground entirely** — a full jump off the floor tops out at feet 460
+against a deck at 360, which is what makes the step mandatory rather than convenient. The move is: run
+right, hop up, stop, turn round, and jump back the other way with the button held (a solid has to be
+cleared rather than touched — 20 held frames, the figure the air-dropped brick forced). The mark is on
+the deck's **right-hand** column, which is the same "arrive at the mark" rule as before read from the
+other end.
+
+Three measurements, all now tests: the step is inside a jump of the ground · the deck is inside a jump
+of the step · the deck is **not** inside a jump of the ground. And two claims about the shape: holding
+forward for four seconds walks under both decks and takes nothing, and **no single forward tap, at any
+frame in a 60-frame sweep, collects it** (where the previous layout had a 0.35s window of taps that
+did). The probe says the same thing from the other side: with the step removed, the flood cannot stand
+anywhere but the floor.
+
+#### The touch layout had to be corrected for this to be honest
+
+One-tap auto-run is the default on touch and that layout **hid the whole move pad**, so a phone player
+could not go left at all — a badge you have to jump back to would have been unreachable for most of
+this audience, which is worse than it being free. The pad now keeps its **left** button under auto-run
+and hides only the right one, which is redundant when forward is automatic. One tap still plays the
+game; one tap plus a back button plays the detour. "One-tap" means you never have to press forward, not
+that you cannot turn round — and every future level detour depends on that distinction.
+
+**494 tests across 44 files** · 0 trapped of 76,273 probe states · 0 states standing on the parked
+hoist with the staircase removed (the skip stays closed, and lifting the badge deck to gy 9 does not
+open a new one) · IIFE 62.3 KB gzip of 90, site payload 64.6 KB · validator green.
+
+**One probe correction worth recording:** the pocket flood reported a single trapped state at x≈0.8 —
+a player mid-jump off the left-hand deck at the very edge of the frame, whose only continuations are
+off-frame and therefore never expanded. Leaving the world is a **fall**, which `forceSetback('fall')`
+relocates out of, so a state whose successors are all off-frame is safe rather than trapped. That is
+the same lesson an earlier pass learned about off-frame *dead ends*, one step further in: it applies to
+the state feeding them too. With that fixed the count is 0, and the geometry never changed.
+
+### Addendum 4, same pass: the maze had no death pose, and the mark had one ring too many
+
+Two owner notes. *"Add a death animation for this screen — when the player dies, what happens to the
+player?"* And: *"Remove the halo effect that is around the ANSR powerup."*
+
+#### The player gets FILED
+
+This build already had the rule — **every death that stops the stage is visible on the player** — and
+two examples of it: the DENIED stamp flattens the hero on screen 1 (`flattened` → the `squash` pose,
+with the stamp still holding him down), and the taped figure wraps him on screen 3 (`tangled` →
+`drawTangled`). Compliance was the screen that had none. Four passes of work on it, and contact still
+booked two months, froze the frame and said nothing about what had just happened.
+
+The pose is built out of **the obstacle's own vocabulary**, which is where these things come from: the
+creatures are rubber stamps on filing cabinets, so what they do to you is bury you in the queue.
+`drawFiled` (pure, in `render/maze.ts`) paints three layers over the hero:
+
+- **A mound of forms to his chest**, five courses stepping inwards. The first cut was symmetrical and
+  rasterised as a *wedding cake* — something somebody built rather than something dumped on him — so
+  every course is offset sideways and the keylines stop short of the ends, which turns ruling into the
+  shadow one sheet casts on the next. Two tones, both lighter than anything else on this screen except
+  the monsters' approval plates, because it is the same material.
+- **Loose sheets still coming down**, stepped on the host's phase — and *held* rather than deleted
+  under `prefers-reduced-motion`, because the information is "he is under a pile of paper" and that
+  survives being still.
+- **The slot mark** pressed across the top sheet in the creature's dark red. No word is set on it: the
+  delay label (`TAX +2 MONTHS`) is already flying up off his body on these exact frames, and two pieces
+  of type on one 48px figure is one too many.
+
+**And the pose has to say who did it.** A creature standing beside the pile with its arm at rest reads
+as a bystander, so `MonsterState.struck` now marks the one that made contact: the renderer slams its
+boom 10px below rest and swaps the head to a third palette with its slot lit (same grid, never a second
+sprite). That works for the same reason `Stamps.struckAt` does — `Simulation.setback()` deliberately
+does not reset the hazard, so the pose survives into the frames it is painted on. `screen2.test.ts`
+asserts the sim side of that (exactly one monster is `struck`, and it is TAX), because it is simulation
+state rather than decoration. A burst of near-white paper joins the existing shake/flash/hit-stop on
+`'monster'`, the second cause to throw debris after the tape shreds on `'mummy'`.
+
+#### There is no ring round the mark, and that is the end of a long thread
+
+Four haloes have now been tried on the ANSR badge: a dithered field (grey-brown dirt at 40px), four
+lone cells off the ray tips (detached dots), a radial corona (which reads as *more rays*, so the logo
+stops being a closed shape), and the tangential dashed ring that shipped for several passes. The owner
+has removed the fourth as well, and the deletion is the right end of the thread: round a 40px mark a
+ring reads as a lasso drawn round the logo rather than as light coming off it, and on a **perched**
+badge — standing still on masonry — there is nothing to explain why it would be turning.
+
+So the mark is now allowed to be the brand asset and nothing else. What says "pickup" is everything
+that is *not* the logo: on a rail the shaft, its wake and the ground chevron; on a perch the lit plinth,
+the contact shadow and four flare cells at full alpha. Rasterised on both screens 1 and 2 to check it
+still reads, and it does — the rail is if anything cleaner, because the shaft was competing with a ring
+30px away from it.
+
+The guard is a **count in the annulus the ring lived in** rather than a check for one constant: cells
+between 24 and 34px of the mark's centre are exactly 4 on a perch (the flares), fewer than 6 on a rail
+(the wake), and every one of the rail's is on the shaft's own vertical axis. Any new ring at any radius
+near the mark fails that immediately. `HALO_PX`/`HALO_R`/`HALO_ON`/`HALO_OFF` and `drawHalo` are gone;
+the history stays in a comment above `CHEVRON` and in `docs/INVARIANTS.md`.
+
+**503 tests across 44 files** · typecheck, lint, validator green · IIFE 62.3 KB gzip of 90.
+
+---
+
+## Pass: the Workplace, again — two tapes, a body with joints, a patroller instead of a respawn, and fire for ammunition
+
+**The brief, six owner notes on one screen.** (1) "The yellow tape around the mummy can be of a
+different colour because right now it merges with the other tapes in the office." (2) "The colour
+scheme needs to be made better — the player and the brick and background feels the same." (3) "Add
+lights once things are restored in the office." (4) "Make the caution signboards and tapes and other
+such things better visually." (5) "The mummy/human isn't well shaped — make the shape better. And the
+mummy right now walks in loop, i.e. when it moves to the end it just respawns from the spawn point;
+instead it would be better if it goes and comes back, like to and fro." (6) "The gun isn't that good —
+make it better and more visually noticeable, and the effect it has on the bandages of the mummy should
+be more visually clear, like the tapes are burning. So to complement this the bullets can be small orbs
+of fire that is burning the bandages, and the bandages are shown burning and getting ashed."
+Plus the standing constraint: "everything should be very refined and look good but staying in the 8-bit
+theme we have."
+
+### What shipped
+
+**Two tapes, and they are different colours on purpose.** The room keeps caution yellow (`#E8C23A`);
+the figure is bound in **red barrier tape** (`WRAP_TAPE #D2402C`, shade `#8E2216`). `tapeStrip` takes a
+`TapeTone` now rather than reading the module's constants, so one piece of stepping arithmetic paints
+either kind, and `drawTangled` — the death pose — uses the *figure's* tape, because what caught the
+player is the figure. This is the second attempt at the same problem: the previous pass held the props
+back to **0.78 alpha** so the one lethal thing on the floor would not be one more yellow shape among
+nine, and the raster this pass says plainly why that was not enough. Nine yellow shapes plus one
+yellow figure is ten yellow shapes; alpha changes which of them is loudest, not how many there are.
+The 0.78 stays, because it is still right for its own reason, but the separation is now carried by hue.
+Red also survives the burn, which the yellow could not have: an ember front is *lighter* than red and
+*the same value* as yellow.
+The three layer pips over his head moved to his tape's colour with it — a yellow pip counting red bands
+is a readout of something that is not on him.
+
+**The figure has joints.** The 20×26 grid was re-authored rather than tweaked. What was wrong with it
+was structural and invisible in code: an **8-row head** (31% of the figure, i.e. chibi proportions)
+sitting straight on a full-width torso, no neck, no waist, and legs divided by a **single column of
+outline** — 3px of dark inside a solid slab. So the raster was a bollard with an arm. Now: a 6-row head
+with its corners cut top and bottom, a 1-row neck, a shoulder row that steps in before the torso
+reaches full width, a waist that narrows, and **two legs separated by a transparent column** with the
+room showing through. The nine rows that the head gave back went to the legs, which is where a human
+carries them. Two consequences that had to be followed through rather than noticed later: every band
+below the hips has to be authored **per leg** (a strip spanning both would tape the gap shut, which is
+the seam-closing-the-eye-slit defect in a different costume), and the eye slit went to **two** rows so
+it survives at 3px cells. `SEAMS` is still derived from the grid, so it could not drift.
+
+**He paces, and that is a gameplay change, not a visual one.** `RETURN_TIME` is gone and `TURN_TIME`
+(0.3s) replaced it: he walks to the end of his corridor, stands for a third of a second, turns, and
+comes back. The `returning` phase — the beat he spent snapping 700px back to his start column — is
+deleted along with the whole reason it had to be **harmless**, and the renderer's fade-in went with it.
+Nothing teleports, so no frame can materialise a lethal 60×78 body on a standing player, and `turning`
+is therefore *lethal*: he is standing where the player has been watching him walk to.
+
+That deleted the screen's own justification for being winnable without the badge, which was, in the
+level note's words, "he loops back behind you rather than turning round". **So it had to be re-earned,
+and it was measured, not argued.** A probe of 30 reactive policies (jump trigger 70–150px × hold 8–20
+frames × head-on-only or not) over 12 start delays:
+
+| jump trigger | clean clears, of 12 |
+|---|---|
+| 70px | 0–1 |
+| 90px | 0–1 |
+| **110px** | **8–10** |
+| 130px | 8–10 |
+| 150px | 8–9 |
+
+and the blind sprint — hold right, jump only when a wall stops you — **loses a life every time**.
+That is the shape the screen wants: crossable, by one specific move, and not by holding a direction.
+The move is to meet him head on, and the arithmetic behind it is now in `tuning.config.ts` beside
+`WALK_SPEED`: a jump clears his 78px crown for **0.455s**, the closing speed against an oncoming figure
+is 260 + 150 = **410 px/s**, so the 88px that have to pass under the player take **0.21s**. Overtaking
+him from behind is deliberately impossible — 110 px/s of relative speed needs 0.8s of air against
+0.455s available — which is exactly what stops "hold right" being an answer.
+**The first run of that probe reported 0/12 for every policy including the blind sprint**, which is the
+finding worth keeping: the partition wall at gx 6 is 80px of solid, so a policy that never jumps at a
+wall never leaves the spawn. A probe has to be able to do the *boring* part of the level before its
+results mean anything.
+
+**Ammunition is fire.** `SHOT_W`/`SHOT_H` went 18×6 → **20×16**: an orb has to be roughly square to
+read as one, and 20×16 is the smallest that carries a rim, a body and a white-hot core in 2px cells.
+The disc is a **stepped half-width profile** (8, 8, 6, 4 either side of the centre line) in three
+concentric values with the core pushed *forward and up*, plus a three-cell ember wake and two sparks,
+all flickering off the orb's **own x position** rather than a clock. The first cut listed the profile
+the other way up — widest rows at the poles — and rasterised as an orange brick with a hot corner:
+right in code, obviously wrong in a PNG, and now stated as a test.
+
+**The tape burns off.** `Workplace` tracks `burnT` and `burnLayer` per figure and `MummyState` carries
+`burn` (0..1) and `burning` (which `need` group is going). The layer leaves the *simulation* on the
+frame the orb lands — the hit is the hit — and the picture of it runs for `BURN_TIME` (0.42s, chosen so
+it can never still be running when the next layer comes off, i.e. under `2 × SHOT_COOLDOWN`). Each band
+is then one of three things: tape, **burning** (`burningBand`: an ember front eating along it in the
+direction the orb was travelling, white-hot core, flame, deep red, then ash cells dropping out on a
+stable hash), or **gone** (`scorchBand`: a permanent soot mark). So the body carries the score, not
+just the pips, and the unravel throws ash and embers instead of intact strips of tape — which it had to,
+because by then the player has watched all three bands burn and falling tape would contradict that.
+
+**The gun.** Re-authored 20×14 at scale 2 (40×28, up from 36×26 — scale 3 is still out, it is a plank).
+The reel of tape on top became a **glowing ember tank**, and the nose became a real **five-cell barrel
+with a white-hot bore**. The receiver went **dark** first, on the room's own "furniture is darker than
+the wall" rule, and the raster killed it immediately: the tool is held at chest height, which on this
+screen is exactly where the dark furniture is, so the player was holding four orange cells in mid-air.
+It is a **mid tone with a lit rail and a black keyline** now — the rule only ever applied to *the room*,
+and a thing the hero carries has to read against whatever he is standing in front of.
+
+**Colour scheme.** Two moves, and the constraint that shaped both is that the hero appears on six
+screens and cannot be tuned for one. The floor material (`TILE_MATERIALS[3]`) came **off the teal axis**
+to a warm grey-olive (`#3C443A`, edge `#96A38C`) — it was `#28383D`, two steps off the wall's own
+`#0A2B33`, so wall, floor and a Light-Teal blazer were three variations on one hue and the frame read as
+one dark field with shapes scored into it. And the **lowest wall register went darkest** (`#051B23`,
+from `#0A2E39`): it is the 140px the hero's whole body stands against, and his shirt was carrying the
+silhouette on its own.
+
+**The lights.** Three things, and the first is a defect the raster found rather than a request.
+`floorPool`'s seven bands **widened** on the way down (54 → 160 half-width) and rasterised as a
+flat-topped stepped **pyramid** sitting on the floor: an object, which is the third time this screen and
+Reception between them have shipped light-as-an-object. Light on a floor seen side-on is brightest where
+the floor meets the wall and dies towards the camera, so the profile **narrows** now (160 → 78) with a
+dithered fringe along the bottom and a bright walkable edge at the floor line. Then the payoff got
+actual **fittings it did not have**: a continuous **cove** behind the ceiling line, an uplit **dado
+course**, a **task lamp on each desk**, double the daylight in the glazing, and the full-frame wash up
+from 0.075 to 0.11 — because four ceiling fittings coming up to full is a change in four places and a
+working office floor is lit from more than four. `litSurfaces` also picked up two more genuinely
+up-facing faces, since there had been 220px of wall between the duct and the dado catching nothing.
+
+**The props.** The cone and the wet floor sign were the same picture — two filled yellow triangles, 48
+and 56 tall, standing on the same floor. They separate on **silhouette** now, not colour: the cone is
+taller and much narrower (2.4:1) with a curved flare, **two** white reflective collars and a square
+black base plate wider than the cone; the sign is a genuine **Λ of two boards** with the room showing
+through between their feet, the near board carrying the falling-figure pictogram, drawn from the
+*board's* centre at each row rather than the prop's (a pictogram at the prop's midpoint hangs off a
+board that has already leaned 12px away from it). The tape runs got a **twist** every fifth segment —
+8px strips laid end to end read as a dashed rule, and a ribbon that turns edge-on reads as tape. The
+barricade rails got a black keyline all round, and its hazard lamp became a hooded lens with four flare
+cells — first drawn in amber (`#FFB04A` over `#B85E12`), which is orange in everything but name, and
+four of them on the floor put the reserved value accent in competition with the badge two columns to
+the left. It is in the caution-yellow family now.
+
+### Gates
+
+**508 tests** (44 files, up from 503). Typecheck, lint, both builds and `validate:levels` green.
+Bundle **IIFE 63.84 KB gzip** (from 62.5), site payload **66.24 KB** — 71% of the 90 KB budget.
+Six new tests: the figure's neck/waist/leg-gap proportions · "bound in a different tape from the room,
+and not one caution-yellow cell lands on him" · the burn leaves fire and then soot · the orb is round
+(widest course at its middle, poles narrower, nothing wider than the hitbox) · he paces both ways and
+never leaves his authored corridor · he never moves more than one frame of walking in one frame, and
+the crossability probe in miniature.
+
+## Pass: the Workplace, third look — he throws, the badge falls out of a spotlight, and the room came off the teal axis
+
+Six owner notes, all on screen 3, and they turned out to be one gameplay note, one layout defect and
+four colour/art notes that share a single diagnosis. Verbatim:
+
+1. "Add a capability for the mummy to throw the bandages at the player capturing him."
+2. "The first computer screen that comes after things are restored is overlaying on the brick obstacle
+   we have in the beginning."
+3. "Change the colour of the desks, it's interfering with the character — and also the desk and computer
+   screen doesn't look refined."
+4. "Add 4 big spot lights from the ceiling facing down, glow up when things restore."
+5. "Change the background wall colour, it's almost the same colour as the outer view from the window and
+   also almost the same colour as our character."
+6. "For the powerup remove the rail and add — from the spot light I just said — an ANSR powerup that
+   falls and stays for a few seconds and the user has to take it otherwise it's gone, and this happens
+   at regular intervals; and this powerup doesn't drop immediately, it's visible as the user comes to
+   this screen but drops after a few seconds the user has spent in the screen, and this drops on a
+   cabinet or something which is before the partition wall so the user can take it safely but the
+   player has to put in some effort to grab it."
+
+Notes 4 and 6 are one mechanism — the fitting the light comes out of is the fitting the badge comes out
+of — and notes 2, 3 and 5 are all the same underlying fact: **this room had one hue and three of its
+objects were sitting in the same place in it.** So the pass reads as four jobs: the throw, the fourth
+delivery model, a floor plan, and a repaint.
+
+### 1. He throws his bandages, and cover is the answer to it
+
+The figure was a metronome you had to pass. He now also **unwinds a length of his own tape and throws
+it down the floor**, which changes what the screen is about: the corridor is no longer the only
+dangerous place on it.
+
+The design is three numbers and one piece of geometry, and every one of them exists to keep the attack
+readable rather than to make it weaker.
+
+- **A long telegraph, on his own body.** `THROW_WINDUP` 0.55s — longer than the stamps' 0.34s warning,
+  because the tell is 500px away from the player rather than directly over them. He raises a coil out of
+  the fist at the end of his reach, gaining a course and a ring as it grows, and three chevrons step out
+  along the line the roll will take. All of it is drawn from `MummyState.wind`, the simulation's own
+  count, so the tell cannot promise a throw that is not coming.
+- **He stands still through the whole thing** (`winding` is a phase, not an overlay), so every attempt
+  costs him ground. That is what pays for the attack being ranged at all.
+- **It is jumpable, and only jumpable.** `THROW_FLOOR_OFF` 30 puts the roll's box at 559–581 against a
+  standing player's 556–600: standing still is a capture, and 41px of a 140px jump clears it. Chest
+  height would have been dodged by doing nothing (there is no crouch on this screen) and head height
+  would have been invisible behind the props.
+- **One roll in the air, ever**, enforced in `aim` rather than hoped for.
+- **`THROW_SPEED` 210, under the player's 260.** A projectile faster than the player can only be jumped;
+  this one can also be backed away from, which keeps "read him and pick your moment" the skill.
+- **`THROW_MIN_RANGE` 150.** At point blank the roll spawns already overlapping the player, which is a
+  hit with no telegraph — the unfair-not-hard failure `WARN_TIME` exists to prevent. Inside that
+  distance his body is the threat, which is the fight the screen already was.
+- **He only throws at a player he is ALREADY FACING.** He never turns to aim. That is what keeps the
+  patrol a metronome: his back is genuinely safe, so which way he is walking is *information*, and the
+  throw cannot smuggle a direction change into the pattern the player has just read.
+
+Then the thing that only became obvious once note 6 was in the same pass: **the partition wall has to be
+cover.** The owner's brief for the drop is that the mark lands before the partition "so the user can
+take it safely", and the badge now takes 3.7s to arrive — so a roll that crossed the wall would make the
+one place on the floor that is meant to be safe the one place you cannot stand still. `Workplace` is
+therefore the only hazard handed the screen's static solids: a roll dies against a solid, and
+`hasLineOfFire` stops him even *winding up* at somebody behind one (a wind-up whose roll dies on the
+wall reads as him not understanding the room, and worse, it burns the interval, so sheltering would
+*suppress* the attack instead of avoiding it). The cutter's orb still ignores geometry, deliberately, and
+the two rules now say opposite things for reasons that are each about the screen rather than about
+physics.
+
+**The winnability argument had to be re-measured, again**, because that is what a new attack invalidates.
+Probe: 20 policies (five jump-trigger distances × four roll-dodge distances) over 12 start delays.
+Result: **best 9/12, and every win in the entire sweep was delay-free.** The best policies are jump-at-
+110-130 with a **late** dodge — 70px, not 140 — which is a real property of the attack rather than a
+quirk of the probe: at 210 px/s against the player's 260, jumping early lands you back down into the
+roll. The blind sprinter is 0/12 and is now stopped by two different things. `screen3.test.ts` plays the
+shipped tuning and states the shape of that result.
+
+### 2. The fourth delivery model: it falls out of the light
+
+`world/badgeCeiling.ts`, alongside `badgeFloat` (rail), `badgeDrop` (airdrop) and `badgePerch` (perch).
+Four beats, and each one asks a different question:
+
+- **`held`** — the mark hangs under the first spotlight's lens for `HOLD` 3.2s, lit, obvious and
+  completely untakeable. **This beat is the mechanic**: it is the only pickup in the game that is
+  *visible before it is takeable*, so the offer is on screen from frame one and being ready for it is a
+  decision. 3.2s is measured against the walk — the spawn is ~170px from the drop column, so a player who
+  runs straight there waits ~2.5s under it.
+- **`falling`** — straight down the fitting's own axis (an arc would say somebody threw it), eased t²,
+  with a contact shadow tightening on the cabinet top so the run-up can start before it lands.
+- **`live`** — the perch's geometry with a clock on it: `LIFETIME` 4.5s, four pips going out, and the
+  whole thing blinking through the last `WARN_TIME`.
+- **`gone`** — `GAP` 2.4s, then it is back in the fitting. A missed drop costs seconds, never the
+  capability.
+
+The landing pad is an **overhead storage cabinet that floats** (gx 4-5, gy 12, `role: "pedestal-cabinet"`
+so the renderer paints it as furniture rather than as level brick). Row 12 is the row this build has
+already proved twice: underside at 520 clears a standing head (556) by 36px, so holding right walks
+underneath and declining is possible, and its top puts the mark 120px up — most of a 140px jump, i.e.
+the button held for ~20 frames. Identical arithmetic to Hire Under Fire's air-dropped brick, arrived at
+from the other direction.
+
+**And the cabinet's right edge is load-bearing geometry.** At gx 4-5 it ends at x 240; a player pinned
+against a partition at gx 6 occupies 212–240, i.e. *underneath it*, where its underside caps their jump
+at 36px against the 80px the wall needs — **the screen would have been sealed.** So the partition moved
+to **gx 7** and the figure's corridor to **gx 10**, which is also why `FIRING_COLUMN` in the tests went
+7 → 9. This is the "a rising plate's park row is load-bearing and the validator cannot see it" trap in a
+new costume: the thing that seals a screen is not the pickup, it is what the pickup's furniture does to
+the *jump beside it*.
+
+Everything phrased in terms of the rail had to be split for the **fourth** time (rail vs drop, then the
+screen with no badge, then the perch, now this). `badgeLowestBox` on this badge reads gy 4 — the
+*spotlight's* row — and puts the "band" 201px over a standing head, so `badgeReach.test.ts` and
+`setbackLog.test.ts` both had to name the deliveries they apply to; the latter is now an explicit
+`delivery === 'rail'` filter rather than a growing list of exclusions. `screen4.test.ts`'s "every other
+screen always has a pickup box" also had to learn that there are two screens whose badge can be absent.
+The validator got the perch's three geometric rules generalised (rests on a solid, that solid floats, the
+rest box is out of standing reach) plus `validateCeilingTiming`, the ceiling twin of the air-drop's
+fairness gate.
+
+### 3. The floor plan, and the defect the owner spotted
+
+`WORK_PODS` was `[190, 430, 668]`. The pod at 190 spanned 190–386 with its monitor at 224–272 — straight
+through the partition wall's column, which is exactly what the owner saw: **the payoff's lit screen was
+painted on top of the one solid the player has to jump.** That is the "a backdrop prop may not stand in a
+column a solid stands in" rule, and this screen now has three solids to keep clear of rather than one.
+
+Right of the new partition there is not room for three 196px pods before the terminal at 922, so the room
+**lost a pod** (`[470, 690]`) and the cabinet bank moved 290 → 340 (it overlapped the partition too). The
+server rack went 100 → 56. Both remaining pods get a colleague in the payoff, where it used to be two of
+three. A tile-level check of the whole plan: cabinet 160–240 · partition 280–320 · cabinet bank 340–444 ·
+cone gx 9 (its 48px base plate at gx 8 touched the partition) · pods 470–666, 690–886 · terminal
+922–1046 · boxes 1136.
+
+### 4. The repaint: the room came off the teal axis, and so did the furniture
+
+The diagnosis for notes 3 and 5 is one sentence. Wall registers `#0A2B33`/`#0E3846`/`#051B23`, glazing
+`#06303C`, desks `#17566A` with `#46A6BC` edges, hero blazer brand Light Teal `#005465`: **five dark
+teals**, so the room, the view, the furniture and the person were one field with shapes scored into it.
+The hero appears on six screens and cannot be tuned for one, so everything else moved — the same move
+the floor made last pass and screen 2 made going brown, and for the third time the answer was
+*temperature at the same value*, not a value change.
+
+- **The plaster is warm grey-olive** (`WALL`: `#231F1A` / `#35322A` / `#2C2A23` / `#1A1712`), values held
+  within a step or two of what they replaced, because the value structure was already right.
+- **The ceiling stays cool slate.** That is what stops the warm wall reading as a sepia filter: plaster
+  and painted metal are different materials and now they look like it.
+- **The furniture is warm dark** (`FURN`), so below the dado rail **the only teal thing in the room is
+  the player** — which is the whole of note 3. The terminal keeps its teal deliberately: it is the object
+  the screen is won on and it is now the one cool thing on the floor, which makes it a beacon.
+- **The damage props went warm too** (`DAMAGE`). They were `#17566A`/`#46A6BC` — the desks' old colour —
+  and against a warm cabinet bank the pulled-out drawers rasterised as blue plastic trays in a brown
+  cupboard. They still obey their own rule (a value or two *above* the furniture, the inverse of the
+  furniture's rule against the wall); only the temperature changed.
+- **The view out is cool daylight**, six stepped courses `#8FB6C4` → `#5F8C9E` with the skyline in near
+  silhouette (`#2C4652` / `#5E7E8C`) and a dark frame. Two surfaces at the same end of the value scale in
+  the same hue is an invisible object, and that is what the window was: a slightly different patch of
+  wall. Value discipline held — at `#8FB6C4` it is a long way below the wrapped figure's near-white
+  cloth, so the window is the lightest thing on the *wall* and never the lightest thing in the *frame*.
+- **The desk and the monitor were rebuilt.** The desk was a 30px black box with an 8px slab on it, i.e. a
+  shelf; it now has a worktop with a shadow line onto its apron, a cable tray in the leg space and a
+  three-drawer pedestal that alternates ends. The divider is a framed fabric panel in two courses with
+  three posts rather than one slab with a rail. The monitor was a rectangle on a 10px neck — a television
+  on a stick — and is now a thin bezel with a wide panel, a lit top edge, a chin badge, a slim stand and a
+  wide foot.
+
+### 5. Four big spotlights, and the raster earning its keep again
+
+The four recessed strip fittings became **spots hanging below the ceiling line**, and the light rules did
+not change: the lens is a lit face, the pool is on the floor, the up-facing edges catch it, and there is
+still **no beam** — a spot is allowed to be a visible object, but the light it makes is a surface.
+
+The raster found four things, none of which was visible in the code:
+
+- **The first fitting was a box.** A 160px canopy filling the whole aperture plus a 64×44 barrel with a
+  flat cowl is wider than it is tall, has no taper, and is indistinguishable from the services duct 20px
+  away from it. What says "spotlight" side-on is a *narrow* mounting and a can whose courses **flare
+  towards the mouth** (44 → 52 → 62 → 72), with the aperture left as a dark recess behind it.
+- **The mark hung in mid-air.** In `held` the badge *is* at `source`, so the two cables drawn "from the
+  source to the badge" had zero length: the pickup rasterised floating 50px under the fitting with
+  nothing above it. It hangs from `CEILING.SPOT_BOTTOM` now — the room's geometry, passed in by the host,
+  because it is not the pickup's number.
+- **A lit line lying in a hole.** The duct is **cut** around each spot (`DUCT_GAP` 96) so the fitting can
+  come through it, and `litSurfaces` was still painting one 184px lit band along the duct's top centred
+  on the fitting — i.e. mostly across the gap. Two bands from the cut's edges outwards. Light-as-an-object
+  for the fourth time on this screen and Reception between them.
+- **Four flare cells read as feet** under a white box. Two, at the corners of the lens itself.
+
+The pools also came down from 160 to **130** half-width: at 160, four pools on a 300px pitch overlapped
+(60→380 against 340→660), which paints one continuous lighter band and reads as the floor's own top edge.
+A spotlight should throw a tighter pool than a strip fitting anyway, so the number and the fixture agree.
+
+And **the thrown roll was a red box.** 26×22 filled, keyline, two bars, small hole — a warning sign
+flying down the corridor. It is a **stepped disc** now (half-widths 13/12/11/9/5), with a lit crown, a
+shaded base, a pale cardboard core and two spokes that step round with the **distance travelled**. Third
+object on this screen to pay the "a round thing needs a profile, not nested squares" bill, after the fire
+orb and the dragon's ground bursts one screen along. The wind-up chevrons needed a **dark backing cell**
+each for the same class of reason: pale cream landed on the wet floor sign and the barricades and
+vanished — a telegraph's colour has to beat the surface it lands on.
+
+### Gates
+
+**530 tests** (45 files, up from 508). Typecheck, lint, both builds and `validate:levels` green.
+Bundle **IIFE 66.24 KB gzip** (from 63.84), site payload **69.3 KB** — 74% of the 90 KB budget.
+Twenty-two new tests: the whole of `badgeCeiling.test.ts` (purity, the four beats, the straight fall,
+collectable only where and when it rests) · six on the ceiling delivery in `badgeReach.test.ts` (it rests
+on a floating cabinet out of standing reach, it is on the safe side of the partition *and* clear of the
+pinned-jump column, it is untakeable through the whole hold, it expires and returns, an auto-runner
+ignores it, and a player who waits then runs at the cabinet takes it) · five on the throw in
+`screen3.test.ts` (winds up standing still, one roll at a time at shin height, capture books the same
+delay his body does, no throw across the partition, and he stops the moment he is freed) · five on the
+art in `workplace.test.ts` (the roll is a disc, never wider than its hitbox, in his tape and not the
+room's, spinning off distance; the spots flare downwards and their lenses glow up on restore; nothing
+lights a duct that is not there; and the cabinet is drawn as a wall-mounted unit with its underside in
+shadow).
+
+---
+
+## Pass: Hire Under Fire, rebuilt — a Godzilla out of smaller cells, a jet instead of a girder, one brick, and an ending you can walk out of
+
+Eight owner notes, all on screen 4, and they resolve into five jobs: an art rebuild of the beast, an art
+*and* fairness rebuild of its fire, a pickup simplification that turned out to be a timing measurement,
+a new ending, and a new death pose. Verbatim:
+
+1. "The screen doesn't look refined and polished — make it better and visually better and refined."
+2. "The Godzilla is not at all refined and looks like blocks of red colour — you need to make it look
+   like real Godzilla, just in 8-bit style, and the fire it throws is too bad, you need to make it
+   better, it's too wide right now; also decrease the size of Godzilla, it's too big."
+3. "Remove the 3 brick structures where the ANSR powerup drops — remove the 2 and just keep 1."
+4. "Lower the speed of drone."
+5. "The water cannon and the throw of water is also bad, it's like blocks just put together — make it
+   more refined and well-finished."
+6. "When the Godzilla dies make the environment beautiful and well lit up, and from the dangerous
+   environment it turns all bright and happy — and if you add any new elements to depict this new
+   environment make sure that it is well polished and well finished."
+7. "The Godzilla for the dying effect dies on the ground and on one side the Godzilla's costume opens up
+   and from there the 5 candidates come out one by one saying HIRED, and the costume after some time
+   vanishes."
+8. "For the dying effect of our character make the character burn upon touching the fire from the
+   Godzilla."
+
+Two of these pairs turned out to be one decision each, and that is the most useful thing in this entry:
+**"smaller" and "more refined" are the same change** (note 2), and **"one brick" and "a slower drone"
+are the same change** (notes 3 and 4).
+
+### 1. Smaller and more refined are one change: halve the cell, not the animal
+
+The beast was **one 30×24 grid at scale 10 → 300×240px, 720 cells.** The owner asked for it to be both
+smaller and to stop looking like blocks of red colour, which reads as a contradiction until you write
+down what a 10px cell buys you: at 20 cells across a 200px animal, a leg is two cells, a jaw is one, and
+every curve in the outline is a 10px stair. **That is what "blocks of red colour" describes** — not the
+palette, the cell.
+
+So the animal is now **46×38 at scale 5 → 230×190px, 1,748 cells**: 23% narrower and 21% shorter on the
+frame, with two and a half times the cells in it. `BODY_W/H` came down 260×240 → 200×190, which is four
+drawn heroes wide and three tall (it was five and four).
+
+What 1,748 cells bought, and every one of these was fixed against a raster rather than in the code:
+
+- **A deep, blocky skull with a short muzzle.** Three cuts of the head drew a long snout and all three
+  rasterised as a crocodile or a raptor. A Godzilla's head is closer to a cube.
+- **A short thick neck, set back from the muzzle and narrower than both the skull and the shoulders.**
+  Without that narrowing the head merges into the chest and the animal has no neck at all — the same
+  rule the Workplace figure's four narrowings paid for.
+- **Four big dorsal plates**, narrow at the top, widest at the base, one clear row of air between each
+  pair. This took four attempts: at width 4-5 and heights 4-5 they merge into one pale mass along the
+  spine, which reads as **fur**. When they were drawn standing off the back behind a dark keyline they
+  read as *flags pinned to the shoulder*. Fewer, taller, with air between them, base row in shade.
+- **A heavy tail that lies FLAT for its last third.** Tapered all the way to a point down a straight
+  diagonal — which is what the first two cuts did — it reads as a **blade**.
+- **Hide bands**: runs of three darker cells with gaps of three, on every fourth row. The first version
+  darkened single cells on a grid and rasterised as **polka dots**, i.e. a costume.
+- **A plated belly on straight bands.** Two cuts followed the silhouette's own front edge row by row and
+  both rasterised as a pale ribbon zig-zagging down the chest.
+- **Three value bands across the body instead of two**, plus a lit plane on every up-facing surface,
+  which is where the roundness comes from.
+- **Two feet with lit top planes and claws**, and the room showing through between the legs.
+
+The technique is the one the previous build established and it is what makes a 1,748-cell grid
+affordable: the silhouette is authored as **per-row spans in a throwaway generator** in `/tmp`, which
+derives the outline, the shading, the belly, the plates and the hide bands mechanically, and the
+**output** is pasted in as literal strings. Nothing generated ships. One bug worth recording from it: the
+first version shaded every row against the row's *full* span, and on the rows the tail leaves from that
+span starts at the tail's tip — so the shading painted **a dark stripe down the middle of the chest**.
+Correct arithmetic, wrong object. Each mask (body, tail, forelimb) has to be shaded by its own geometry.
+
+The glasses had to be refitted, and that produced a defect worth writing down: the frame's lower bar,
+positioned two rows under the eye, landed **on the mouth line** of the new head, so a dark rule ran
+through the teeth and the whole face read as a **blindfold**. There is no bar under the lens now.
+
+### 2. The fire: a narrower cone, and a jet painted per column instead of per box
+
+Two things were wrong and they had different fixes.
+
+**Too wide** (owner). `CONE_NEAR_H`/`CONE_FAR_H` were 120/190 — 190px of flame at the far end is three
+standing players deep, which is weather rather than a breath. They are **70/120** now.
+
+But narrowing a cone whose axis falls from the jaw to the floor makes the screen **easier**, because the
+flame meets a standing head *later* along the axis. So this is a fairness change first, and the whole
+chain had to be solved together:
+
+```
+jaw height above floor  h = BODY_H − BODY_H×MOUTH_Y_FRACTION = 190 − 28.5 = 161.5
+lethal from  438.5 + 141.5f + 35 + 25f ≥ 556   →   f ≥ 0.495
+lethal strip = (1 − 0.495) × CONE_REACH
+```
+
+At the old reach of 560 that is 283px ≈ 1.19s to walk clear of, against 1.60s of safe floor — a screen
+a blind sprint would survive. **`CONE_REACH` therefore went UP, 560 → 620**, putting the lethal strip at
+313px ≈ 1.31s and the lane at x 348–661. The two probes that matter both still pass: the reading policy
+(wait outside the far end, commit the moment a burst ends) clears it with zero delays, and the blind
+sprint dies. `MOUTH_X_FRACTION`/`MOUTH_Y_FRACTION` are now **read off the drawn grid** (mouth row 5,
+muzzle column 41) rather than chosen: 0.46 and 0.15.
+
+**And it looked bad.** The burn was three stacked rectangles per hitbox segment — eight boxes in three
+colours, i.e. **an orange girder lying across the screen**. The fix is the clouds' lesson pointed at a
+hazard: paint a **profile**, a 4px cell per column, each column with its own top and bottom.
+
+The first attempt at that painted each column to the height of *the box it fell in*, and a box is an AABB
+over a whole segment — so it rasterised as eight rectangular blocks with hard steps between them, which
+is the same defect in a new costume. **The flame's band per column is computed from the same numbers
+`coneBoxes` steps** (axis lerp + half-thickness lerp), which is strictly inside the hitbox because the
+band is a subset of its own box. That is the rule this file has always kept — what is painted is what
+burns — with the arithmetic shared rather than the geometry copied. Both edges bite *inwards* only, the
+nose tapers over the last 7% so the jet has an end rather than a cut, and there is a hot root at the jaw
+kept on the fire's own side of the mouth (centred on it, half of it hangs outside the first segment).
+
+### 3. One brick and a slower drone are the same decision
+
+Removing two of the three floating bricks is trivial. Slowing the drone is not, because
+`POWERUPS.DROP.CROSS_TIME` was set by one-tap play: on touch the hero auto-runs, so the badge is only
+collectable if it lands **in front of** him, and a slower drone is overhead later, releases later and
+lands later. The two notes push the same variable from opposite ends.
+
+So it was measured. A sweep of (column × `CROSS_TIME`), scoring the contiguous window of single taps that
+still take the mark (the budget is ≥0.3s):
+
+| column | 2.6 | 3.0 | 3.2 | 3.4 | 3.6 | 4.0 |
+|---|---|---|---|---|---|---|
+| gx 13 (the old first drop) | 0.40s | 0.40s | 0.40s | 0.40s | **0.17s** | 0 |
+| gx 15 | 0.40s | 0.40s | 0.40s | 0.40s | 0.40s | 0.10s |
+| gx 16 | 0.40s | 0.40s | 0.40s | 0.40s | 0.40s | 0.13s |
+| gx 17 | 0.40s | 0.40s | 0.40s | 0.40s | 0.40s | 0 |
+| gx 18 | 0.28s | 0.28s | 0.28s | 0.28s | 0.28s | 0 |
+
+So the pair is **gx 16 at 3.4s** (424 px/s, 23% slower than the 554 that shipped), two steps inside the
+cliff. gx 18 never clears the budget at all — the later taps die in the fire.
+
+Then a second measurement fell out of the first: with the drone slowed, the mark landed **33px behind**
+the auto-runner's front edge instead of in front of him, because **the fall spends exactly the lead the
+crossing bought** (137px of lead at release, 143px of walking during a 0.55s fall). `FALL_TIME` came
+down to **0.35**, which is also the more honest picture — a crate let go by a drone accelerates. Gap at
+landing: 28–35px in front of him.
+
+One test had to change its shape rather than its numbers: `badgeDrop`'s phase-walk asserted the sequence
+was exactly `carrying → falling → live` inside one cycle, and with the slower drone and the shorter fall
+the early columns now *expire* before the cycle is out. The **order** was always the claim; the length
+of the list was an accident of the old clock.
+
+### 4. The water cannon and the jets: neither was made of anything
+
+The owner's word was "blocks just put together", and both objects deserved it.
+
+The **cannon** was 26×13 at scale 2: a pale housing, a parallel-sided tube and a lit rectangle for a
+mouth. It is **32×17 → 64×34** now, authored the same way as the beast (spans, mechanical outline, lit
+rail per part): a pressure tank with a band and a valve, a **mid-value** housing with one lit rail (the
+rule a carried thing has to obey — it is held in front of whatever the hero is standing against), a grip
+and a trigger, and a mouth that **flares in whole-cell steps** to a dark aperture with two lit cells in
+it. Two failed cuts on the mouth are worth keeping: filled with a pale bore it read as a **white flag on
+the end of a stick**, and with parallel sides it was a **pipe**. A hole seen side-on is dark.
+
+The **jets** were five squares stepping back from the head every 20px — a dashed row of rectangles with
+the sky between them, which is the tape-ribbon defect from the Workplace in another costume. A jet is
+now a **tapering line of 4px cells every 4px** with a lit spine, thickest just behind the head and
+thinning to a wisp, plus a stepped nose in front of the hitbox and three droplets offset *across* the
+line of travel. The head is still exactly the hitbox, because it is the hitbox.
+
+### 5. The ending: it dies on the ground, the suit opens, and five people walk out of it
+
+The old ending was a fade: the beast dissolved on the spot and left a heap of spectacle frames. The
+owner's ending is a **sequence**, and the important structural consequence is that **a creature that
+dissolves leaves nothing that can then be opened.**
+
+- **The fall.** `stripping` (1.1s) is now a **topple**: the standing grid is drawn cell by cell with each
+  row sheared sideways in proportion to its height off the floor, sinking and squashing, so the head
+  travels furthest and the feet stay put. It leans *away* from the player, which is the side the five
+  will come out on. The empty suit builds up underneath it as it fades, so one becomes the other.
+- **The suit.** A new 52×13 grid at scale 5 → 260×65: a slumped profile interpolated between control
+  points (the skull lying on its cheek with the jaw open, the shoulders still holding their shape, the
+  hips, the tail trailing away), with a **zip down one side**. Authored as flat runs first, it rasterised
+  as a row of boxes with vertical cliffs between them — the same "count the steps in the outline" lesson
+  the clouds taught.
+- **The opening is an event, not a state.** The zip's cells (`i`/`z`/`Z`) are painted only as far as
+  `openness` has run; before that, those columns are the suit's own body. A costume that is open on the
+  frame it lands cannot be *opened*.
+- **They walk out.** `CandidateState` carries a facing and a walk now instead of a fall: everyone starts
+  at the door and walks to their own place in a line-up **towards the player**, `CANDIDATE_STAGGER`
+  0.55s apart, which is longer than one walk-out is visible for — so early in the sequence there is
+  exactly one figure in the doorway, which is what "one by one" means as arithmetic. Stride is
+  distance-driven (a bob plus a thrown leading leg), never clock-driven, or five people march in lockstep.
+- **Then it vanishes.** `COSTUME_HOLD` 1.6s after the last hire arrives, `COSTUME_FADE` 1.2s, and
+  `costumeState()` returns **null** rather than `fade: 1`, so "there is nothing there" is not a number
+  anybody has to check. All five are out at 3.15s and the suit is gone at 5.95s — inside the walk from
+  the roost to the exit, so the payoff finishes on the screen it happened on.
+
+The whole sequence is a function of **one clock** (seconds since the beast went down), so the hazard
+remembers nothing and a replay lands on the same frame.
+
+### 6. The environment comes good, in two layers
+
+`Dragon.relief` (0..1 over `RELIEF_TIME` 2.2s after the fall) is the dial, and it is handed to
+`scenery.ts` as a plain number — the backdrop still knows nothing about a badge, a hazard or the
+simulation. It is a **second parameter** rather than a second meaning for the maze's `weather`, because
+one number doing both jobs reads as a bug the first time a screen wants both.
+
+The maze's lesson is inherited wholesale: **the change has to be visible across the whole frame**, so
+there are two layers — the sky (`drawSceneBackground`) and a full-frame veil-and-wash over the masonry
+and under the cast (`drawReliefWash`, drawn from `Game.drawDragonScreen`, exactly where the maze draws
+`drawWeatherWash`). And "un-gloomed is not lit": the veil lifting and the pale wash coming up are both
+there, not one dial doing both.
+
+What actually moves: the sky from an ember night to a bright morning; the **sun and the cloud bank**,
+which are screen 2's own functions (there is one sun in this game); the skyline hazing up as its lit
+windows go **out**; the heat shimmer going away with the danger it belonged to; the scorch under the
+roost receding and **grass coming through it**; and the market opening — awnings up and trading, lit
+windows out.
+
+### 7. The screen itself, refined
+
+Note 1 was the vaguest and it had a concrete diagnosis: between the horizon and the floor there was
+200px of **nothing**, so the frame was a sky, a distant skyline, a brick band, a beast and three teal
+smudges. Two props fix it:
+
+- **`drawMarketRow`** — a ridge of four low blocks with stepped parapets, a water tower breaking the row,
+  windows, and two striped canopies at street level. All of it **left of x=760**, which is the rule the
+  deleted crag paid for: two dark warm masses in the beast's own columns is one mass, and the animal
+  loses its silhouette.
+- **`drawHiringQueue`** — the three loose figures became a **queue behind a rope** (posts, a sagging two-
+  course rope), which says what they are: people waiting on this process.
+
+And the name plate moved. At chest height it was clear of the HUD, clear of the animal and clear of the
+sky — until the beast shrank and the cone narrowed, at which point **the jet ran straight through the
+plaque**, because a jet leaving a 190px animal's jaw crosses exactly the band a chest-height label lives
+in. It is 72px above the floor now, under the lane, in the one window nothing else uses.
+
+### 8. The hero burns
+
+The game's **fourth death pose**, and it follows the rule the other three set: build it out of the
+obstacle's own vocabulary. A stamp flattens him, the Workplace figure tapes him up, a compliance monster
+files him — fire **burns** him. Soot climbing from the feet, flame on the body, embers, a pale smoke
+plume. Drawn *over* the hero like the tape and the paperwork, because the sim booked the delay on the
+frame of contact and the person underneath has to still be recognisable.
+
+It is the first pose that is a **process** rather than a frame, which is why `Simulation` now exposes
+`lifeLostProgress` (0..1 through `LIVES.LOST_HOLD`, on **sim time**). The first cut drew a flame column
+per 4px of body and every column reached a similar height, so it rasterised as an **orange box with a
+head sticking out of the top** — the cone's own defect, third costume. What reads as burning is seven
+tongues at very different heights, each tapering to a single cell, with the person visible between them:
+the test measures it as distinct cells covering under 45% of the rectangle they span.
+
+### Numbers
+
+- **544 tests** (45 files), up from 530: nine new ones for the burn, the costume's three phases, the
+  topple, the walk-out, the relief dial and the market/queue/wash.
+- **IIFE 68.91 KB gzip** (was 66.2), site payload **72.4 KB** (was 69.3) — 77% of the 90 KB budget. The
+  ~2.7 KB is the two new grids and the new art; the budget gate's own measurement question is unchanged
+  (`docs/OPEN.md` §1).
+- Validator green on all six screens.

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { drawAnsrBadgeMark, drawBadgePickup, BADGE_MARK_D } from './badge';
+import { drawAnsrBadgeMark, drawBadgePickup, drawBadgePerch, BADGE_MARK_D } from './badge';
 import { RESOLUTION } from '../data/tuning.config';
 import { ANSR_MARK_PATH, ANSR_MARK_W, ANSR_MARK_H, LOGO_ORANGE } from '../ui/ansrMark';
 
@@ -199,5 +199,96 @@ describe('the badge pickup as a whole', () => {
     const above = (rs: Rect[]) => rs.filter((r) => r.y < VIEW.cy - 20 && r.y > VIEW.bandTop).length;
     expect(below(up.rects)).toBeGreaterThan(below(down.rects));
     expect(above(down.rects)).toBeGreaterThan(above(up.rects));
+  });
+});
+
+describe('the badge standing on a wall (the Compliance perch)', () => {
+  const PERCH = { cx: 260, cy: 500, surfaceY: 520, phase: 0.2 };
+
+  it('draws none of the rail: no shaft, no band brackets, no ground chevron', () => {
+    const { ctx, rects } = recorder();
+    drawBadgePerch(ctx, PERCH);
+    // Everything it paints is within a tile and a half of the mark. The rail's shaft ran
+    // 310px and its chevron sat on the ground band 100px below — both of them describe a
+    // pickup that moves, and this one does not.
+    // Everything stays inside a tile and a half of the mark now that there is no ring
+    // round it: the plinth and the contact shadow are on the wall's top course, and the
+    // four flare cells are 26px out.
+    for (const r of rects) {
+      expect(r.y).toBeGreaterThan(PERCH.cy - 60);
+      expect(r.y + r.h).toBeLessThanOrEqual(PERCH.cy + 60);
+    }
+  });
+
+  it('ties the mark to the wall it stands on', () => {
+    const { ctx, rects } = recorder();
+    drawBadgePerch(ctx, PERCH);
+    // A contact shadow on the top course, so the mark is ON the wall rather than a tile
+    // above it — which is exactly the picture the rail used to draw.
+    const onSurface = rects.filter((r) => r.y >= PERCH.surfaceY - 1);
+    expect(onSurface.length).toBeGreaterThan(0);
+    expect(onSurface.some((r) => r.color.includes('0,16,22'))).toBe(true);
+  });
+
+  it('carries flare cells at full alpha, few and bright', () => {
+    const { ctx, rects } = recorder();
+    drawBadgePerch(ctx, PERCH);
+    // The halo lesson: a still 40px mark on masonry needs a handful of opaque cells to
+    // read as a pickup, and must not get a low-alpha field (which reads as grime).
+    const flare = rects.filter((r) => r.color === '#ff8a4d' && r.w === 5);
+    expect(flare).toHaveLength(4);
+  });
+
+  it('is a pure function of its view', () => {
+    const a = recorder();
+    drawBadgePerch(a.ctx, PERCH);
+    const b = recorder();
+    drawBadgePerch(b.ctx, PERCH);
+    expect(a.rects).toEqual(b.rects);
+  });
+});
+
+describe('there is no ring round the mark', () => {
+  /**
+   * Owner call: "remove the halo effect that is around the ANSR powerup" — the fifth and
+   * last entry in that story (a dithered field · four lone cells · a radial corona · a
+   * tangential dashed ring, which is what this deletes).
+   *
+   * Stated as a count in the annulus the ring lived in, because that is the shape of the
+   * thing rather than one of its constants: the dashed ring put ~50 cells on a circle
+   * 28px out from the centre, and what is allowed out there now is the four flare cells on
+   * a perch and the shaft's wake on a rail. Any new ring, of any radius near the mark,
+   * fails this immediately.
+   */
+  const ringCells = (rects: Rect[], cx: number, cy: number) =>
+    rects.filter((r) => {
+      const d = Math.hypot(r.x + r.w / 2 - cx, r.y + r.h / 2 - cy);
+      return d >= 24 && d <= 34;
+    });
+
+  it('the perched mark has four flare cells out there and nothing else', () => {
+    const { ctx, rects } = recorder();
+    drawBadgePerch(ctx, { cx: 260, cy: 500, surfaceY: 520, phase: 0.2 });
+    expect(ringCells(rects, 260, 500)).toHaveLength(4);
+  });
+
+  it('the floating mark has only its own wake out there', () => {
+    const { ctx, rects } = recorder();
+    drawBadgePickup(ctx, VIEW);
+    expect(ringCells(rects, VIEW.cx, VIEW.cy).length).toBeLessThan(6);
+    // …and what IS drawn away from the mark is the shaft, i.e. on its vertical axis.
+    for (const r of ringCells(rects, VIEW.cx, VIEW.cy)) {
+      expect(Math.abs(r.x + r.w / 2 - VIEW.cx)).toBeLessThan(6);
+    }
+  });
+
+  it('holds still where it used to crawl: a rail badge with no motion in the ring', () => {
+    // The ring's dash pattern was the only thing on the pickup that turned. With it gone,
+    // two nearby phases differ only in the mark's own shimmer and the chevron's step.
+    const a = recorder();
+    drawBadgePickup(a.ctx, { ...VIEW, phase: 0.02 });
+    const b = recorder();
+    drawBadgePickup(b.ctx, { ...VIEW, phase: 0.06 });
+    expect(a.rects).toEqual(b.rects);
   });
 });

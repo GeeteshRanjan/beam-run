@@ -34,12 +34,21 @@ import {
   BUBBLE_TEAL,
   type HeroMotion,
 } from '../render/sprites';
-import { drawBadgePickup } from '../render/badge';
+import { drawBadgePickup, drawBadgePerch, drawBadgeCeilingDrop } from '../render/badge';
 import { drawInkPads, drawStamps as drawStampHeads } from '../render/stamps';
-import { drawMonsters, drawGatherPad, drawLift } from '../render/maze';
+import {
+  drawMonsters,
+  drawGatherPad,
+  drawLift,
+  drawHoist,
+  drawWeatherWash,
+  drawFiled,
+} from '../render/maze';
 import {
   drawMummies,
   drawShots,
+  drawBandages,
+  drawOverheadCabinet,
   drawCutter,
   drawOffice,
   drawTerminal,
@@ -54,10 +63,12 @@ import {
   drawHiredCandidates,
   drawFloatingBrick,
   drawScorchedGround,
+  drawBurningHero,
 } from '../render/dragon';
 import { drawBadgeDelivery } from '../render/carrier';
 import { badgeCenter } from '../world/badgeFloat';
-import { drawTileRect, drawSceneBackground } from '../render/scenery';
+import { isPerched, perchCenter } from '../world/badgePerch';
+import { drawTileRect, drawSceneBackground, drawReliefWash, CEILING } from '../render/scenery';
 import { drawTitleScene } from '../render/titleScene';
 import { drawText, drawLabelPlaque } from '../render/PixelText';
 import { AssistController } from './AssistController';
@@ -269,6 +280,13 @@ export class Game {
         if (cause === 'mummy') {
           const p = this.sim.player;
           this.effects.emitBurst(p.box.x + p.box.w / 2, p.box.y + p.box.h / 2, '#E8C23A', 14, 150);
+        }
+        // Caught by a compliance monster: a burst of loose forms, in the same near-white
+        // the monsters' approval plates are drawn in, because the pile that lands on him
+        // and the head that filed him are the same material.
+        if (cause === 'monster') {
+          const p = this.sim.player;
+          this.effects.emitBurst(p.box.x + p.box.w / 2, p.box.y + p.box.h / 3, '#E4EAEC', 16, 170);
         }
         this.audio.playSfx('setback');
         /*
@@ -729,7 +747,25 @@ export class Game {
 
     // The finale paints its own bespoke hero sky/plaza in drawFinale; every
     // other screen gets its meaningful pixel backdrop here.
-    if (id !== 5) drawSceneBackground(ctx, id, t, this.reducedMotion);
+    //
+    // The last argument is the Compliance maze's weather (0 overcast, 1 daylight),
+    // which is what GCC-BOT looks like on that screen instead of a halo on the hero
+    // (owner call). It is read off the hazard here rather than inside `scenery.ts`,
+    // which has no business knowing a badge exists.
+    // …and the last one is Hire Under Fire's `relief` (0 while the beast holds the far end,
+    // 1 once it is beaten and the five have walked out of its costume), which is what
+    // "the environment turns all bright and happy" is as a number. Same arrangement as the
+    // maze's weather, and read off the hazard here for the same reason.
+    if (id !== 5) {
+      drawSceneBackground(
+        ctx,
+        id,
+        t,
+        this.reducedMotion,
+        this.maze?.skyClear ?? 0,
+        this.dragon?.relief ?? 0,
+      );
+    }
   }
 
   private drawWorld(ctx: CanvasRenderingContext2D, alpha: number): void {
@@ -777,6 +813,31 @@ export class Game {
       if (this.tangled) {
         drawTangled(ctx, cx, feetY, this.reducedMotion ? 0 : this.now(), this.reducedMotion);
       }
+      // Caught by a compliance monster: he is buried in the queue. The third of the three
+      // death poses, and the screen that had none until now — a frozen frame with no pose
+      // says a delay happened without saying what did it.
+      if (this.filed) {
+        drawFiled(
+          ctx,
+          cx,
+          feetY,
+          this.reducedMotion ? 0.2 : (this.now() * 0.6) % 1,
+          this.reducedMotion,
+        );
+      }
+      // Caught by the dragon's fire: he BURNS (owner call). The fourth death pose, and the
+      // fourth time the answer was to build it out of the obstacle's own vocabulary — a
+      // stamp flattens him, tape wraps him, paperwork buries him, and fire burns him.
+      if (this.burning) {
+        drawBurningHero(
+          ctx,
+          cx,
+          feetY,
+          this.lifeLostProgress,
+          this.reducedMotion ? 0 : this.now(),
+          this.reducedMotion,
+        );
+      }
     }
   }
 
@@ -784,6 +845,12 @@ export class Game {
   private get workplace(): Workplace | null {
     const hazard = this.sim.activeHazard;
     return hazard instanceof Workplace ? hazard : null;
+  }
+
+  /** The current screen's Compliance maze, or null anywhere else. */
+  private get maze(): ComplianceMaze | null {
+    const hazard = this.sim.activeHazard;
+    return hazard instanceof ComplianceMaze ? hazard : null;
   }
 
   /** The current screen's hiring dragon, or null anywhere else. */
@@ -831,9 +898,38 @@ export class Game {
     c.beaten = dragon.isBeaten;
   }
 
+  /**
+   * True on the life-lost frames that follow the dragon's fire: the player is drawn
+   * **burning** (owner call), charring from the feet up with smoke over his head.
+   *
+   * Presentation only, like the other three poses — the sim booked the delay the instant the
+   * flame touched him. `'fire'` is the dragon's cause and no other screen uses it.
+   */
+  private get burning(): boolean {
+    return this.sim.state === 'LIFE_LOST' && this.sim.lifeLost?.cause === 'fire';
+  }
+
+  /** How far through the life-lost hold we are — the burn takes hold over it. */
+  private get lifeLostProgress(): number {
+    return this.sim.lifeLostProgress;
+  }
+
   /** True on the life-lost frames that follow contact with the wrapped figure. */
   private get tangled(): boolean {
     return this.sim.state === 'LIFE_LOST' && this.sim.lifeLost?.cause === 'mummy';
+  }
+
+  /**
+   * True on the life-lost frames that follow contact with a compliance monster: the player
+   * is drawn buried in the paperwork it just filed him under (`render/maze.ts`).
+   *
+   * Presentation only, like the other two: the sim booked the delay on the frame of contact.
+   * `'monster'` is the maze's cause and no other screen uses it, so this needs no screen
+   * check — but the monster's own pose does come from the hazard (`MonsterState.struck`),
+   * which is why `Simulation.setback()` must keep not resetting it.
+   */
+  private get filed(): boolean {
+    return this.sim.state === 'LIFE_LOST' && this.sim.lifeLost?.cause === 'monster';
   }
 
   /**
@@ -1062,9 +1158,12 @@ export class Game {
     if (!(hazard instanceof Dragon)) return;
     const t = this.reducedMotion ? 0 : this.now();
     const state = hazard.dragonState();
-    // The ground first: the floor it has already burnt. It sits over the level
-    // material and under everything that moves.
-    drawScorchedGround(ctx, state.box.x + state.box.w / 2);
+    // The payoff's full-frame half first: a cool veil that lifts and a pale wash that comes
+    // up, over the brickwork the backdrop cannot reach and under everything that moves, so
+    // the cast stays saturated against it. Exactly the two layers the maze's weather needs.
+    drawReliefWash(ctx, hazard.relief);
+    // Then the ground: the floor it has already burnt, receding as the light comes good.
+    drawScorchedGround(ctx, state.box.x + state.box.w / 2, hazard.relief);
     // The floating bricks the badge is delivered onto. Before the fire, because the
     // outer end of the cone crosses the last one and fire goes in front of masonry.
     drawFloatingBrick(ctx, this.sim.screen.propRects, t, this.reducedMotion);
@@ -1087,7 +1186,11 @@ export class Game {
   private drawMaze(ctx: CanvasRenderingContext2D): void {
     const hazard = this.sim.activeHazard;
     if (!(hazard instanceof ComplianceMaze)) return;
+    // The weather goes down first, over the masonry the backdrop cannot reach and
+    // under everything that moves, so the cast stays saturated against it.
+    drawWeatherWash(ctx, hazard.skyClear);
     drawLift(ctx, hazard.liftState());
+    drawHoist(ctx, hazard.hoistState());
     drawGatherPad(ctx, hazard.gatherAt, hazard.isFriendly);
     drawMonsters(ctx, hazard.monsterStates());
   }
@@ -1116,8 +1219,13 @@ export class Game {
       t,
       this.reducedMotion,
     );
+    // The cabinet the ANSR mark drops onto. A `pedestal` solid, so `drawWorld` skips it
+    // and it is painted as the room's own furniture rather than as level brickwork.
+    drawOverheadCabinet(ctx, this.sim.screen.propRects, hazard.restore);
     drawMummies(ctx, mummies, t, this.reducedMotion);
     drawShots(ctx, hazard.shotStates());
+    // …and the bandages he has thrown, over the figure that threw them.
+    drawBandages(ctx, hazard.bandageStates());
   }
 
   /**
@@ -1166,6 +1274,66 @@ export class Game {
             alpha: 0.95,
           });
         }
+      }
+      return;
+    }
+
+    /*
+     * Falling out of a ceiling spotlight (the Workplace): no rail and no carrier — the
+     * source is a fitting the room already has. The host supplies the phase and the row
+     * it lands on; everything else comes from the sim, which collides against the same
+     * function (`world/badgeCeiling.ts`).
+     */
+    const ceiling = this.sim.badgeCeiling;
+    if (ceiling) {
+      drawBadgeCeilingDrop(ctx, {
+        phase: ceiling.phase,
+        source: ceiling.source,
+        badge: ceiling.badge,
+        restY: (badge.restGy ?? 15) * T - T / 2,
+        remaining: ceiling.remaining,
+        progress: ceiling.progress,
+        tick: this.reducedMotion ? 0.12 : (this.now() * 0.3) % 1,
+        warnAt: POWERUPS.CEILING.WARN_TIME,
+        // The lens it hangs from is the ROOM's geometry, so it comes from the room.
+        hangFromY: CEILING.SPOT_BOTTOM,
+      });
+      // The capability plaque rides above the mark: below it is the cabinet's own top
+      // course while it is down, and the fitting's cowl while it is still up there.
+      const ceilingTag = solutionTag(badge.type);
+      if (ceilingTag && ceiling.phase !== 'gone') {
+        drawLabelPlaque(ctx, ceilingTag, ceiling.badge.x, ceiling.badge.y - 52, {
+          scale: 2,
+          fg: '#CFE6EC',
+          bg: 'rgba(0,26,34,0.7)',
+          frame: 'rgba(28,130,150,0.6)',
+          alpha: 0.95,
+        });
+      }
+      return;
+    }
+
+    // Standing on a wall (the Compliance maze): no rail, no band, no clock. The
+    // position is a constant, so the only thing this host supplies is a phase.
+    if (isPerched(badge)) {
+      const at = perchCenter(badge);
+      drawBadgePerch(ctx, {
+        cx: at.x,
+        cy: at.y,
+        surfaceY: at.y + T / 2,
+        phase: this.reducedMotion ? 0.12 : (this.now() * 0.3) % 1,
+      });
+      const perchTag = solutionTag(badge.type);
+      if (perchTag) {
+        // Above the mark here, not below: below is the wall's own top course, where a
+        // plaque would be painted onto the masonry the badge is standing on.
+        drawLabelPlaque(ctx, perchTag, at.x, at.y - 40, {
+          scale: 2,
+          fg: '#CFE6EC',
+          bg: 'rgba(0,26,34,0.7)',
+          frame: 'rgba(28,130,150,0.6)',
+          alpha: 0.95,
+        });
       }
       return;
     }

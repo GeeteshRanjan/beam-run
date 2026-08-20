@@ -151,8 +151,20 @@ describe('badge float', () => {
      * The drop screen's own clearances are proved there, against `dropRestBox`.
      */
     // Reception is excluded too, for the simpler reason that it has no badge at
-    // all any more (owner call).
-    for (const screen of SCREENS.filter((s) => s.badge && s.badge.delivery !== 'airdrop')) {
+    // all any more (owner call), and Compliance because its mark **stands on a brick
+    // wall** rather than floating (owner call): `badgeLowestBox` on a perch reads the
+    // wall's own row as an anchor and puts the band 155px underground. Its clearances
+    // are the wall's height and they are proved in `badgeReach.test.ts`.
+    /*
+     * …and the Workplace comes out too, for the fourth repetition of the same lesson: its
+     * mark falls out of a **ceiling spotlight** (owner call — the rail is gone), so its
+     * `gy` is the *fitting's* row and a band measured from it lands 201px over a standing
+     * head. Every rule phrased in terms of one delivery has to name the deliveries it
+     * applies to; there are four of them now, and only one is a rail.
+     */
+    for (const screen of SCREENS.filter(
+      (s) => s.badge && (s.badge.delivery ?? 'rail') === 'rail',
+    )) {
       const b = screen.badge!;
       it(`screen ${screen.id} (${screen.name})`, () => {
         const lowest = badgeLowestBox(b);

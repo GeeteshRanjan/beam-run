@@ -197,9 +197,17 @@ describe('the hiring dragon', () => {
           nearestFire = Math.min(nearestFire, b.x);
         }
       }
-      // Clear of the spawn *and* clear of the drop column behind the player (gx 8):
-      // a badge that expires is enough of a clock without fire arriving on top of it.
-      expect(nearestFire).toBeGreaterThan(9 * T);
+      /*
+       * Clear of the spawn, with a walk in hand.
+       *
+       * This used to also have to clear a drop column *behind* the player (gx 8), which was
+       * the tightest of the three constraints on `CONE_REACH`. That column is gone — there
+       * is one brick now, at gx 16, and it stands inside the lane on purpose. So what is
+       * left is the rule that has always mattered: the player must be able to stand where
+       * the screen puts them and read the pattern before anything can reach them. 200px is
+       * four tiles of walking, and the lane's far end measures ~339 against a spawn at 40.
+       */
+      expect(nearestFire).toBeGreaterThan(1 * T + PLAYER.WIDTH + 200);
     });
   });
 
@@ -647,11 +655,23 @@ describe('the hiring dragon', () => {
         expect(d.shotsFired).toBe(fired);
       });
 
-      it('the five land on the ground, spread out, on frame', () => {
+      it('the five WALK OUT of the suit, one at a time, and line up on the floor', () => {
         const d = dragon();
         const p = stander(20);
         beat(d, p);
-        run(d, p, D.CANDIDATE_FALL_TIME + 1, ASSISTED);
+        /*
+         * The owner's ending: the costume opens and they come out **one by one**. So the
+         * claim is about the *order* as well as the destination — half way through the
+         * sequence exactly some of them are out and the rest have not started, and nobody
+         * is ever above the floor, because they walk rather than fall.
+         */
+        run(d, p, D.COSTUME_OPEN + D.CANDIDATE_STAGGER + D.CANDIDATE_WALK_TIME * 0.5, ASSISTED);
+        const mid = d.candidateStates();
+        expect(mid.filter((c) => c.progress > 0).length).toBeGreaterThan(0);
+        expect(mid.filter((c) => c.progress > 0).length).toBeLessThan(D.CANDIDATES);
+        for (const c of mid) expect(c.y).toBeCloseTo(GROUND_TOP, 5);
+
+        run(d, p, D.CANDIDATE_STAGGER * D.CANDIDATES + D.CANDIDATE_WALK_TIME + 1, ASSISTED);
         const cands = d.candidateStates();
         expect(cands).toHaveLength(D.CANDIDATES);
         for (const c of cands) {
@@ -667,6 +687,47 @@ describe('the hiring dragon', () => {
         for (let i = 1; i < xs.length; i += 1) {
           expect(xs[i]! - xs[i - 1]!).toBeGreaterThan(40);
         }
+      });
+
+      it('the empty costume lies there, opens, and then VANISHES', () => {
+        const d = dragon();
+        const p = stander(20);
+        beat(d, p);
+        // It is on the floor from the frame the beast goes down, and shut.
+        expect(d.costumeState()!.openness).toBeLessThan(0.2);
+        run(d, p, D.COSTUME_OPEN + 0.05, ASSISTED);
+        expect(d.costumeState()!.openness).toBe(1);
+        expect(d.costumeState()!.fade).toBe(0);
+        // …it is still there while the five are walking out and for the hold after,
+        const allOut =
+          D.COSTUME_OPEN + (D.CANDIDATES - 1) * D.CANDIDATE_STAGGER + D.CANDIDATE_WALK_TIME;
+        run(d, p, allOut - D.COSTUME_OPEN + D.COSTUME_HOLD * 0.5, ASSISTED);
+        expect(d.costumeState()).not.toBeNull();
+        expect(d.costumeState()!.fade).toBe(0);
+        // …then it goes, and once gone it reports nothing rather than a fully faded thing.
+        run(d, p, D.COSTUME_HOLD + D.COSTUME_FADE + 0.2, ASSISTED);
+        expect(d.costumeState()).toBeNull();
+        expect(d.dragonState().costume).toBeNull();
+        // The five stay: what the screen is won on is the hire, not the suit.
+        expect(d.candidateStates().every((c) => c.landed)).toBe(true);
+      });
+
+      it('the environment comes good on its own dial, and only once it is beaten', () => {
+        const d = dragon();
+        const p = stander(20);
+        expect(d.relief).toBe(0);
+        beat(d, p);
+        expect(d.relief).toBeLessThan(0.2);
+        run(d, p, D.RELIEF_TIME * 0.5, ASSISTED);
+        const half = d.relief;
+        expect(half).toBeGreaterThan(0.2);
+        expect(half).toBeLessThan(0.9);
+        run(d, p, D.RELIEF_TIME, ASSISTED);
+        expect(d.relief).toBe(1);
+        // It is sim time, so a reset takes the whole payoff back with it.
+        d.reset();
+        expect(d.relief).toBe(0);
+        expect(d.costumeState()).toBeNull();
       });
     });
 

@@ -60,7 +60,15 @@ describe('the air-dropped badge', () => {
       const phase = dropStateAt(BADGE, t).phase;
       if (seen[seen.length - 1] !== phase) seen.push(phase);
     }
-    expect(seen).toEqual(['carrying', 'falling', 'live']);
+    /*
+     * The ORDER is the claim, not the length of the list. Whether a `gone` beat falls inside
+     * the same cycle depends on the column and on the clock: with the slower drone and the
+     * shorter fall this pass brought in (`POWERUPS.DROP.CROSS_TIME` 2.6 → 3.4, `FALL_TIME`
+     * 0.55 → 0.35) the early columns now expire before the cycle is out, where before they
+     * did not. That is the next test's subject; this one is about the sequence.
+     */
+    expect(seen.slice(0, 3)).toEqual(['carrying', 'falling', 'live']);
+    expect(seen.slice(3)).toEqual(seen.slice(3).filter((p) => p === 'gone'));
   });
 
   it('reaches "gone" when the lifetime runs out inside the cycle', () => {

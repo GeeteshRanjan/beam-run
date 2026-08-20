@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   BEAST_H,
   BEAST_W,
+  drawBurningHero,
   drawCone,
   drawDragon,
   drawFloatingBrick,
@@ -59,6 +60,7 @@ function dragon(over: Partial<DragonState> = {}): DragonState {
     progress: 0,
     layers: D.HITS_TO_STRIP,
     dissolve: null,
+    costume: null,
     ...over,
   };
 }
@@ -87,19 +89,28 @@ function jet(over: Partial<WaterState> = {}): WaterState {
 }
 
 function candidate(over: Partial<CandidateState> = {}): CandidateState {
-  return { x: 640, y: GROUND_TOP, progress: 1, landed: true, ...over };
+  return { x: 640, y: GROUND_TOP, progress: 1, landed: true, dir: -1, ...over };
 }
 
 const upper = (rs: Rect[]) => rs.map((r) => r.fill.toUpperCase());
 
 describe('the Godzilla', () => {
-  it('is a boss-sized silhouette, several heroes wide and tall', () => {
-    // The Workplace lesson, applied: size against the DRAWN hero (48×60), never his
-    // 28×44 hitbox. At 200×190 (the previous build) it rasterised as a hunched lizard
-    // with no legible legs; a boss the owner's reference would recognise needs to
-    // dwarf the player.
-    expect(D.BODY_W / 48).toBeGreaterThanOrEqual(5);
-    expect(D.BODY_H / 60).toBeGreaterThanOrEqual(4);
+  it('is a boss-sized silhouette, four heroes wide and three tall', () => {
+    /*
+     * The Workplace lesson, applied: size against the DRAWN hero (48×60), never his 28×44
+     * hitbox. It has now been measured from both ends. At 200×190 *with 10px cells* it
+     * rasterised as a hunched lizard with no legible legs, which bought 260×240; the owner
+     * then asked for it smaller ("decrease the size, it's too big"), and the way to give
+     * that up without going back to the lizard was to halve the CELL rather than keep the
+     * pixels — 200×190 out of 5px cells is 1,748 cells where 260×240 out of 10px cells was
+     * 720. So the floor here is about what a boss has to be next to a person, and the
+     * refinement is somewhere else entirely.
+     */
+    expect(D.BODY_W / 48).toBeGreaterThanOrEqual(4);
+    expect(D.BODY_H / 60).toBeGreaterThanOrEqual(3);
+    // …and the cell is small enough to describe an animal. 10px cells are what "blocks of
+    // red colour" was, and a grid this size cannot be made of them.
+    expect(BEAST_W / 46).toBeLessThanOrEqual(6);
     // The grid is a little wider and no taller than the box: the extra is all tail,
     // which is allowed to hang out of the back of a box that is only a water target.
     expect(BEAST_W).toBeGreaterThan(D.BODY_W);
@@ -204,35 +215,95 @@ describe('the Godzilla', () => {
     expect(washing.rects.some((r) => r.fill.includes('168,236,250'))).toBe(true);
   });
 
-  it('leaves nothing but the wreck of the costume once it is beaten', () => {
-    // The owner's call, and the assertion is deliberately blunt: after the last hit
-    // there must be **no animal** on the frame. An earlier build held the undressed
-    // beast at a third alpha, which read as a defeated lizard standing behind the five
-    // people who are the actual payoff.
+  it('leaves an empty COSTUME on the floor once it is beaten, and nothing standing', () => {
+    /*
+     * The owner's ending: "it dies on the ground and on one side the Godzilla's costume
+     * opens up". So what is left is a suit lying on the floor — the animal's own hide, which
+     * is why the flesh colours are *expected* here rather than banned, and the assertion
+     * that matters is about **height**: nothing is standing. An earlier build held the
+     * undressed beast up at a third alpha, which read as a defeated lizard behind the five
+     * people who are the actual payoff; the one before that left a heap of spectacle frames,
+     * which nobody could have walked out of.
+     */
     const { ctx, rects } = recorder();
-    drawDragon(ctx, dragon({ layers: 0, phase: 'beaten' }), 1.2, true);
+    drawDragon(
+      ctx,
+      dragon({ layers: 0, phase: 'beaten', costume: { openness: 1, fade: 0 } }),
+      1.2,
+      true,
+    );
     const fills = upper(rects);
-    for (const flesh of ['#9B2F38', '#5C1620', '#C24A50', '#E7D3A6', '#EFE4C8']) {
-      expect(fills).not.toContain(flesh);
-    }
-    // What is left is on the floor: the frame, a cracked lens and the water it came
-    // off in.
-    expect(fills).toContain('#16232A');
-    expect(fills).toContain('#0B1418');
-    expect(rects.some((r) => r.fill.includes('28,127,166'))).toBe(true);
-    for (const r of rects) expect(r.y).toBeGreaterThan(GROUND_TOP - 40);
+    expect(fills).toContain('#9B2F38'); // its hide, on the floor
+    // Nothing is more than a heap high: the suit is 65px deep and it lies on the ground.
+    const highest = Math.min(...rects.map((r) => r.y));
+    expect(highest).toBeGreaterThan(GROUND_TOP - 90);
+    // The way out of it, and the glasses beside it.
+    expect(fills).toContain('#180509'); // the dark inside of the suit
+    expect(fills).toContain('#16232A'); // the frame
+    expect(fills).toContain('#0B1418'); // its cracked lens
+    expect(rects.some((r) => r.fill.includes('28,127,166'))).toBe(true); // the puddle
   });
 
-  it('grows the wreck under itself while it comes apart', () => {
-    // `stripping` is the hand-over: the beast fades as the heap builds, so one becomes
-    // the other rather than one being swapped for it.
+  it('unzips the suit as far as it has been opened, and no further', () => {
+    // The opening is an event, not a state: before the zip has run, those columns are the
+    // suit's own body. A costume that is open the frame it lands cannot be *opened*.
+    const shut = recorder();
+    drawDragon(
+      shut.ctx,
+      dragon({ layers: 0, phase: 'beaten', costume: { openness: 0, fade: 0 } }),
+      1.2,
+      true,
+    );
+    const open = recorder();
+    drawDragon(
+      open.ctx,
+      dragon({ layers: 0, phase: 'beaten', costume: { openness: 1, fade: 0 } }),
+      1.2,
+      true,
+    );
+    const inside = (rs: Rect[]) => rs.filter((r) => r.fill.toUpperCase() === '#180509').length;
+    expect(inside(shut.rects)).toBe(0);
+    expect(inside(open.rects)).toBeGreaterThan(20);
+  });
+
+  it('goes when it is told to: a faded costume paints nothing at all', () => {
+    // "The costume after some time vanishes" (owner call). The hazard reports null once it
+    // has gone, and a fully faded one must not linger as a dark smear either.
+    const { ctx, rects } = recorder();
+    drawDragon(
+      ctx,
+      dragon({ layers: 0, phase: 'beaten', costume: { openness: 1, fade: 1 } }),
+      1.2,
+      true,
+    );
+    expect(rects).toHaveLength(0);
+    const gone = recorder();
+    drawDragon(gone.ctx, dragon({ layers: 0, phase: 'beaten', costume: null }), 1.2, true);
+    expect(gone.rects).toHaveLength(0);
+  });
+
+  it('TOPPLES as it dies, and the suit builds up under it', () => {
+    /*
+     * `stripping` is the hand-over: the beast leans further and sinks as the empty suit
+     * comes up under it, so one becomes the other. It used to dissolve on the spot, which
+     * left nothing that could then be opened — and the opening is the ending.
+     */
     const early = recorder();
     drawDragon(early.ctx, dragon({ layers: 0, phase: 'stripping', progress: 0.1 }), 1.2, true);
     const late = recorder();
     drawDragon(late.ctx, dragon({ layers: 0, phase: 'stripping', progress: 0.9 }), 1.2, true);
-    const wreck = (rs: Rect[]) => rs.filter((r) => r.y >= GROUND_TOP - 30).length;
-    expect(wreck(early.rects)).toBeGreaterThan(0);
-    expect(wreck(late.rects)).toBeGreaterThanOrEqual(wreck(early.rects));
+    // The lean: its highest cells have travelled sideways, and the whole animal is lower.
+    const crown = (rs: Rect[]) => {
+      const top = Math.min(...rs.map((r) => r.y));
+      const band = rs.filter((r) => r.y < top + 30);
+      return { top, x: Math.max(...band.map((r) => r.x)) };
+    };
+    const a = crown(early.rects);
+    const b = crown(late.rects);
+    expect(b.top).toBeGreaterThan(a.top);
+    expect(Math.abs(b.x - a.x)).toBeGreaterThan(40);
+    // …and the suit is already on the floor underneath it.
+    expect(late.rects.filter((r) => r.y >= GROUND_TOP - 30).length).toBeGreaterThan(10);
     // …and the label stops the moment it stops being the obstacle.
     expect(late.rects.some((r) => r.fill.includes('155,47,56'))).toBe(false);
   });
@@ -265,7 +336,7 @@ describe('the Godzilla', () => {
 
   it('drops the pips once it has been beaten', () => {
     const { ctx, rects } = recorder();
-    const d = dragon({ layers: 0, phase: 'beaten' });
+    const d = dragon({ layers: 0, phase: 'beaten', costume: { openness: 1, fade: 0 } });
     drawDragon(ctx, d, 1.2, true);
     const cx = d.box.x + d.box.w / 2;
     expect(rects.filter((r) => r.w === 8 && r.h <= 6 && r.x < cx - 150)).toHaveLength(0);
@@ -551,15 +622,112 @@ describe('the five hires', () => {
   it('throws no confetti under reduced motion, and none before the first landing', () => {
     const falling = recorder();
     drawHiredCandidates(falling.ctx, [candidate({ progress: 0.5, landed: false })], 1.2, false);
-    const airborne = falling.rects.filter((r) => r.w === 6 && r.h === 6);
-    expect(airborne).toHaveLength(0);
+    // 8px cells, and only over the line-up: 24 six-pixel cells across the whole frame read
+    // as specks of dirt against the bright sky the payoff now brings up, which is the same
+    // defect that deleted this screen's drifting embers.
+    const confetti = (rs: Rect[]) => rs.filter((r) => r.w === 8 && r.h === 8);
+    expect(confetti(falling.rects)).toHaveLength(0);
 
     const landed = recorder();
     drawHiredCandidates(landed.ctx, [candidate()], 1.2, false);
-    expect(landed.rects.filter((r) => r.w === 6 && r.h === 6).length).toBeGreaterThan(10);
+    expect(confetti(landed.rects).length).toBeGreaterThan(8);
+    for (const r of confetti(landed.rects)) {
+      expect(Math.abs(r.x - 640)).toBeLessThan(140);
+    }
 
     const reduced = recorder();
     drawHiredCandidates(reduced.ctx, [candidate()], 1.2, true);
-    expect(reduced.rects.filter((r) => r.w === 6 && r.h === 6)).toHaveLength(0);
+    expect(confetti(reduced.rects)).toHaveLength(0);
+  });
+});
+
+describe('the player, burning', () => {
+  /*
+   * The fourth death pose (owner call: "for the dying effect of our character, make the
+   * character burn upon touching the fire from the Godzilla"), and the assertions are about
+   * the two things the first cut got wrong. It drew a flame column per 4px of body, every
+   * column reaching a similar height, which rasterised as an **orange box with a head
+   * sticking out of it** — the cone's eight-rectangles defect in a second costume. What
+   * reads as burning is a handful of tongues at very different heights with the person
+   * visible between them, and soot on the body underneath.
+   */
+  const burn = (p: number, reduced = false) => {
+    const { ctx, rects } = recorder();
+    drawBurningHero(ctx, 400, GROUND_TOP, p, 1.2, reduced);
+    return rects;
+  };
+  const fire = (rs: Rect[]) => rs.filter((r) => r.fill.toUpperCase().startsWith('#FF'));
+
+  it('burns in TONGUES with air between them, not as a block', () => {
+    const rs = burn(0.8);
+    const flame = fire(rs);
+    expect(flame.length).toBeGreaterThan(20);
+    // Every flame cell is one 4px cell wide or a small multiple of it: no filled slabs.
+    for (const r of flame) expect(r.w).toBeLessThanOrEqual(12);
+    // Tongues reach very different heights — that spread is the whole read. Measured as
+    // the top of the flame per column band.
+    const tops = new Map<number, number>();
+    for (const r of flame) {
+      const band = Math.round(r.x / 12);
+      tops.set(band, Math.min(tops.get(band) ?? 1e9, r.y));
+    }
+    const hs = [...tops.values()];
+    expect(Math.max(...hs) - Math.min(...hs)).toBeGreaterThan(30);
+    /*
+     * …and there is unpainted air between them, which is the assertion that actually rules
+     * out the box: the flame's own cells cover less than half of the rectangle they span.
+     * The rejected version covered nearly all of it, which is the definition of a slab.
+     */
+    const x0 = Math.min(...flame.map((r) => r.x));
+    const x1 = Math.max(...flame.map((r) => r.x + r.w));
+    const y0 = Math.min(...flame.map((r) => r.y));
+    const y1 = Math.max(...flame.map((r) => r.y + r.h));
+    // Distinct cells, not painted area: a tongue paints its shell and then its core over
+    // the same cell, so summing areas double-counts and would flatter any shape.
+    const cells = new Set<string>();
+    for (const r of flame) {
+      for (let cx2 = r.x; cx2 < r.x + r.w; cx2 += 4) {
+        for (let cy = r.y; cy < r.y + r.h; cy += 4) cells.add(`${cx2 >> 2},${cy >> 2}`);
+      }
+    }
+    expect((cells.size * 16) / ((x1 - x0) * (y1 - y0))).toBeLessThan(0.45);
+  });
+
+  it('chars the body from the feet up, and takes hold over the beat', () => {
+    const early = burn(0.1);
+    const late = burn(1);
+    const soot = (rs: Rect[]) =>
+      rs.filter((r) => ['#180C0A', '#2A1410'].includes(r.fill.toUpperCase()));
+    expect(soot(early).length).toBeGreaterThan(0);
+    expect(soot(late).length).toBeGreaterThan(soot(early).length);
+    // The char starts at the shoes: its lowest cell is on the floor line either way.
+    expect(Math.max(...soot(late).map((r) => r.y + r.h))).toBeGreaterThan(GROUND_TOP - 8);
+    // And the fire grows with it rather than arriving whole.
+    const highest = (rs: Rect[]) => Math.min(...fire(rs).map((r) => r.y));
+    expect(highest(late)).toBeLessThan(highest(early));
+  });
+
+  it('sends up PALE smoke, and only as the fire takes hold', () => {
+    // Pale because it has to read against a near-black sky; the first version was a dark
+    // grey at low alpha and rasterised as nothing at all.
+    const smoke = (rs: Rect[]) => rs.filter((r) => r.fill.includes('206,210,208'));
+    const late = burn(1);
+    expect(smoke(late).length).toBeGreaterThan(3);
+    for (const r of smoke(late)) expect(r.y).toBeLessThan(GROUND_TOP - 60);
+    const alphas = smoke(late).map((r) => Number(r.fill.slice(r.fill.lastIndexOf(',') + 1, -1)));
+    expect(Math.max(...alphas)).toBeGreaterThan(0.2);
+    // At the start of the beat there is barely any of it.
+    const maxEarly = Math.max(
+      ...smoke(burn(0.05)).map((r) => Number(r.fill.slice(r.fill.lastIndexOf(',') + 1, -1))),
+    );
+    expect(maxEarly).toBeLessThan(0.06);
+  });
+
+  it('holds still under reduced motion, and drops the embers', () => {
+    const a = burn(0.7, true);
+    const b = burn(0.7, true);
+    expect(b).toEqual(a);
+    // The two embers are the only wall-clock part, so they go with the motion.
+    expect(fire(a).length).toBeLessThan(fire(burn(0.7, false)).length);
   });
 });

@@ -58,6 +58,7 @@
  * on a framed plaque **over each monster** — which is where the owner asked for
  * the TAX/GST/AUDIT signage to live, instead of on boards hanging in the sky.
  */
+import { RESOLUTION } from '../data/tuning.config';
 import { drawPixels, pxRect, type Palette } from './PixelArt';
 import { drawLabelPlaque } from './PixelText';
 import type { LiftState, MonsterState } from '../world/Hazards/ComplianceMaze';
@@ -124,6 +125,19 @@ const ANGRY: Palette = {
   c: '#3A1414', // the slot: the deployed barrier's "PENDING" core, unchanged
 };
 
+/**
+ * The frames after it has caught somebody: the same head, the slot lit up.
+ *
+ * A third palette rather than a third sprite — the grid, the cabinet and the plate are
+ * untouched, and the only thing that moves is the bar through the middle, which is the one
+ * feature this creature has.
+ */
+const STRUCK: Palette = {
+  ...SHARED,
+  H: '#CFE6EC',
+  c: '#8B1A1A',
+};
+
 /** Cleared: the same head and the same slot, filed. */
 const SMILING: Palette = {
   ...SHARED,
@@ -163,7 +177,15 @@ export function drawMonsters(ctx: CanvasRenderingContext2D, monsters: MonsterSta
     // inside this one. Raised it leaves the box, which is legal because a friendly
     // monster cannot cost the player anything.
     const ARM_H = MONSTER_SCALE * 2;
-    const armY = m.box.y + MONSTER_SCALE * 4 - m.arm * MONSTER_SCALE * 7;
+    /*
+     * The one that caught the player holds its boom **slammed down** on the frames the
+     * impact is painted on (`MonsterState.struck`): 10px below rest, i.e. across the pile
+     * of forms the player is now under. It is the same idea as the DENIED stamp staying on
+     * the flattened hero on screen 1 — the pose has to say who did it, and a creature
+     * standing there with its arm at rest says nobody did.
+     */
+    const slam = m.struck ? MONSTER_SCALE * 2 : 0;
+    const armY = m.box.y + MONSTER_SCALE * 4 - m.arm * MONSTER_SCALE * 7 + slam;
     for (let i = 0; i < MONSTER_PX_W / MONSTER_SCALE; i += 1) {
       const seg = i * MONSTER_SCALE;
       // Two cells on, two off: the hazard stripe reads without colour.
@@ -171,9 +193,10 @@ export function drawMonsters(ctx: CanvasRenderingContext2D, monsters: MonsterSta
       pxRect(ctx, stripe, x0 + seg, armY - m.arm * seg * 0.55, MONSTER_SCALE, ARM_H, 1);
     }
 
-    drawPixels(ctx, MONSTER, m.friendly ? SMILING : ANGRY, m.box.x, m.box.y, {
-      scale: MONSTER_SCALE,
-    });
+    // …and its slot goes hot, which is the only thing on the creature that ever changes
+    // besides the head's colour. Same grid, third palette: no new sprite.
+    const palette = m.friendly ? SMILING : m.struck ? STRUCK : ANGRY;
+    drawPixels(ctx, MONSTER, palette, m.box.x, m.box.y, { scale: MONSTER_SCALE });
 
     // Name plate — a framed plaque, the same one the backdrop's filing cabinets
     // used to carry, moved onto the thing it names (owner call: "I don't want the
@@ -202,6 +225,119 @@ export function drawMonsters(ctx: CanvasRenderingContext2D, monsters: MonsterSta
 }
 
 /**
+ * **What happens to the player when a compliance monster catches him: he gets FILED.**
+ *
+ * Every death that stops a stage is visible *on the player* — that is a rule this build
+ * has paid for twice (the DENIED stamp flattens him on screen 1, the taped figure wraps him
+ * on screen 3) and this screen was the one that still had none: contact booked two months,
+ * the frame froze, and nothing on it said why. So the maze gets its own pose, and the
+ * obstacle's own vocabulary is what it is made of: these creatures are rubber stamps on
+ * filing cabinets, so what they do to you is **bury you in the queue**.
+ *
+ * Three parts, drawn over the hero:
+ *  - **A mound of forms** stacked to his chest, in courses that step inwards, each with a
+ *    keyline under it so it reads as *paper* rather than as a snowdrift. Two tones, both
+ *    lighter than anything on this screen except the monsters' own approval plates —
+ *    which is deliberate, because the two things are the same material.
+ *  - **Loose sheets in the air**, still coming down. They drift on the phase the host
+ *    passes in, so `prefers-reduced-motion` holds them mid-fall rather than deleting them:
+ *    the information is "he is under a pile of paper", and that survives being still.
+ *  - **The slot mark**, pressed across the top sheet in the creature's own dark red. It is
+ *    the same bar that sits in every monster's head, which is what ties the pile to the
+ *    thing that made it. No word is set on it: the delay label (`OBSTACLE +2 MONTHS`)
+ *    is already flying up off his body on these exact frames, and two pieces of type on
+ *    one 48px figure is one too many.
+ *
+ * Pure: same inputs, same cells, no wall clock of its own.
+ */
+export function drawFiled(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  feetY: number,
+  phase: number,
+  reduced: boolean,
+): void {
+  const P = 4;
+  const SHEET = '#E4EAEC';
+  const SHEET_2 = '#C3D0D5';
+  const KEYLINE = '#7C8E95';
+  const SLOT = '#8B1A1A';
+
+  /*
+   * The mound: five courses stepping inwards to his chest, widest on the floor — and each
+   * one **offset sideways**, which is the whole difference between a stack of paper and a
+   * wedding cake. Rasterised symmetrical it read as a tidy pyramid, i.e. as something
+   * somebody built rather than as something dumped on him.
+   */
+  const courses: readonly [number, number, number][] = [
+    [72, 0, -3],
+    [62, 8, 5],
+    [56, 15, -6],
+    [44, 21, 3],
+    [30, 26, -2],
+  ];
+  courses.forEach(([w, up, off], i) => {
+    const y = feetY - up - 10;
+    const x = cx - w / 2 + off;
+    pxRect(ctx, i % 2 === 0 ? SHEET : SHEET_2, x, y, w, 10, P);
+    // The keyline is the shadow one course casts on the one below, so it stops short of
+    // the ends — a line the full width of every course reads as ruling, not as paper.
+    pxRect(ctx, KEYLINE, x + 4, y + 8, w - 8, 2, 2);
+  });
+  // Two sheets shoved out sideways, so the pile has corners instead of being a hill.
+  pxRect(ctx, SHEET, cx - 46, feetY - 14, 18, 5, P);
+  pxRect(ctx, KEYLINE, cx - 46, feetY - 10, 18, 2, 2);
+  pxRect(ctx, SHEET_2, cx + 28, feetY - 21, 20, 5, P);
+  pxRect(ctx, KEYLINE, cx + 28, feetY - 17, 20, 2, 2);
+
+  // The slot mark, stamped across the top of the pile.
+  pxRect(ctx, SLOT, cx - 13, feetY - 40, 26, 6, 2);
+  pxRect(ctx, SLOT, cx - 17, feetY - 38, 4, 2, 2);
+  pxRect(ctx, SLOT, cx + 13, feetY - 38, 4, 2, 2);
+
+  // Loose sheets still coming down. Held frames, not eased — an 8-bit machine would step
+  // them, and under reduced motion the step is simply frozen.
+  const drift = reduced ? 0 : Math.floor(phase * 6) % 3;
+  const falling: readonly [number, number][] = [
+    [-34, -58],
+    [22, -66],
+    [-6, -78],
+  ];
+  falling.forEach(([dx, dy], i) => {
+    const y = feetY + dy + (i === 1 ? -drift * P : drift * P);
+    pxRect(ctx, i % 2 === 0 ? SHEET : SHEET_2, cx + dx, y, 16, 5, P);
+    pxRect(ctx, KEYLINE, cx + dx + (drift % 2 === 0 ? 0 : 2), y + 5, 16, 2, 2);
+  });
+}
+
+/**
+ * The weather, over the whole frame: the gloom that sits on this screen, and the wash
+ * that replaces it once GCC-BOT has filed everything.
+ *
+ * The sky, the clouds and the rain belong to `scenery.ts`, which paints them *behind*
+ * the level. This is the other half of the same change and it has to go **over** the
+ * masonry, because a screen where only the sky brightens is a screen with a bright sky
+ * and a dark maze in front of it — the argument is that the environment is fresh, and
+ * the environment is mostly brick.
+ *
+ * Two layers, each the inverse of the other, exactly as the Workplace's payoff does it:
+ * a cool dark veil at `0.22 × (1 − clear)`, and a pale wash at `0.07 × clear`. Drawn
+ * before the plates and the monsters so the cast stays saturated against it.
+ */
+export function drawWeatherWash(ctx: CanvasRenderingContext2D, clear: number): void {
+  const c = Math.max(0, Math.min(1, clear));
+  const { WIDTH: w, HEIGHT: h } = RESOLUTION;
+  if (c < 1) {
+    ctx.fillStyle = `rgba(0,16,24,${(0.22 * (1 - c)).toFixed(3)})`;
+    ctx.fillRect(0, 0, w, h);
+  }
+  if (c > 0) {
+    ctx.fillStyle = `rgba(190,232,240,${(0.07 * c).toFixed(3)})`;
+    ctx.fillRect(0, 0, w, h);
+  }
+}
+
+/**
  * Where the monsters go once GCC-BOT has filed everything. Drawn only while they
  * are actually on their way (or sitting there), because before the badge it would
  * be a marker for something that has not been offered yet.
@@ -223,10 +359,11 @@ export function drawGatherPad(
 /**
  * The clearance lift — the plate that carries the player down into the far bay.
  *
- * It is the only thing in this level painted in its own colour rather than the
- * screen's stone material, and that is the point: everything else here is filed
- * paper stacked into architecture, and this is a machine that moves. A brick
- * texture said "another ledge" (owner call).
+ * With the hoist below it, the two plates are the only things in this level painted in
+ * their own colour rather than the screen's stone material, and that is the point:
+ * everything else here is filed paper stacked into architecture, and these are
+ * machines that move. A brick texture said "another ledge" (owner call) — which is
+ * exactly what the platform the hoist replaced looked like.
  *
  * The yellow is machinery yellow, not the reserved value orange (`#FF5400`) — the
  * same signal a real lift carries. The travel is drawn as well as the plate: a
@@ -234,6 +371,29 @@ export function drawGatherPad(
  * stepped on, exactly the way the badge's rail says "this floats".
  */
 export function drawLift(ctx: CanvasRenderingContext2D, lift: LiftState | null): void {
+  drawPlate(ctx, lift, 1);
+}
+
+/**
+ * The clearance **hoist** — the same machine, going the other way.
+ *
+ * It replaced the long brown platform that used to stand across this span (owner
+ * call: "make this a floating platform like the yellow one on the other side but make
+ * it go up and down"), so it is deliberately painted as the *same object* as the
+ * lift: machinery yellow, lit top edge, chevrons for the travel. Two screens' worth of
+ * vocabulary for one idea would be worse than none — a player who has learnt what the
+ * yellow plate does on the way out of this maze should recognise it on the way in.
+ *
+ * The only thing that changes is which way the chevrons point, and that they are drawn
+ * *above* the plate rather than below it: the travel cue always shows the trip the
+ * plate has left to make.
+ */
+export function drawHoist(ctx: CanvasRenderingContext2D, hoist: LiftState | null): void {
+  drawPlate(ctx, hoist, -1);
+}
+
+/** `dir` is +1 for a plate that descends and −1 for one that rises. */
+function drawPlate(ctx: CanvasRenderingContext2D, lift: LiftState | null, dir: 1 | -1): void {
   if (!lift) return;
   const { box } = lift;
   const cx = box.x + box.w / 2;
@@ -248,17 +408,33 @@ export function drawLift(ctx: CanvasRenderingContext2D, lift: LiftState | null):
   // inside the remaining travel — the rail may never draw past where the plate can
   // actually go (a test pins that, and a half-chevron hanging below the bottom of
   // the shaft would promise a descent the lift does not have).
-  const railBottom = box.y + box.h + lift.remaining;
+  // The rail runs from the plate towards wherever it is going: below it for the lift,
+  // above it for the hoist. `dir` is the only difference between the two machines.
+  const start = dir > 0 ? box.y + box.h : box.y;
+  const railEnd = start + dir * lift.remaining;
   const span = Math.max(1, lift.remaining);
   const CH = 6;
-  for (let y = box.y + box.h + 14; y + CH * 4 + 2 <= railBottom; y += 44) {
-    const fade = 0.34 - 0.2 * ((y - box.y - box.h) / span); // brightest under the plate
+  for (
+    let y = start + dir * 14;
+    dir > 0 ? y + CH * 4 + 2 <= railEnd : y - CH * 4 - 2 >= railEnd;
+    y += dir * 44
+  ) {
+    const fade = 0.34 - 0.2 * (Math.abs(y - start) / span); // brightest by the plate
     const c = `rgba(239,201,76,${Math.max(0.1, fade).toFixed(2)})`;
     for (let i = 0; i < 4; i += 1) {
-      // Two arms stepping down and inwards: a chevron, in whole 6px cells.
-      pxRect(ctx, c, cx - 20 + i * CH, y + i * CH, CH, CH, 2);
-      pxRect(ctx, c, cx + 14 - i * CH, y + i * CH, CH, CH, 2);
+      // Two arms stepping away from the plate and inwards: a chevron, in whole 6px
+      // cells. Mirrored vertically for a rising plate, so it points up.
+      pxRect(ctx, c, cx - 20 + i * CH, y + dir * i * CH, CH, CH, 2);
+      pxRect(ctx, c, cx + 14 - i * CH, y + dir * i * CH, CH, CH, 2);
     }
+  }
+
+  // Carriage shoes under each end, so a 240px plate reads as a machine rather than as a
+  // yellow ruler. They hang BELOW the plate on purpose: anything drawn above its top
+  // face would promise footing the collision box does not have.
+  for (const sx of [box.x, box.x + box.w - 10]) {
+    pxRect(ctx, '#8A6E22', sx, box.y + box.h, 10, 8, 2);
+    pxRect(ctx, '#3A2E08', sx + 2, box.y + box.h + 8, 6, 4, 2);
   }
 
   // Plate: dark underside, yellow face, lit top edge — a machined slab.
@@ -267,11 +443,16 @@ export function drawLift(ctx: CanvasRenderingContext2D, lift: LiftState | null):
   pxRect(ctx, lift.carrying ? '#FFF0B0' : '#FFE68A', box.x + 2, box.y + 2, box.w - 4, 4, 2);
   pxRect(ctx, '#8A6E22', box.x, box.y + box.h - 4, box.w, 4, 2);
 
-  // Down chevrons on the plate: the sketch's arrow, in the art's own idiom.
-  for (let i = -1; i <= 1; i += 1) {
-    const ox = cx + i * 26;
-    pxRect(ctx, '#6B5410', ox - 6, box.y + 5, 4, 4, 2);
-    pxRect(ctx, '#6B5410', ox - 2, box.y + 9, 4, 4, 2);
-    pxRect(ctx, '#6B5410', ox + 2, box.y + 5, 4, 4, 2);
+  // Chevrons on the plate itself: the sketch's arrow, in the art's own idiom, pointing
+  // the way this plate travels. A wide plate gets more of them, so a 240px hoist does
+  // not read as a slab with three marks lost in the middle of it.
+  const marks = Math.max(1, Math.round(box.w / 80));
+  for (let i = 0; i < marks; i += 1) {
+    const ox = box.x + (box.w * (i + 0.5)) / marks;
+    const top = dir > 0 ? box.y + 5 : box.y + 9;
+    const mid = dir > 0 ? box.y + 9 : box.y + 5;
+    pxRect(ctx, '#6B5410', ox - 6, top, 4, 4, 2);
+    pxRect(ctx, '#6B5410', ox - 2, mid, 4, 4, 2);
+    pxRect(ctx, '#6B5410', ox + 2, top, 4, 4, 2);
   }
 }

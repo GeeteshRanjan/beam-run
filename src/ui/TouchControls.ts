@@ -134,8 +134,16 @@ export class TouchControls {
   }
 
   /**
-   * One-tap layout: the move pad is hidden (forward motion is automatic) and the
-   * act button grows, so the whole game is playable with a single thumb.
+   * One-tap layout: forward motion is automatic, so the **right** arrow goes and the act
+   * button grows — the whole game stays playable with a single thumb.
+   *
+   * The **left** arrow stays, and that is a deliberate correction. This layout used to
+   * hide the move pad entirely, which quietly made anything *behind* the player
+   * unreachable on the platform most of this audience is on: the Compliance badge is
+   * reached by hopping onto a floating step and then jumping back the other way (owner
+   * call, `docs/SCREENS.md` §4.9), and with no way to go left a phone player could never
+   * take GCC-BOT at all. One-tap means "you never have to press forward", not "you cannot
+   * turn round".
    */
   setAutoRun(on: boolean): void {
     this.root.classList.toggle('beam-run__touch--autorun', on);

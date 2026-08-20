@@ -37,6 +37,13 @@ import { aabbOverlap, type AABB } from '../world/Physics';
 import { Powerups, type ActivePowerView } from '../world/Powerups';
 import { badgeBoxAt, badgeCenter } from '../world/badgeFloat';
 import { dropBoxAt, dropStateAt, isAirdropped, type DropView } from '../world/badgeDrop';
+import { isPerched, perchBox, perchCenter } from '../world/badgePerch';
+import {
+  ceilingBoxAt,
+  ceilingStateAt,
+  isCeilingDrop,
+  type CeilingView,
+} from '../world/badgeCeiling';
 import {
   ledgerRows,
   logPanelView,
@@ -268,12 +275,30 @@ export class Simulation {
    * Null has two meanings and they are both "not now": the badge is already taken,
    * or this screen's badge is air-dropped and is currently in the air, expired, or
    * waiting for the next drone (`world/badgeDrop.ts`). The rail is always
-   * collectable somewhere; a delivery is not, and that is the mechanic.
+   * collectable somewhere, and so is a perch (`world/badgePerch.ts`, the Compliance
+   * maze's mark standing on its brick wall); a delivery is not, and that is the
+   * mechanic.
    */
   get badgeBox(): AABB | null {
     const b = this._screen.data.badge;
     if (!b || this.powerups.collected) return null;
+    if (isPerched(b)) return perchBox(b);
+    // The Workplace's mark falls out of a ceiling spotlight and expires, so like the
+    // air-drop it is only collectable for part of its cycle (`world/badgeCeiling.ts`).
+    if (isCeilingDrop(b)) return ceilingBoxAt(b, this.screenClock);
     return isAirdropped(b) ? dropBoxAt(b, this.screenClock) : badgeBoxAt(b, this.screenClock);
+  }
+
+  /**
+   * The ceiling delivery in progress, or null anywhere but the Workplace.
+   *
+   * Read by the host to draw the mark waiting in the fitting, the fall, and the
+   * countdown on the cabinet. A plain function of the clock, like `badgeDrop`.
+   */
+  get badgeCeiling(): CeilingView | null {
+    const b = this._screen.data.badge;
+    if (!b || !isCeilingDrop(b)) return null;
+    return ceilingStateAt(b, this.screenClock);
   }
 
   /**
@@ -300,6 +325,8 @@ export class Simulation {
   get badgePoint(): { x: number; y: number } | null {
     const b = this._screen.data.badge;
     if (!b) return null;
+    if (isPerched(b)) return perchCenter(b);
+    if (isCeilingDrop(b)) return ceilingStateAt(b, this.screenClock).badge;
     return isAirdropped(b) ? dropStateAt(b, this.screenClock).badge : badgeCenter(b, this.screenClock);
   }
   /** Capabilities engaged this run, in pickup order. */
@@ -348,6 +375,22 @@ export class Simulation {
     };
   }
 
+  /**
+   * 0..1 through the life-lost hold (`LIVES.LOST_HOLD`), and 0 at every other time.
+   *
+   * Presentation only, and the reason it exists is that one of the death poses is not a
+   * *pose* but a **process**: the dragon's fire burns the player, so the picture has to
+   * take hold over the beat rather than appear whole (`render/dragon.ts`'s
+   * `drawBurningHero`). The other three poses are single frames and need nothing from here.
+   *
+   * It is sim time, not the wall clock — the same rule the badge's float and the maze's
+   * weather follow — so the burn is the same on a replay and it holds still if the sim does.
+   */
+  get lifeLostProgress(): number {
+    if (this.state !== 'LIFE_LOST') return 0;
+    return Math.min(1, this.lifeLostT / LIVES.LOST_HOLD);
+  }
+
   // --- run lifecycle --------------------------------------------------------
 
   private startRun(): void {
@@ -387,9 +430,13 @@ export class Simulation {
       case 'dragon':
         return new Dragon(d.dragons ?? []);
       case 'maze':
-        return new ComplianceMaze(d.monsters ?? [], d.gather, d.lift);
+        return new ComplianceMaze(d.monsters ?? [], d.gather, d.lift, d.hoist);
       case 'workplace':
-        return new Workplace(d.mummies ?? [], d.terminal);
+        // It is handed the screen's static solids, and it is the only hazard that is:
+        // the bandages the figure throws are **stopped by the partition wall**, which is
+        // what makes the badge's side of that wall the safe side (owner call: the mark
+        // drops before the partition "so the user can take it safely").
+        return new Workplace(d.mummies ?? [], d.terminal, this._screen.solids);
       default:
         return null;
     }
@@ -405,11 +452,17 @@ export class Simulation {
    * host may draw the player inside the ANSR bubble.
    *
    * Only true where the hazard actually says so (`Hazard.shieldsPlayer`): the
-   * DENIED stamps cannot press an ANSR-backed player, the compliance maze turns
-   * friendly outright, and the hiring dragon's fire cannot touch a haloed player.
-   * On the screens where help means "the obstacles ahead are cleared" rather than
-   * "you cannot be hit" — the Workplace, where the badge makes the obstacle
-   * *solvable* — a shield visual would promise protection the rules do not give.
+   * DENIED stamps cannot press an ANSR-backed player, and the hiring dragon's fire
+   * cannot touch a haloed one. On the screens where help means "the obstacles ahead
+   * are cleared" rather than "you cannot be hit" — the Workplace, where the badge
+   * makes the obstacle *solvable* — a shield visual would promise protection the
+   * rules do not give.
+   *
+   * The **Compliance maze is the exception in the other direction** (owner call): its
+   * monsters really are harmless once GCC-BOT has filed everything, so a bubble would
+   * be honest there — and it still does not draw one, because that screen shows the
+   * same news on the world instead, by clearing the weather
+   * (`ComplianceMaze.skyClear`).
    */
   get shielded(): boolean {
     return this.powerups.isAssisted && this.hazard?.shieldsPlayer === true;

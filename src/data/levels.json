@@ -8,8 +8,8 @@
       "solid": "static collidable platform/wall (non-lethal). Walking into a wall stops you.",
       "spawn": "player entry point (feet), always near far-left",
       "exit": "reaching this x (right edge trigger) advances to next screen",
-      "badge": "ANSR capability pickup; anchored early in the screen and levitating vertically around gy (see POWERUPS in tuning.config.ts for how the band is derived). 'delivery' switches that off: with \"airdrop\" (Hire Under Fire only, owner call) the badge is not on a rail at all - a flying ANSR supply drone crosses the screen along row 'gy', releases it over one of the 'drops' columns in turn, and the badge comes to rest on the floating brick at row 'restGy' there for POWERUPS.DROP.LIFETIME seconds before it is gone (omit 'restGy' and it rests on the floor). Miss it and the next drone comes with the next column, so the screen is never unanswerable; stand still and you get nothing, which is the point on the one screen where standing still is how you get burnt. 'gx'/'gy' are still authored because everything structural reads them: gx is the column the badge belongs to for the badge-before-obstacle rule, and gy is the drone's flight row.",
-      "pedestal": "a solid with role \"pedestal\" is a floating block, drawn as its screen's own prop rather than as level material (on Hire Under Fire, the three bricks the badge is dropped onto). It is real geometry - it collides, it can be landed on, and the physics validator has to prove the badge on top of it is reachable - and it replaced the old \"hurdle\" role, which was a one-tile step in the middle of the same screen and was removed (owner call: it added nothing to a boss screen). A pedestal has to leave the corridor under it walkable: at row 12 its underside is 36px clear of a standing head.",
+      "badge": "ANSR capability pickup; anchored early in the screen and levitating vertically around gy (see POWERUPS in tuning.config.ts for how the band is derived). 'delivery' switches that off: with \"airdrop\" (Hire Under Fire only, owner call) the badge is not on a rail at all - a flying ANSR supply drone crosses the screen along row 'gy', releases it over one of the 'drops' columns in turn, and the badge comes to rest on the floating brick at row 'restGy' there for POWERUPS.DROP.LIFETIME seconds before it is gone (omit 'restGy' and it rests on the floor). Miss it and the next drone comes with the next column, so the screen is never unanswerable; stand still and you get nothing, which is the point on the one screen where standing still is how you get burnt. 'gx'/'gy' are still authored because everything structural reads them: gx is the column the badge belongs to for the badge-before-obstacle rule, and gy is the drone's flight row. With \"perch\" (Compliance) the mark simply stands on the top course of a floating brick deck at 'gx'/'restGy'. With \"ceiling\" (the Workplace, owner call) it hangs in the beam of a ceiling spotlight at 'gx'/'gy', drops straight down onto the floating cabinet at 'restGy' after POWERUPS.CEILING.HOLD seconds, rests there for LIFETIME and is gone until the next cycle - the only delivery that is visible before it is takeable.",
+      "pedestal": "a solid with role \"pedestal\" is a floating block, drawn as its screen's own prop rather than as level material (on Hire Under Fire, the single brick the badge is dropped onto). It is real geometry - it collides, it can be landed on, and the physics validator has to prove the badge on top of it is reachable - and it replaced the old \"hurdle\" role, which was a one-tile step in the middle of the same screen and was removed (owner call: it added nothing to a boss screen). A pedestal has to leave the corridor under it walkable: at row 12 its underside is 36px clear of a standing head.",
       "dragons": "the hiring dragon on Hire Under Fire - the screen's only obstacle, and it wears glasses and nothing else (owner call: no jacket and no tie). Exactly one is authored; it is a list because every other hazard family here is one. 'from'/'to' are the columns of the ground it STANDS ON at the far end of the screen - on two feet, so there is no hover row to author: its height comes from HAZARDS.DRAGON.BODY_H and the ground band. Its BODY IS NOT A HITBOX: the only lethal thing on the screen is one straight, growing, slightly diverging cone of fire thrown from its jaw along the floor in front of it, so nothing can cost a life without a telegraph in front of it and nothing on the screen travels. It opens every attempt with a roar it cannot attack during (HAZARDS.DRAGON.ROAR_TIME), which is the guaranteed safe beat the level starts on. 'seed' picks its rhythm without Math.random, and 'taunts' are the strings painted on the burst's own plaque, one per burst - drawn content, so uppercase and apostrophe-free, and NOT stripped from the bundle.",
       "monsters": "a compliance monster patrolling one corridor of the Compliance maze. 'from'/'to' are the grid columns it may wander between and 'gy' is the surface row it stands on at 'from'; 'slope' (-1 rising to the right, 0 flat, 1 falling) steps that row per tread and 'slopeRun' is how many columns make up one tread (default 1, and 2 on this screen's flights), so a monster can walk a staircase without ever standing half a row inside it. Its name is drawn on a framed plaque above it and is the ONLY signage on the screen - the five names are the five filings, so a second copy of them on boards in the sky is a duller label layer competing with this one (owner call, twice). It re-rolls direction and speed at every junction from its own seeded generator - unpredictable, never hunting. Touch one unassisted and the stage stalls. 'route' is the way home once the badge is taken: a list of surface cells it walks through, corner by corner, to reach the gather cell - the monsters use the player's own staircases rather than drifting through the geometry, which is the whole point of the picture.",
       "lift": "a moving platform. 'gx'/'gy'/'w' are where it PARKS (top of the plate at gy) and 'toGy' the row whose top it descends to. It carries the player down while they stand on it and returns when they step off. It is not in 'solids' on purpose: it moves, so the hazard owns the live box and nothing derives its position twice.",
@@ -95,23 +95,32 @@
       "hazard": "maze",
       "meaningTag": "entity-and-compliance",
       "monthsBase": 2,
-      "note": "Owner rebuild, authored from the owner's reference sketch, then re-cut a second time because the first pass got the STAIRS wrong. The screen is a STAIRCASE MAZE: no route along the ground, so the exit is only reachable by climbing. The switchback is the sketch, read bottom-left to right: the lower staircase rises off the left corridor onto the filings block (the one the sketch marks 'monsters gather here'); dropping back to the top tread and jumping up-left reaches the long left platform; the upper staircase rises right off that platform onto the top gallery, which runs into the statutory wall; the wall's top is the jumping-off point for the clearance LIFT, which carries the player down into the far bay and the exit. Every level is a corridor with a wandering monster on it, so the maze cannot be crossed by holding one direction on one level. Take GCC-BOT and every toll gate stands open for good while the five monsters stop scowling and cross the maze to the block. WHAT CHANGED ON THE RE-CUT, and why it matters if this is ever edited again: the staircases used to be single columns filled solid to the ground (h 1/2/3/4), which rasterised as a stack of blocks rather than as stairs, and the filings landing was 11 tiles wide by 8 tall - between them they made the bottom-right two thirds of the frame one unbroken slab. Both flights are ONE TILE THICK now, with open sky under them, and every tread is TWO columns wide so the flight reads as a long shallow diagonal the way the sketch draws it. The block is 7x5. The block still runs all the way to the statutory wall on purpose: shortening it opens a strip of ground between the block and the wall that can only be entered by falling from the gallery and cannot be left, which is a soft lock, not a shortcut.",
+      "note": "Owner rebuild, authored from the owner's reference sketch, re-cut once because the first pass got the STAIRS wrong, and re-cut a third time on the owner's pass that deleted the badge rail and the long brown platform. The screen is a STAIRCASE MAZE: no route along the ground, so the exit is only reachable by climbing. Read bottom-left to right: the ANSR mark stands on a FLOATING brick structure, and getting to it is TWO jumps in OPPOSITE directions (owner call, third note on this screen): running right, jump onto 'step-ansr-approach' (gx 4-6, gy 12, 120px over the corridor), then turn around and jump back up-LEFT onto 'wall-ansr-mark' (gx 1-2, gy 9), which is 120px higher again and 40px across a gap - the mark sits on its right-hand column. Walk under both and you keep going with no GCC-BOT, which is the point: the mark used to hang on a levitating rail, then stood on the floor where nobody could avoid it, then sat one hop off the ground where everybody took it on the way past; the left corridor runs on to the lower staircase, which rises onto the filings block; back down to the top tread (stair-tds, gx 15) and one hop LEFT onto the clearance HOIST, which carries the player up two rows to the upper stairs, the top gallery and the statutory wall; the wall's top is the jumping-off point for the clearance LIFT down into the far bay and the exit. Every level is a corridor with a wandering monster on it, so the maze cannot be crossed by holding one direction on one level. Take GCC-BOT and every toll gate stands open for good, the five monsters stop scowling and cross the maze to the block, and the weather clears. WHAT CHANGED ON THIS RE-CUT, and why it matters if this is ever edited again: the long 'platform-registers' (gx 9-14, gy 8) is GONE and the HOIST stands in its place, because the owner asked for a plate that goes up and down instead of a slab you had to jump up-left onto from 120px below. The hoist parks at gy 9 and NOT one row lower: its underside at 376 has to leave 84px of headroom over the highest tread beneath its span (stair-gst at gy 12, top 480), or a player on that tread can no longer hop up to stair-tds and the maze becomes uncompletable - and nothing in the static-solid validator would catch it, because the plate is not a solid in this file. 'wall-hoist-guide' at gx 8 is the owner's left-hand wall, and lifting the badge structure into the air made it load-bearing rather than belt-and-braces: from the structure's deck at 480 the apex is feet-340, which is ABOVE the plate's parked top at 360 and only 80px away horizontally, so without the pier the whole lower maze could be skipped by jumping structure -> plate -> upper flight. The staircases stay ONE TILE THICK with open sky under them and TWO-column treads; step-resubmit at gx16 gy13 is the only way out of the strip under the lower flight. The block is 7x5 and still runs all the way to the statutory wall on purpose: shortening it opens a strip of ground that can only be entered by falling and cannot be left.",
       "spawn": { "gx": 1, "gy": 15 },
       "exit": { "gx": 31 },
       "solids": [
         { "gx": 0, "gy": 15, "w": 32, "h": 3, "role": "ground" },
+        { "gx": 1, "gy": 9, "w": 2, "h": 1, "role": "wall-ansr-mark" },
+        { "gx": 4, "gy": 12, "w": 3, "h": 1, "role": "step-ansr-approach" },
         { "gx": 9, "gy": 14, "w": 2, "h": 1, "role": "stair-registration" },
         { "gx": 11, "gy": 13, "w": 2, "h": 1, "role": "stair-pan" },
         { "gx": 13, "gy": 12, "w": 2, "h": 1, "role": "stair-gst" },
         { "gx": 15, "gy": 11, "w": 1, "h": 1, "role": "stair-tds" },
         { "gx": 16, "gy": 13, "w": 1, "h": 1, "role": "step-resubmit" },
         { "gx": 17, "gy": 10, "w": 7, "h": 5, "role": "block-filings" },
-        { "gx": 9, "gy": 8, "w": 6, "h": 1, "role": "platform-registers" },
+        { "gx": 8, "gy": 6, "w": 1, "h": 4, "role": "wall-hoist-guide" },
         { "gx": 16, "gy": 7, "w": 2, "h": 1, "role": "stair-transfer-pricing" },
         { "gx": 18, "gy": 6, "w": 2, "h": 1, "role": "stair-fema" },
         { "gx": 20, "gy": 5, "w": 4, "h": 1, "role": "gallery-approvals" },
         { "gx": 24, "gy": 5, "w": 1, "h": 10, "role": "wall-statutory" }
       ],
+      "hoist": {
+        "gx": 9,
+        "gy": 9,
+        "w": 6,
+        "toGy": 7,
+        "note": "The clearance hoist - the owner's replacement for the long brown platform that used to stand at gy 8 ('make this a floating platform like the yellow one on the other side but make it go up and down'). Same machine as the lift and the same rule: it moves only while the player is on it (UP, here) and returns only while it is empty, so it can never rise into a body it is not carrying. It PARKS low (gy 9) and travels to gy 7, where its right edge sits 40px from stair-transfer-pricing at the same height - board it with one hop left off stair-tds and you are on the upper flight. Not in solids for the same reason the lift is not: it moves, so the hazard owns its live box and this file says only where it parks."
+      },
       "lift": {
         "gx": 26,
         "gy": 6,
@@ -145,17 +154,22 @@
           "slopeRun": 2,
           "seed": 23,
           "zone": "struggle",
-          "route": [{ "gx": 15, "gy": 11 }, { "gx": 17, "gy": 10 }, { "gx": 20, "gy": 10 }]
+          "route": [
+            { "gx": 15, "gy": 11 },
+            { "gx": 17, "gy": 10 },
+            { "gx": 20, "gy": 10 }
+          ]
         },
         {
           "name": "LEGAL",
           "from": 9,
           "to": 14,
-          "gy": 8,
+          "gy": 9,
+          "hoist": true,
           "seed": 53,
           "zone": "struggle",
+          "note": "LEGAL rides the clearance hoist, which is this maze's fifth level now that the long platform at gy 8 is gone. `hoist` means its surface is the plate's live top rather than a row in this file, so `gy` here is only the plate's parking row - the corridor it wanders is the plate's own span (gx 9-14). Boarding the hoist therefore costs the same as any other corridor on this screen: you read the monster first.",
           "route": [
-            { "gx": 14, "gy": 8 },
             { "gx": 15, "gy": 11 },
             { "gx": 17, "gy": 10 },
             { "gx": 20, "gy": 10 }
@@ -190,9 +204,11 @@
       "gather": { "gx": 20, "gy": 10 },
       "badge": {
         "type": "CLEAR_PATH",
-        "gx": 4,
-        "gy": 8,
-        "note": "GCC-BOT files on your behalf. Every toll gate in the maze stands open for good, and the five compliance monsters stop scowling and walk off to the landing together - the whole maze becomes a staircase you simply climb. Skip it and the same maze has to be timed corridor by corridor, with a wandering monster on every level."
+        "gx": 2,
+        "gy": 9,
+        "delivery": "perch",
+        "restGy": 9,
+        "note": "GCC-BOT files on your behalf. Every toll gate in the maze stands open for good, the five compliance monsters stop scowling and walk off to the landing together, and the weather over the market clears - the whole maze becomes a staircase you simply climb. Skip it and the same maze has to be timed corridor by corridor, with a wandering monster on every level. DELIVERY: this is the one badge that is neither on a rail nor air-dropped (owner call: 'remove the ANSR powerup rail and instead make a brick wall which will have an ANSR powerup on it'). It stands on the top course of 'wall-ansr-mark', which is a FLOATING brick structure over the left corridor and not a wall standing on the floor (owner call, a second note on the same pass: 'the powerup is easily available and is on the way, so the player would anyway take it - keep it somewhere that it is on the user to take it or not, maybe a floating brick structure where it resides, the player jumps up to it, takes it and then comes back to the normal path'). On the ground it was a hurdle you had to clear anyway, so everybody collected the mark for free; floating at gy 12 its underside leaves 36px of air over a standing head, so holding RIGHT walks straight underneath and the detour is a decision. The mark sits on the structure's LAST column: a player who lands anywhere on the deck and keeps walking right cannot miss it, where one in the middle could be walked past by somebody who landed late - and gx 6 is also the last column it may use at all, because TAX's corridor starts at gx 7 and the badge has to precede every obstacle. The deck is THREE blocks (gx 4-6) rather than four, and that is a measured number, not a shape: it is 120px over the floor, so it has to be cleared in one arc, and every column added to its LEFT end costs run-up. At gx 3-6 a one-tap auto-run player had a 0.20s window of taps that landed on it; at gx 4-6 the window is 0.35s, against a 0.30s budget (badgeReach.test.ts)."
       },
       "copy": { "titleCard": "Compliance", "onClear": "Compliance cleared." }
     },
@@ -204,17 +220,18 @@
       "hazard": "workplace",
       "meaningTag": "a-workplace-that-works",
       "monthsBase": 2,
-      "note": "Owner-specified replacement for Local Expertise, and it sits here - straight after Compliance - because a workplace is the first thing you actually walk into once the filings clear. The picture: a broken office. Lights flickering, wet floor signs, caution tape over everything, and one figure mummified in three layers of that same tape trudging the floor. He only ever walks ONE way (see 'mummies') so he is a metronome, not a chase. The player spawns behind the partition at gx 6, which is two columns clear of the corridor, so he is out of reach on frame one - that partition is both the safety and this screen's one jump. The two-column gap between the partition and the corridor is not spare space: it is where you stand to cut the tape, and it is why the pulse never has to cross the partition to reach him. Unassisted the screen is still winnable: wait behind the partition until he is at the far end, then run, because he loops back behind you rather than turning round. With the badge you do not dodge him at all - you free him.",
+      "note": "Owner-specified replacement for Local Expertise, and it sits here - straight after Compliance - because a workplace is the first thing you actually walk into once the filings clear. The picture: a broken office. Lights flickering, wet floor signs, caution tape over everything, and one figure mummified in three layers of RED barrier tape trudging the floor - a different colour from the room's caution yellow on purpose, because a wrapped man in the same yellow as nine props merged into the set. He paces his corridor TO AND FRO (see 'mummies'), pausing to turn at each end, so he is a metronome rather than a chase: read one leg and pick your moment. He used to loop instead, snapping back to his start column, and the owner replaced that because a body that vanishes at one end and reappears at the other reads as a respawn rather than as a person. AND HE THROWS (owner call: 'add a capability for the mummy to throw the bandages at the player capturing him'): every HAZARDS.WORKPLACE.THROW_INTERVAL he stops, raises a coil of his own tape over his shoulder for THROW_WINDUP, and unwinds it down the floor at the player's shins. Contact books the same 'mummy' delay as his body does and the player is shown wrapped where he stood, which is what 'capturing him' looks like. The answer is to jump it - the roll flies 30px above the floor line so clearing it costs 41px of a 140px jump - and the three numbers that keep that fair are the long telegraph, the fact that he stands still through the whole throw (so every attempt costs him ground), and that only one roll is ever in the air. He will not throw at a player closer than THROW_MIN_RANGE, because a roll spawned inside the player is a hit with no telegraph; inside that distance his body is the threat, which is the fight this screen was already about. The player spawns behind the partition at gx 7, which is two clear columns short of the corridor, so he is out of reach on frame one - that partition is both the safety and this screen's one jump, and now that the figure throws it is a place to READ him from rather than a place to wait behind. The gap between the partition and the corridor is not spare space: it is where you stand to burn the tape off him, and it is why the orb never has to cross the partition to reach him. Unassisted the screen is still winnable, but waiting him out no longer works now that he comes back: the move is to meet him head on and JUMP him. That is measured, not assumed - a jump clears his 78px crown for 0.455s, the head-on closing speed is 260 + 150 = 410 px/s so the 88px of overlap take 0.21s, and overtaking him from behind needs 0.8s of air, which is impossible on purpose and is what stops 'hold right' being an answer. With the badge you do not dodge him at all - you free him.",
       "spawn": { "gx": 1, "gy": 15 },
       "exit": { "gx": 31 },
       "solids": [
         { "gx": 0, "gy": 15, "w": 32, "h": 3, "role": "ground" },
-        { "gx": 6, "gy": 13, "w": 1, "h": 2, "role": "wall-partition" }
+        { "gx": 4, "gy": 12, "w": 2, "h": 1, "role": "pedestal-cabinet" },
+        { "gx": 7, "gy": 13, "w": 1, "h": 2, "role": "wall-partition" }
       ],
-      "mummies": [{ "name": "TIED UP", "from": 9, "to": 27, "gy": 15, "zone": "struggle" }],
+      "mummies": [{ "name": "TIED UP", "from": 10, "to": 27, "gy": 15, "zone": "struggle" }],
       "terminal": { "gx": 24, "gy": 15 },
       "clutter": [
-        { "kind": "cone", "gx": 7 },
+        { "kind": "cone", "gx": 9 },
         { "kind": "post", "gx": 14 },
         { "kind": "sign", "gx": 15 },
         { "kind": "post", "gx": 17 },
@@ -227,9 +244,11 @@
       ],
       "badge": {
         "type": "UNWRAP",
-        "gx": 4,
-        "gy": 8,
-        "note": "The only badge that hands the player a verb of their own: it makes a cutter appear and the shoot button live. Three hits strip the three tape layers and he unravels - and he does NOT die. He is a colleague who was wrapped in the same caution tape as the room: shirt, sleeves rolled up, straight to the sparking terminal, and it is his work that lights the floor and clears every sign and every strip of tape. The blocker becomes the person who makes it right. Skip the badge and there is no cutter, so the same figure has to be timed and jumped instead."
+        "gx": 5,
+        "gy": 4,
+        "delivery": "ceiling",
+        "restGy": 12,
+        "note": "DELIVERY: the rail is gone (owner call: 'for the powerup remove the rail and add - from the spot light I just said - an ANSR powerup that falls and stays for a few seconds, and the user has to take it otherwise it's gone, and this happens at regular intervals; and this powerup doesn't drop immediately, it's visible as the user comes to this screen but drops after a few seconds the user has spent in the screen, and this drops on a cabinet or something which is before the partition wall so the user can take it safely but the player has to put in some effort to grab it'). So this is the fourth delivery model and the only one tied to its own screen's picture: the mark hangs in the beam of the FIRST of the four ceiling spotlights - gx 5 is that fitting's own centre column (x 220), so it falls straight down its own axis - waits POWERUPS.CEILING.HOLD (3.2s) while the player walks in and watches it, drops onto the top of the floating overhead cabinet at restGy 12, rests there for LIFETIME (4.5s) and is gone until the next cycle. The cabinet ('cabinet-badge', gx 4-5 gy 12) is the effort: it FLOATS, leaving 36px over a standing head, so holding RIGHT walks straight underneath and takes nothing, and getting on top of it means clearing 120px of the 140 a jump has - i.e. the button held for ~20 frames, the same figure the air-dropped brick on screen 4 forced. It is BEFORE the partition (gx 7) so the whole transaction happens on the safe side of the wall, which is the owner's 'so the user can take it safely'; and its right edge (x 240) is 40px clear of the wall's face, which is load-bearing rather than tidy - a player pinned against the partition must not be standing UNDER the cabinet, or its underside caps his jump at 36px and the screen is sealed. The only badge in the game that is visible before it is takeable: the offer is on screen from frame one and being ready for it is a decision. The rest is unchanged - it is still the only badge that hands the player a verb of their own: it makes a cutter appear and the shoot button live, and what it fires are small orbs of fire. Three hits BURN the three tape layers off him - an ember front eats along each band, ash falls away, and a permanent soot mark is left behind, so the body carries the score rather than only the three pips over his head - and then he unravels, and he does NOT die. He is a colleague somebody taped off like a piece of broken furniture: shirt, sleeves rolled up, straight to the sparking terminal, and it is his work that lights the floor and clears every sign and every strip of tape. The blocker becomes the person who makes it right. Skip the badge and there is no cutter, so the same figure has to be timed and jumped instead."
       },
       "copy": { "titleCard": "Workplace", "onClear": "Workplace running." }
     },
@@ -246,28 +265,12 @@
       "solids": [
         { "gx": 0, "gy": 15, "w": 32, "h": 3, "role": "ground" },
         {
-          "gx": 8,
+          "gx": 16,
           "gy": 12,
           "w": 1,
           "h": 1,
           "role": "pedestal",
-          "note": "One of the three floating bricks the drone drops the badge onto (owner call: the badge lands on a floating square brick and the player has to jump for it, instead of lying on the floor where it could be walked into). One tile square, at row 12: its underside is y=520 against a standing head at y=556, so the corridor still walks clear underneath it, and its top at y=480 puts the badge's box 76px above that head - a jump of 76 against 140 available. Three of them, one per authored drop column, because the delivery repeats on a different column each time and every one of them has to be a real jump."
-        },
-        {
-          "gx": 13,
-          "gy": 12,
-          "w": 1,
-          "h": 1,
-          "role": "pedestal",
-          "note": "The FIRST drop's brick, and the one that has to work on a phone: on touch the hero auto-runs right, so this is the column he arrives at, and taking the badge is one tap of the jump button as he passes under it."
-        },
-        {
-          "gx": 18,
-          "gy": 12,
-          "w": 1,
-          "h": 1,
-          "role": "pedestal",
-          "note": "The last brick before the dragon's lane. It stands inside the outer half of the cone's reach on purpose - grabbing this one means reading the burst rhythm first, which is the screen's name."
+          "note": "THE floating brick the drone drops the badge onto - there is exactly ONE now (owner call: 'remove the 3 brick structures where the ANSR powerup drops, remove the 2 and just keep 1'). One tile square, at row 12: its underside is y=520 against a standing head at y=556, so the corridor still walks clear underneath it, and its top at y=480 puts the badge's box 76px above that head - a jump of 76 against 140 available. The column moved 13 -> 15 with the same note that removed the other two bricks, because the OTHER owner note on this pass was 'lower the speed of drone': a slower drone is overhead later, so it releases later, so the badge lands later, so the column it lands on has to be one the auto-running hero has not walked past yet. Measured, not guessed - a sweep of (column x POWERUPS.DROP.CROSS_TIME) puts the one-tap window at the full 0.40s for gx15-gx17 up to a 3.6s crossing while the old gx13 falls off the cliff at 3.6 and gx18 never clears the 0.3s budget at all. gx16 is the one of those three where the mark still lands a clear step IN FRONT of an auto-runner (28-35px of gap once POWERUPS.DROP.FALL_TIME came down to 0.35 with it) rather than level with his shoulder."
         }
       ],
       "dragons": [
@@ -286,9 +289,9 @@
         "gx": 4,
         "gy": 5,
         "delivery": "airdrop",
-        "drops": [13, 8, 18],
+        "drops": [16],
         "restGy": 12,
-        "note": "The one badge that is DELIVERED (owner call): no levitating rail on this screen. An ANSR supply drone crosses row 5 and drops the badge over columns 13, 8 and 18 in turn - and it lands on a FLOATING BRICK at row 12 rather than on the floor (owner call, second pass), so taking it is a jump as well as a journey. It lies up there for POWERUPS.DROP.LIFETIME seconds and then it is gone. The column ORDER is set by one-tap play, not by taste: on touch the hero runs right on his own, so the first drop has to land in front of him, and gx13 is where a 554 px/s drone can put it about 90px ahead of a player who left the spawn at t=0 (see POWERUPS.DROP.CROSS_TIME). gx8 is the fallback behind him for anyone who stopped or was knocked back, and gx18 is the last brick before the dragon's lane. Talent500 then does two things at once: a teal halo makes the fire harmless, and the same badge puts a water cannon in the player's hands. Water beats the fire first - jets crossing the burning cone cut the burst short - and only between bursts does a jet reach the dragon and take a hit off the one thing it is wearing. Four hits and the glasses wash off, the beast goes with them, and five candidates walk out of the wreckage stamped HIRED: the screen is won on a hire rather than on a kill. Skip every drop and the dragon cannot be answered at all: the stage is a dodge from the spawn to the exit."
+        "note": "The one badge that is DELIVERED (owner call): no levitating rail on this screen. An ANSR supply drone crosses row 5 and drops the badge over ONE column - gx16 - and it lands on a FLOATING BRICK at row 12 rather than on the floor (owner call, second pass), so taking it is a jump as well as a journey. It lies up there for POWERUPS.DROP.LIFETIME seconds and then it is gone, and the next drone brings another one to the same brick. There used to be three columns and three bricks; the owner removed two of them on the same pass that slowed the drone down, and the two notes are one decision: at 424 px/s (POWERUPS.DROP.CROSS_TIME 3.4) the release is later, so the surviving column has to be one an auto-running hero has not passed - gx16, measured by sweeping every tap frame at every candidate column, together with a shorter FALL_TIME because the fall spends exactly the lead the crossing bought. Talent500 then does two things at once: a teal halo makes the fire harmless, and the same badge puts a water cannon in the player's hands. Water beats the fire first - jets crossing the burning cone cut the burst short - and only between bursts does a jet reach the dragon and take a hit off the one thing it is wearing. Four hits and the glasses wash off, the beast TOPPLES to the floor, its costume unzips down one side and the five candidates who were inside it walk out one by one stamped HIRED, and the empty suit lies there and then vanishes (HAZARDS.DRAGON.COSTUME_*): the screen is won on a hire rather than on a kill, and the environment comes good with them (Dragon.relief). Skip every drop and the dragon cannot be answered at all: the stage is a dodge from the spawn to the exit."
       },
       "copy": { "titleCard": "Hire Under Fire", "onClear": "Talent secured." }
     },

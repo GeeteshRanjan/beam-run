@@ -30,19 +30,23 @@ since then has been post-launch passes: a meaning-model rebuild (§4), layout an
 mobile adaptivity, an 8-bit conversion of every remaining web-native surface, the
 finale rebuild, a custom 404 page and the badge work.
 
-- **Tests:** 462 passing (43 files)
-- **Bundle:** ESM 60.0 KB / IIFE 60.4 KB gzip — **the real download is 60.4 KB, 67% of the
-  90 KB budget.** The deployed site payload is **63.2 KB**. The `analyze` gate reads **~117 KB of 90 and
+- **Tests:** 544 passing (45 files)
+- **Bundle:** ESM 68.4 KB / IIFE 68.9 KB gzip — **the real download is 68.9 KB, 77% of the
+  90 KB budget.** The deployed site payload is **72.4 KB**. The `analyze` gate reads **~137 KB of 90 and
   fails**, because it sums *every* `.js` in `dist/` and so adds the two alternative output formats
   together. **This is an open owner decision, not a regression — see `docs/OPEN.md` §1.**
   Everything else is green.
 - **Validator:** green on all 6 screens (structural + physics-aware + meaning layers)
 - **Screen order (owner calls):** Reception (an office lobby interior, and the one screen with
   **no badge**) · **Setup Delays (1)** · **Compliance (2)** · **Workplace (3)** ·
-  **Hire Under Fire (4)** · Tech Park (5). Compliance was rebuilt from scratch as a staircase maze;
+  **Hire Under Fire (4)** · Tech Park (5). Compliance was rebuilt from scratch as a staircase maze and
+  then refined: its badge **stands on a brick wall** (no rail), the long brown platform is a **rising
+  hoist**, and its badge clears the **weather** instead of putting a halo on the hero;
   **Local Expertise is gone** — the Workplace screen replaced it outright and took the slot after
-  Compliance; Hire Under Fire is now a **boss fight against a dragon in a tie and glasses**. Detail
-  for all of these: `docs/SCREENS.md`.
+  Compliance; Hire Under Fire is a **boss fight against a Godzilla in glasses**, rebuilt smaller out of a finer
+  cell, with a narrower jet, **one** badge brick, a slower drone and an ending its costume opens; the Workplace
+  figure **throws his bandages** and that screen's badge **falls out of a ceiling spotlight** onto a floating
+  cabinet on the safe side of its partition wall. Detail for all of these: `docs/SCREENS.md`.
 - **Next:** resolve `docs/OPEN.md` §1 (the budget measurement), then no queued task. **All four
   capability effects are owner-specified and built**; the Tech Park's `SAFE_PASSAGE` badge is the
   only one still deliberately unassigned (Reception's was deleted with its badge).
@@ -142,24 +146,33 @@ section wins** — they predate every one of those revisions and still describe 
 4. **Every screen WITH AN OBSTACLE carries an ANSR badge, ahead of the obstacles it answers, and it is
    always a jump.** **Reception carries none** (owner call): its badge was a `SAFE_PASSAGE` mark with
    no effect, which taught the player that taking an ANSR badge changes nothing one screen before the
-   one that saves them. Its three labelled steps are the tutorial. On four screens the badge
+   one that saves them. Its three labelled steps are the tutorial. On three screens the badge
    levitates: a straight vertical line, ±`POWERUPS.FLOAT_AMPLITUDE` around `gy 8`,
    one cycle per `FLOAT_PERIOD` (**6.4s** — owner call, slower than the old 4.8) — topping out just
    under the HUD and bottoming out **41px above a standing head**, so it is a timed jump and never a
    walk-through (owner call). It **rises first and then falls**, which is why `badgeFloatOffset` is a
    cosine: it starts at the bottom of the band, i.e. at its most reachable on the frame the screen
    starts (owner call — do not flip it back to a sine, see `docs/INVARIANTS.md`). On Hire Under Fire it
-   is **delivered onto a floating brick** instead (`docs/SCREENS.md` §4.12) — same rule, different
-   question. (Four rail screens: 1, 2, 3 and the Tech Park.) Missable on purpose: that is what the
+   is **delivered onto a floating brick** instead (`docs/SCREENS.md` §4.12) and on Compliance it
+   **stands on a floating brick deck** the player can walk under (owner call — `delivery: "perch"`,
+   `world/badgePerch.ts`,
+   `docs/SCREENS.md` §4.9), and on the Workplace it **falls out of a ceiling spotlight** onto a floating
+   cabinet and expires (owner call — `delivery: "ceiling"`, `world/badgeCeiling.ts`; the only pickup in
+   the game that is *visible before it is takeable*): **four** delivery models, one rule.
+   (Rail screens: 1 and the Tech Park.) Missable on purpose: that is what the
    retry title card's line is for. `POWERUPS` derives both ends of the band;
-   the validator fails the build if the band dips into a standing player, if a drop has nothing under
-   it, if any obstacle sits at or before the badge, or if none sit beyond it. **Never offer a
+   the validator fails the build if the band dips into a standing player, if a drop or a perch has
+   nothing under it, if a perch is inside standing reach, **if a perch's structure reaches the floor**
+   (a badge on the path is a badge nobody chooses), if any obstacle sits at or before the badge,
+   or if none sit beyond it. **Never offer a
    "do it yourself" route** — self-build is the actual competitor.
 5. **Four structurally different verbs, never one reskinned shield.**
    `PLACE_TILE` slows the DENIED stamps to a walk-through pace *and* shields (1Wrk) ·
-   `CLEAR_PATH` turns the compliance monsters friendly, raises their toll arms and walks them off
-   the route (GCC-BOT) · `UNWRAP` hands the player a cutter and a shoot button; three hits
-   free the taped-up colleague, who then fixes the room (500Leaders) · `EXTINGUISH` raises a
+   `CLEAR_PATH` turns the compliance monsters friendly, raises their toll arms, walks them off
+   the route and **clears the weather over the market** (GCC-BOT — the one capability whose "help is
+   active" read is on the world rather than a halo on the hero, owner call) · `UNWRAP` hands the player a cutter and a shoot button; three hits
+   free the taped-up colleague — who **throws lengths of his own tape** at anybody standing in the open
+   until he is freed — and he then fixes the room (500Leaders) · `EXTINGUISH` raises a
    teal halo the hiring dragon's fire cannot touch **and** hands over a water cannon that quenches
    that fire and then strips the dragon's suit off (Talent500). All four owner-specified; the screen
    mechanics are in `docs/SCREENS.md` §4.9–§4.11.
@@ -219,34 +232,40 @@ measurement · the placeholder `navigatorUrl` · screen 1 unassisted, played by 
 Three only, one short paragraph each. The findings live in the journal; anything permanent is
 already in `docs/INVARIANTS.md`.
 
-- **The Workplace, refined: an office that is broken *and lit*, and a mummy made of cloth.** The
-  raster said two things the code did not — the room had **one value** (wall, dividers, cabinets and
-  terminal all within two steps, so the bottom third was an indistinct field) and **"restored" looked
-  like "broken"**. `scenery.ts` now authors the room **as the fix leaves it** and `render/workplace.ts`
-  lays the damage over it from `restore`, sharing exported geometry; furniture went *darker* than the
-  wall with one lit edge each; the four gradient wedges became a lit diffuser, a **seven-step floor
-  pool** and up-facing edges, with two fittings holding and two striking. Clumsy is now ceiling tiles
-  out, a tile hanging by a corner, a bucket under a stain, a chair over, drawers open and notices
-  taped to the wall; the payoff is four pools, live monitors, two colleagues back at their desks and a
-  full-frame wash. The figure is **cloth-first** (seams every other row, tape cut to one-cell bands, a
-  fist on the reach, 3px of empty hitbox instead of 9). **462 tests**; the new
-  `render/workplace.test.ts` caught two live defects — a ceiling hole 4px inside a light's aperture,
-  and caution yellow at full alpha in a layer the fix does not reach.
-- **Docs audit: this file became a router.** It was 592 lines / 48 KB — 2.4× its own cap — and a
-  mandatory read every session (~12k tokens). §4.9–§4.14, §5 and §7 moved verbatim to
-  `docs/SCREENS.md`, `docs/ARCHITECTURE.md` and `docs/OPEN.md`; §10's entries were cut to ~6 lines
-  each. **241 lines / 17 KB now**, ~7k tokens saved per session. `docs/INVARIANTS.md` got a
-  five-group index (Gameplay is ~70% of it — split per screen if it grows). The hygiene sweep found
-  **no dead code and no stale tracked files**, but three things worth knowing: **45 files are
-  uncommitted** (the maze, the dragon, the Workplace, the lives model *and* `docs/INVARIANTS.md`
-  are all unversioned — `HEAD` is still `4c9461d`) · the root/`src/data` copies of
-  `tuning.config.ts` + `levels.json` are byte-identical with **nothing enforcing it** · the steering
-  file exists **twice** by design, so edit both. The root `index.html` looks stale and is not — it
-  is the host-embed demo.
-- **The exodus is a walk now, and descents drop instead of floating.** `GATHER_SPEED` 420 → **160**
-  (bracketed by things already on screen: above the creatures' own `SPEED_MAX` 132, well under the
-  player's 260), so taking the badge sends five obstacles home over ~4s instead of deleting them in
-  1.77s. Slowing it exposed a second defect: `walkHome` moved both axes at one speed, so LEGAL's and
-  AUDIT's pure-vertical descents read as *floating* — the leftover vertical part of a descent now
-  falls at a new `GATHER_DROP_SPEED` (420). **451 tests**; the new one measures frames with a fixture
-  shaped like LEGAL's real route, because the existing `STAIR` fixture never produces a pure drop.
+- **Hire Under Fire, rebuilt: a Godzilla out of smaller cells, a jet instead of a girder, one brick, and an ending you can walk out of.**
+  Eight owner notes, and two pairs of them were single decisions. **"Smaller" and "more refined" are the same
+  change**: 300×240 at a 10px cell → **230×190 at a 5px cell** (720 cells → 1,748), because at 20 cells across an
+  animal a leg is two cells and every curve is a stair — which is what "blocks of red colour" describes. That
+  bought a blocky skull, a real neck, four *separated* dorsal plates (merged they read as fur, stood off the back
+  as flags), a tail that lies flat instead of tapering to a blade, and hide bands instead of polka dots.
+  **"One brick" and "a slower drone" are also one change**: a slower drone releases later, so the surviving column
+  has to be one an auto-runner has not passed — **gx 16 at a 3.4s crossing** keeps the full 0.40s one-tap window
+  where the old gx 13 falls off the cliff, and `FALL_TIME` went 0.55 → 0.35 because the fall spends exactly the
+  lead the crossing buys. The fire is **70→120px** instead of 120→190, which *lengthened* `CONE_REACH` to 620 (a
+  thinner cone meets a standing head later along its own axis), and it is painted **per column from the hitbox's
+  own arithmetic** rather than from its bounding boxes — the distinction that turned an orange girder into a jet.
+  Cannon and jets rebuilt for the same note: a flared bell to a dark aperture, a stream of cells rather than five
+  squares. The ending is a **sequence** now — topple, a costume that **unzips**, five hires walking out one at a
+  time, then the suit vanishing — because a creature that dissolves leaves nothing that can be opened. The screen
+  comes good on `Dragon.relief`, and the hero **burns**: the fourth death pose and the first that is a *process*,
+  hence `Simulation.lifeLostProgress`. **544 tests**; the raster found a blindfold, a girder, a white flag on a
+  stick, polka dots and an orange box with a head on top. Detail: `docs/SCREENS.md` §4.11–§4.12.
+- **The Workplace, third look: he throws, the badge falls out of a spotlight, and the room came off the teal axis.**
+  Six owner notes, four jobs. The figure **throws his bandages** (0.55s wind-up, one roll in the air, at shin
+  height so the answer is a jump) and the **partition wall is cover** — a roll dies against a solid and he will
+  not even wind up at somebody behind one, which is what makes the badge's side of that wall safe (winnability
+  re-measured: best 9/12, every win clean, and the dodge is *late*). The **rail is gone**: the mark hangs in a
+  ceiling **spotlight** for 3.2s, visible and untakeable, then drops onto a **floating cabinet** and expires — a
+  fourth delivery model, and the fourth time a rule phrased in terms of the rail had to name the deliveries it
+  applies to. That cabinet moved the **partition to gx 7**, because at gx 6 a pinned player stood under it with
+  36px of jump against the 80 he needed, i.e. the screen was sealed. The room lost a work pod and went **off the
+  teal axis** (warm plaster and furniture, a cool ceiling so it is not a sepia filter). The raster found five
+  defects the code could not, including a spotlight that was a box and a mark hanging from nothing. **530 tests.**
+- **The Workplace again: two tapes, a body with joints, a patroller instead of a respawn, fire for ammunition.**
+  Six owner notes. The figure's tape went **red** (alpha was never going to fix nine yellow shapes plus one yellow
+  figure) and his 20×26 grid was **re-authored with joints** — a 6-row head, a neck, a stepped shoulder, a waist,
+  two legs with a *transparent* column between them. He **paces to and fro** now, which deleted the screen's own
+  winnability argument and re-earned it by probe (**10/12 clean, blind sprint 0/12**, the move being to jump him
+  head on). Ammunition is a **fire orb** that leaves a permanent soot mark; the cutter went to a **mid** value
+  because dark vanished into the furniture it is held in front of; the floor came off the teal axis and the lowest
+  wall register went darkest, since the hero cannot be tuned for one screen. **508 tests.**

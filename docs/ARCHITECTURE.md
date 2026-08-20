@@ -56,44 +56,83 @@ need all of it. The rules that constrain these modules are in `docs/INVARIANTS.m
 - `Screen.ts` (grid→px, skips `noncollide`; no collectibles any more), `Powerups.ts` (timer-free;
   permanent help; badges carry no geometry), `badgeDrop.ts` (**pure** — the whole air-drop as a function of (spec, sim time): drone, parcel, the
   rest position on the brick at `restGy`, and the pickup box, so nothing about the delivery is derived
-  twice), `badgeFloat.ts` (**pure**
+  twice), `badgeCeiling.ts` (**pure** — the *fourth* delivery model, and the only one tied to its own screen's
+  picture: the Workplace's mark hanging in a ceiling spotlight, falling straight down that fitting's axis
+  onto the floating cabinet under it, resting for a few seconds and expiring. `isCeilingDrop`/
+  `ceilingStateAt`/`ceilingBoxAt`/`ceilingRestBox`/`ceilingLandsAt`/`ceilingCycleLength`. Four beats —
+  `held` (visible and **untakeable**, which is the mechanic) · `falling` · `live` · `gone` — read by the
+  sim, the renderer and the validator, so the one rectangle has one author),
+  `badgePerch.ts` (**pure** — the third delivery model and the simplest: the Compliance mark
+  **standing on the top course of a brick wall**, `isPerched`/`perchBox`/`perchCenter`, no clock and
+  no expiry, read by the sim, the renderer and the validator so the one rectangle has one author),
+  `badgeFloat.ts` (**pure**
   `badgeCenter`/`badgeBoxAt`/`badgeLowestBox` — the one source of the badge's position, read by the
   sim *and* the renderer with the same clock; **cosine, so the mark rises first**), `types.ts`
   (`Hazard {solids, speedMultAt, shieldsPlayer?, update, reset}`,
   `HazardContext {assisted, extraTelegraph}`).
 - `Hazards/` — `Stamps.ts` (screen 1's slamming DENIED stamps; replaced `Quicksand.ts`),
-  **`ComplianceMaze.ts`** (screen 2's wandering monsters + the clearance lift; replaced
-  `Gates.ts`, which replaced `Plants.ts`), **`Workplace.ts`** (screen 3's one-way taped figure, the
-  cutter's pulses, and the `restore` dial; replaced `Spikes.ts`, deleted with Local Expertise),
+  **`ComplianceMaze.ts`** (screen 2's wandering monsters, the clearance lift, the clearance hoist and
+  the weather dial; replaced
+  `Gates.ts`, which replaced `Plants.ts`), **`Workplace.ts`** (screen 3's pacing taped figure, the
+  **bandages he throws**, the cutter's pulses, and the `restore` dial; replaced `Spikes.ts`, deleted with
+  Local Expertise. It is the **only hazard handed the screen's static solids**, because a thrown bandage
+  has to be stopped by the partition wall and `hasLineOfFire` has to stop him winding up at a player
+  behind it — that wall is where the badge lands, so it has to be cover),
   **`Dragon.ts`** (screen 4's grounded Godzilla: roar beat, the patch of floor it holds, **one
-  growing diverging cone of fire** with a pinned taunt, the water cannon, the glasses and the HIRED
-  payoff; replaced `Fire.ts`). It also exports `MOUTH_X_FRACTION`/`MOUTH_Y_FRACTION` — the jaw is the
-  one piece of anatomy the sim and the renderer both need, so it has one source — and **`coneBoxes()`,
-  the single function that says what burns *and* what is painted**.
+  growing diverging cone of fire** with a pinned taunt, the water cannon, the glasses, and the ending —
+  the topple, the **costume that unzips and then vanishes** (`costumeState()`), the five who **walk out
+  of it one at a time** (`CandidateState` carries a facing and a walk, not a fall), and **`relief`**, the
+  0..1 sim-time dial the backdrop reads for "the environment comes good"; replaced `Fire.ts`). It also
+  exports `MOUTH_X_FRACTION`/`MOUTH_Y_FRACTION` — the jaw is the one piece of anatomy the sim and the
+  renderer both need, so it has one source, and both are read off the drawn grid — and **`coneBoxes()`,
+  the single function that says what burns *and* what is painted**. Its whole ending is a function of one
+  clock (seconds since the beast went down), so nothing about it is remembered.
   Each answers `assisted` in its own way; `Stamps`,
   `ComplianceMaze` and `Dragon` set `shieldsPlayer`, which is what licenses the bubble on the player.
-  `ComplianceMaze` is also the only hazard that returns a **solid** — the lift — because it is the
-  only moving geometry in the game and one object must own its position.
+  `ComplianceMaze` is also the only hazard that returns **solids** — the clearance **lift** (down)
+  and the clearance **hoist** (up, which replaced the long brown platform at gy 8) — because they are
+  the only moving geometry in the game and one object must own their positions. Both are one `Plate`
+  with the direction taken from data (`toGy` vs `gy`), and the rising one is the single place in the
+  game where the world moves the player: it offsets a rider's box by its own delta. It also owns
+  `skyClear`, the 0..1 weather dial that is what the badge looks like on that screen instead of a halo
+  (`shieldsPlayer` is deliberately absent there), and it reads a monster's surface off the plate when
+  the monster is authored `hoist: true`.
 
 **Render (`src/render/`, canvas)** — `PixelArt.ts` (crisp fillRect core; `drawBricks` takes optional
 `faces` — per-brick tones — and `bevel`, both opt-in, used by screen 1 only), `PixelText.ts` (5×7 font,
 `FONT` exported), `sprites.ts` (hero incl. the `squash` pose, `drawAnsrBubble`),
 `sprites.ts` also owns `BubbleTint` (`BUBBLE_ORANGE` / `BUBBLE_TEAL` — colour **plus** an alpha
 `boost` and a radius `spread`, because a colour swap is not a brightness swap),
-`badge.ts` (the floating pickup: the **real ANSR mark** via `ansrLogo.ts`, sized to the hitbox, on a
+`badge.ts` (the pickups — four delivery treatments now, incl. **`drawBadgeCeilingDrop`**, the mark on
+cables under a spotlight's lens, its fall with a tightening contact shadow, and the resting perch plus a
+four-pip countdown that blinks out; the lens it hangs from is the *room's* number, passed in, never
+`source.y`: the two are equal in `held` and cables between them had zero length — the pickup rasterised
+floating with nothing above it. Also: the **real ANSR mark** via `ansrLogo.ts`, sized to the hitbox, on a
 dark cell core, plus levitation shaft + flare + ground chevron — pure, so it rasterises alone;
-`Game.drawBadge` supplies only the band and a phase),
+`Game.drawBadge` supplies only the band and a phase — plus **`drawBadgePerch`**, the same mark
+standing still on a wall with a contact shadow, a lit plinth and four flare cells, and none of the
+rail's shaft, brackets or ground chevron),
 `stamps.ts` (screen 1's hazard — pure, no wall clock, so it rasterises alone),
 `maze.ts` (screen 2: the **7×13 grid at scale 5 = 35×65**, i.e. the *whole* creature that is on
 `origin/main` — slate cabinet, a gap, and the approval head floating above it — read through two mood
 palettes; the striped boom arm painted **behind** the head, 7 cells so it fits the box at rest;
-the gather pad and the clearance lift with its chevron travel cue; pure, rasterises alone),
-**`dragon.ts`** (screen 4: the Godzilla as **one 30×24 grid at scale 10** — see `docs/INVARIANTS.md` for why that
-breaks the composed-creature rule on purpose — plus the glasses drawn on top in *cell* coordinates so
-they mirror with it, the cone of fire with its cream floor telegraph and pinned taunt plaque, the
-floating bricks the badge lands on, the costume wreck the beast leaves behind, the cannon, its jets,
-steam and the five HIRED candidates; pure, rasterises alone),
-`workplace.ts` (screen 3: **one 20×26 figure grid read through two palettes** — the wrap and the
+the gather pad; **both plates through one `drawPlate`** — the lift's chevrons stepping down below it
+and the hoist's stepping up above it, plus carriage shoes under each end and a mark per 80px of plate;
+and **`drawWeatherWash`**, the full-frame veil-and-wash half of that screen's weather, painted over the
+masonry the backdrop cannot reach and under the cast; pure, rasterises alone),
+**`dragon.ts`** (screen 4: the Godzilla as **one 46×38 grid at scale 5** — see `docs/INVARIANTS.md` for why
+that breaks the composed-creature rule on purpose, and why halving the cell is what "make it smaller and
+more refined" meant — plus the glasses drawn on top in *cell* coordinates so they mirror with it; the cone
+of fire, painted **per column from `coneBoxes`' own arithmetic** rather than from the boxes themselves,
+with its cream floor telegraph and pinned taunt plaque; the floating brick the badge lands on; the
+**topple** (`drawTopplingBeast`, a per-row shear) and the **fallen costume** it becomes (a second 52×13
+grid whose zip is painted only as far as it has been opened); the cannon (32×17, a flared bell) and its
+jets (a tapering line of cells, not five squares); steam; the five HIRED candidates walking out; and
+**`drawBurningHero`**, the game's fourth death pose. Pure, rasterises alone),
+`workplace.ts` (screen 3 — also **`drawBandages`** (the thrown roll as a stepped *disc* with a pale core
+and spokes that step round with distance), **`drawOverheadCabinet`** (the badge's landing pad, a
+`pedestal` solid drawn as wall-mounted furniture) and `spotLight` (the four **flared cans** that replaced
+the recessed strips, glowing up with `restore`); plus **one 20×26 figure grid read through two palettes** — the wrap and the
 colleague — with the wound-cloth seams derived from that grid, the tape bands, the cutter, its pulses,
 the barricade/cone/sign/post/ladder props, `drawTangled`, the enlarged terminal, **and the whole
 damage-and-light layer**: the missing ceiling tiles, the room somebody walked out of, the gloom, the
@@ -101,9 +140,23 @@ fittings with their floor pools and lit edges, and the restored payoff. It draws
 the room `scenery.ts` paints, and reads that room's geometry from the constants that module exports —
 `CEILING`, `WORK_PODS`, `POD_SCREEN`, `CABINETS`, `WINDOW`. Pure, rasterises alone; guarded by
 `workplace.test.ts`),
-`scenery.ts` (per-level materials, skies, signage — **and the two interiors**: `drawLobbyInterior`
+`scenery.ts` (per-level materials, skies, signage — **and screen 2's weather**: `drawSkyBand` +
+`mixHex` interpolate every sky stop, `drawCloudBank` contracts an overcast lid into lit cumulus,
+`drawRain` and `drawSunBreak` come and go, all driven by one `weather` number the host passes in, so
+this module still knows nothing about hazards or badges. Cloud and sun are built from `WEATHER_CELL`
+(4px) plus a silhouette — a height per column from authored lobes, and a real pixel circle in three
+bands — and both are exported for `scenery.test.ts`, which is the only test this module has — **and the two interiors**: `drawLobbyInterior`
 for Reception, `docs/SCREENS.md` §4.13, and `drawOfficeInterior` for the Workplace, which paints that
-room **as the fix leaves it** and exports the geometry the damage layer draws against),
+room **as the fix leaves it** and exports the geometry the damage layer draws against — now off the teal
+axis (`WALL` warm plaster, `FURN` warm furniture, a **cool** ceiling, cool daylight in the glazing), with
+two work pods instead of three and the services duct **cut** around each spotlight).
+**Screen 4 has a second dial now**: `drawSceneBackground` takes `relief` alongside `weather` (a separate
+parameter, not a second meaning for one number), which turns an ember night into a bright morning — the
+same sun and cloud bank screen 2 uses, the skyline's lit windows going *out*, the heat haze off — and
+`drawMarketRow` / `drawHiringQueue` are that screen's middle distance (four low blocks, a water tower,
+canopies that only trade in daylight, and the queue behind a sagging rope), all of it kept **left of
+x=760** so the beast keeps its silhouette. **`drawReliefWash`** is the full-frame veil-and-wash half of
+it, the exact counterpart of `drawWeatherWash`),
 `titleScene.ts` (attract screen),
 `finale.ts` (screen 5 painting), `ansrLogo.ts` (cached `Path2D` of the real brand mark;
 resolves to null without `Path2D`, draw is a no-op).

@@ -3,7 +3,7 @@ import { ComplianceMaze } from './ComplianceMaze';
 import { Player } from '../Player';
 import { LOOP, HAZARDS, RESOLUTION, PLAYER } from '../../data/tuning.config';
 import type { MonsterSpec } from '../../data/levels';
-import type { HazardContext } from '../types';
+import type { Hazard, HazardContext } from '../types';
 
 const DT = LOOP.FIXED_DT;
 const T = RESOLUTION.TILE;
@@ -263,8 +263,27 @@ describe('ComplianceMaze — assisted (GCC-BOT files everything)', () => {
     expect(cause).toBeNull();
   });
 
-  it('shields the player, because contact really is harmless', () => {
-    expect(maze().shieldsPlayer).toBe(true);
+  it('does NOT shield the player, even though contact is harmless — the WEATHER says it', () => {
+    // Owner call: no orange halo on the hero on this screen. The rules would allow one
+    // (nothing here can cost anything once GCC-BOT has filed), so this is deliberately
+    // stated as a test — the next person to read `Hazard.shieldsPlayer` will otherwise
+    // read the missing flag as an omission and put the bubble back.
+    const m = maze([FLAT]);
+    const asHazard: Hazard = m;
+    expect(asHazard.shieldsPlayer).toBeUndefined();
+    expect(m.skyClear).toBe(0);
+    run(m, 2, bystander(), ASSISTED);
+    // …and what replaces it is a dial, not a switch, so the change is a change.
+    expect(m.skyClear).toBe(1);
+  });
+
+  it('the weather only clears once the badge is taken, and it takes CLEAR_SKY_TIME', () => {
+    const m = maze([FLAT]);
+    run(m, 3, bystander(), CTX);
+    expect(m.skyClear).toBe(0);
+    run(m, M.CLEAR_SKY_TIME / 2, bystander(), ASSISTED);
+    expect(m.skyClear).toBeGreaterThan(0.4);
+    expect(m.skyClear).toBeLessThan(0.6);
   });
 
   it('reset() puts the maze back for a fresh attempt', () => {

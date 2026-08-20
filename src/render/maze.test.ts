@@ -1,7 +1,16 @@
 import { describe, it, expect } from 'vitest';
-import { MONSTER, MONSTER_SCALE, drawMonsters, drawLift, drawGatherPad } from './maze';
+import {
+  MONSTER,
+  MONSTER_SCALE,
+  drawMonsters,
+  drawLift,
+  drawHoist,
+  drawGatherPad,
+  drawWeatherWash,
+  drawFiled,
+} from './maze';
 import { maxWidth } from './PixelArt';
-import { BRAND, HAZARDS, PLAYER } from '../data/tuning.config';
+import { BRAND, HAZARDS, PLAYER, RESOLUTION } from '../data/tuning.config';
 import type { LiftState, MonsterState } from '../world/Hazards/ComplianceMaze';
 
 const M = HAZARDS.MAZE;
@@ -36,6 +45,7 @@ function monster(over: Partial<MonsterState> = {}): MonsterState {
     friendly: false,
     arm: 0,
     settled: false,
+    struck: false,
     ...over,
   };
 }
@@ -232,7 +242,9 @@ describe('the clearance lift', () => {
     drawLift(top.ctx, lift({ remaining: 360 }));
     const bottom = recorder();
     drawLift(bottom.ctx, lift({ box: { x: 1040, y: 600, w: 120, h: M.LIFT_H }, remaining: 0 }));
-    const rail = (rs: Rect[], y: number) => rs.filter((r) => r.y > y + M.LIFT_H).length;
+    // The plate's carriage shoes hang 12px under it and travel with it, so they are
+    // part of the machine rather than part of the rail.
+    const rail = (rs: Rect[], y: number) => rs.filter((r) => r.y > y + M.LIFT_H + 12).length;
     expect(rail(top.rects, 240)).toBeGreaterThan(0);
     expect(rail(bottom.rects, 600)).toBe(0);
   });
@@ -241,5 +253,171 @@ describe('the clearance lift', () => {
     const { ctx, rects } = recorder();
     drawLift(ctx, null);
     expect(rects).toHaveLength(0);
+  });
+});
+
+describe('the clearance hoist', () => {
+  /** Parked low with two rows of travel above it — the shipped geometry. */
+  const hoist = (over: Partial<LiftState> = {}): LiftState => ({
+    box: { x: 360, y: 360, w: 240, h: M.LIFT_H },
+    progress: 0,
+    remaining: 80,
+    carrying: false,
+    ...over,
+  });
+
+  it('is the same machine as the lift, and says so', () => {
+    const { ctx, rects } = recorder();
+    drawHoist(ctx, hoist());
+    const fills = new Set(rects.map((r) => r.fill.toUpperCase()));
+    expect([...fills].some((f) => f.includes('EFC94C'))).toBe(true);
+    // The one colour rule this screen cannot break: machinery yellow, never the
+    // reserved value orange.
+    for (const f of fills) expect(f).not.toContain(BRAND.ORANGE);
+  });
+
+  it('points its travel UP, above the plate, and never past where it can go', () => {
+    const h = hoist({ remaining: 80 });
+    const { ctx, rects } = recorder();
+    drawHoist(ctx, h);
+    const cue = rects.filter((r) => r.y + r.h <= h.box.y);
+    expect(cue.length).toBeGreaterThan(0);
+    // A cue drawn past the end of the travel promises a lift the machine does not have.
+    expect(Math.min(...cue.map((r) => r.y))).toBeGreaterThanOrEqual(h.box.y - h.remaining);
+    // …and nothing is drawn below the plate except its carriage shoes, which hang under
+    // it rather than over its top face: art above the plate would promise footing the
+    // collision box does not have.
+    const below = rects.filter((r) => r.y >= h.box.y + h.box.h);
+    for (const r of below) expect(r.y).toBeLessThanOrEqual(h.box.y + h.box.h + 12);
+  });
+
+  it('carries a mark per 80px, so a 240px plate is not a blank ruler', () => {
+    const wide = recorder();
+    drawHoist(wide.ctx, hoist());
+    const narrow = recorder();
+    drawHoist(narrow.ctx, hoist({ box: { x: 360, y: 360, w: 80, h: M.LIFT_H } }));
+    const marks = (rs: Rect[]) => rs.filter((r) => r.fill.toUpperCase().includes('6B5410')).length;
+    expect(marks(wide.rects)).toBe(marks(narrow.rects) * 3);
+  });
+
+  it('draws nothing at all when a screen has no hoist', () => {
+    const { ctx, rects } = recorder();
+    drawHoist(ctx, null);
+    expect(rects).toHaveLength(0);
+  });
+});
+
+describe('the weather wash', () => {
+  it('veils the whole frame under gloom and washes it under daylight', () => {
+    const gloom = recorder();
+    drawWeatherWash(gloom.ctx, 0);
+    expect(gloom.rects).toHaveLength(1);
+    expect(gloom.rects[0]!.w).toBe(RESOLUTION.WIDTH);
+    expect(gloom.rects[0]!.h).toBe(RESOLUTION.HEIGHT);
+    // Cool and dark while it is raining…
+    expect(gloom.rects[0]!.fill).toContain('0,16,24');
+
+    const clear = recorder();
+    drawWeatherWash(clear.ctx, 1);
+    expect(clear.rects).toHaveLength(1);
+    // …and its exact inverse once GCC-BOT has filed everything. Same lesson as the
+    // Workplace's payoff: "un-gloomed" is not "lit".
+    expect(clear.rects[0]!.fill).toContain('190,232,240');
+  });
+
+  it('is a dial, not a switch: half way through, both layers are on the frame', () => {
+    const { ctx, rects } = recorder();
+    drawWeatherWash(ctx, 0.5);
+    expect(rects).toHaveLength(2);
+    for (const r of rects) expect(r.w).toBe(RESOLUTION.WIDTH);
+  });
+
+  it('never paints the value orange, whatever the weather', () => {
+    for (const c of [0, 0.3, 0.7, 1]) {
+      const { ctx, rects } = recorder();
+      drawWeatherWash(ctx, c);
+      for (const r of rects) expect(r.fill.toUpperCase()).not.toContain(BRAND.ORANGE);
+    }
+  });
+});
+
+describe('the death pose: the player gets filed', () => {
+  const FEET = 600;
+  const CX = 300;
+  const pose = (phase = 0.2, reduced = false): Rect[] => {
+    const { ctx, rects } = recorder();
+    drawFiled(ctx, CX, FEET, phase, reduced);
+    return rects;
+  };
+
+  it('buries him from the floor to his chest, and nothing below the floor', () => {
+    // The rule this screen was missing: every death that stops the stage is visible ON the
+    // player. The pile has to reach him — a mound round his ankles would read as scenery —
+    // and it must not paint into the ground band under his feet.
+    const rects = pose();
+    const top = Math.min(...rects.map((r) => r.y));
+    const bottom = Math.max(...rects.map((r) => r.y + r.h));
+    expect(bottom).toBeLessThanOrEqual(FEET);
+    // A drawn hero is 60px tall, so his chest is ~FEET-34: the stack has to get there.
+    expect(top).toBeLessThan(FEET - 34);
+  });
+
+  it('is an uneven STACK, not a pyramid', () => {
+    // Rasterised symmetrical it read as a wedding cake, i.e. as something somebody built
+    // rather than as something dumped on him. Every course is offset sideways, so no two
+    // share a centre line.
+    // The courses are the tall wide runs; `pxRect` snaps their height to the 4px cell, so
+    // they come out 8 or 12 rather than the authored 10.
+    const wide = pose().filter((r) => r.w >= 28 && r.h >= 8);
+    expect(wide.length).toBeGreaterThanOrEqual(5);
+    // No two courses that touch share a centre line, which is what makes the stack lean
+    // rather than taper. (Two non-adjacent courses may land on the same centre — the
+    // property that matters is that consecutive ones do not.)
+    const centres = wide.map((r) => Math.round(r.x + r.w / 2));
+    for (let i = 1; i < centres.length; i += 1) {
+      expect(centres[i]).not.toBe(centres[i - 1]);
+    }
+  });
+
+  it('is stamped with the creature\'s own slot mark, in its own dark red', () => {
+    // What ties the pile to the thing that made it: the same bar that sits in every
+    // monster's head. It is the only warm thing in the pose, and it is not the value
+    // orange, which this screen reserves for the badge.
+    const red = pose().filter((r) => r.fill.toUpperCase() === '#8B1A1A');
+    expect(red.length).toBeGreaterThanOrEqual(3);
+    for (const r of red) expect(r.fill.toUpperCase()).not.toContain(BRAND.ORANGE);
+  });
+
+  it('keeps the loose sheets on the frame under reduced motion', () => {
+    // The information is "he is under a pile of paper", and that survives being still — so
+    // the sheets hold mid-fall rather than being deleted (the same call the ANSR bubble and
+    // the badge's shimmer make).
+    const still = pose(0.2, true);
+    const later = pose(0.9, true);
+    expect(later).toEqual(still);
+    expect(still.length).toBe(pose(0.2, false).length);
+  });
+
+  it('is pure: same inputs, same cells', () => {
+    expect(pose(0.4)).toEqual(pose(0.4));
+  });
+});
+
+describe('the monster that caught him', () => {
+  it('slams its boom down and lights its slot, without changing sprite', () => {
+    const calm = recorder();
+    drawMonsters(calm.ctx, [monster()]);
+    const hit = recorder();
+    drawMonsters(hit.ctx, [monster({ struck: true })]);
+
+    // Same number of cells: a third palette and an offset, never a second grid.
+    expect(hit.rects).toHaveLength(calm.rects.length);
+    // The slot goes hot…
+    expect(hit.rects.some((r) => r.fill.toUpperCase() === '#8B1A1A')).toBe(true);
+    expect(calm.rects.some((r) => r.fill.toUpperCase() === '#8B1A1A')).toBe(false);
+    // …and the striped boom sits LOWER than at rest, i.e. across the player it just filed.
+    const armY = (rs: Rect[]) =>
+      Math.min(...rs.filter((r) => r.fill === '#E6E6E6').map((r) => r.y));
+    expect(armY(hit.rects)).toBeGreaterThan(armY(calm.rects));
   });
 });

@@ -47,18 +47,30 @@
  *     slow mode only rescales time and cannot change geometry, so a reachable
  *     route here is also reachable with the assists on.
  */
-import { RESOLUTION, PLAYER, LOOP, JOURNEY, POWERUPS } from '../src/data/tuning.config';
-import { SCREENS, TOTAL_MONTHS_BASE, type ScreenData, GRID } from '../src/data/levels';
+import { RESOLUTION, PLAYER, LOOP, JOURNEY, POWERUPS, HAZARDS } from '../src/data/tuning.config';
+import {
+  SCREENS,
+  TOTAL_MONTHS_BASE,
+  type LiftSpec,
+  type ScreenData,
+  GRID,
+} from '../src/data/levels';
 import { CAPABILITIES } from '../src/data/copy';
 import { Player } from '../src/world/Player';
 import { aabbOverlap, type AABB } from '../src/world/Physics';
 import { badgeLowestBox } from '../src/world/badgeFloat';
+import { isPerched, perchBox } from '../src/world/badgePerch';
 import {
   dropColumnsOf,
   dropLandsAt,
   dropRestBox,
   isAirdropped,
 } from '../src/world/badgeDrop';
+import {
+  ceilingLandsAt,
+  ceilingRestBox,
+  isCeilingDrop,
+} from '../src/world/badgeCeiling';
 import { makeInput } from '../src/core/Input';
 
 type Problem = { screen: number | 'model'; message: string };
@@ -139,6 +151,70 @@ function validateStructure(s: ScreenData): Problem[] {
    * has to sit *on top of* something rather than inside it, and (below, in the physics
    * pass) has to be reachable, and reachable *in time*.
    */
+  /*
+   * A PERCHED badge (the Compliance maze) is the third delivery model and it answers
+   * the float band's question by construction: it stands on the top course of a brick
+   * wall, so "jumpable, not walkable" is a statement about the wall's height. Two
+   * things to prove, and they are the drop's two rules with the clock taken out — it
+   * rests on top of something rather than inside it, and it is out of a standing
+   * player's reach. Reachability is proved in the physics pass below.
+   */
+  /*
+   * A CEILING-DROPPED badge (the Workplace) is the fourth model, and geometrically it
+   * asks the perch's questions with a clock added — so it is checked by the same block.
+   * It rests on the top of the floating overhead cabinet, that cabinet has to float, and
+   * the rest box has to be out of a standing player's reach. The clock's own question
+   * ("is the first drop makeable from the spawn?") is `validateCeilingTiming` below.
+   */
+  if (s.badge && (isPerched(s.badge) || isCeilingDrop(s.badge))) {
+    const perched = isPerched(s.badge);
+    const kind = perched ? 'perched' : 'ceiling-dropped';
+    const box = perched ? perchBox(s.badge) : ceilingRestBox(s.badge);
+    const solids = screenSolids(s);
+    for (const solid of solids) {
+      if (aabbOverlap(box, solid)) {
+        push(
+          `${kind} badge at gx=${s.badge.gx} is inside a solid ` +
+            `(${solid.x / T},${solid.y / T}) — it has to stand on top of one`,
+        );
+      }
+    }
+    const wall = solids.find(
+      (solid) =>
+        Math.abs(solid.y - (box.y + box.h)) < 1 &&
+        solid.x < box.x + box.w &&
+        solid.x + solid.w > box.x,
+    );
+    if (!wall) {
+      push(
+        `${kind} badge at gx=${s.badge.gx} has nothing under it ` +
+          `(rest bottom y=${box.y + box.h}) — it needs the structure it stands on`,
+      );
+    }
+    const standingHead = 15 * GRID.tile - PLAYER.HEIGHT;
+    /*
+     * And that structure has to FLOAT: there must be walkable air under it (owner call).
+     *
+     * This is the rule the first cut of the perch broke. Standing on the floor, the
+     * structure was a hurdle across the only corridor, so every player cleared it and
+     * every player collected the mark on the way past — a badge that is on the path is a
+     * badge nobody decides to take, and the whole model rests on the player *choosing*
+     * ANSR. Floating, the same jump is a detour: walk under it and you keep the months.
+     */
+    if (wall && wall.y + wall.h > standingHead) {
+      push(
+        `the ${kind} badge's structure at (${wall.x / T},${wall.y / T}) reaches the floor (bottom ` +
+          `y=${wall.y + wall.h} vs a standing head at ${standingHead}) — it has to float, or ` +
+          'the badge is on the path and taking it stops being the player\'s decision',
+      );
+    }
+    if (box.y + box.h > standingHead) {
+      push(
+        `${kind} badge sits within a standing player (bottom y=${box.y + box.h} vs head ` +
+          `y=${standingHead}) — what it stands on has to be taller than the hero`,
+      );
+    }
+  }
   if (s.badge && isAirdropped(s.badge)) {
     const cols = dropColumnsOf(s.badge);
     if (cols.length === 0) push('airdropped badge has no drop columns');
@@ -170,7 +246,7 @@ function validateStructure(s: ScreenData): Problem[] {
         );
       }
     }
-  } else if (s.badge) {
+  } else if (s.badge && !isPerched(s.badge) && !isCeilingDrop(s.badge)) {
     // The badge floats, so its band must stay inside the frame too — an anchor that
     // is technically in bounds can still swing the pickup off the top of the screen.
     const box = badgeLowestBox(s.badge);
@@ -318,6 +394,69 @@ function validateModel(): Problem[] {
 
 // --- geometry helpers -------------------------------------------------------
 
+/**
+ * A moving plate's box at one end of its travel. `where` is 'park' or 'travel'.
+ *
+ * The plates are deliberately absent from `solids` (the hazard owns the live box), so
+ * every check about them has to reconstruct the two ends from level data — which is
+ * exactly what the hazard does with the same two numbers.
+ */
+function plateBox(spec: LiftSpec, where: 'park' | 'travel'): AABB {
+  const y = (where === 'park' ? spec.gy : spec.toGy) * T;
+  return { x: spec.gx * T, y, w: spec.w * T, h: HAZARDS.MAZE.LIFT_H };
+}
+
+/** The box a player standing on that plate would occupy, for the reachability flood. */
+function onPlateBox(spec: LiftSpec, where: 'park' | 'travel'): AABB {
+  const plate = plateBox(spec, where);
+  return { x: plate.x, y: plate.y - PLAYER.HEIGHT, w: plate.w, h: PLAYER.HEIGHT };
+}
+
+/**
+ * A RISING plate may not park where it takes the headroom off the ground underneath it.
+ *
+ * This is the trap this screen's re-cut nearly shipped, and nothing else would have
+ * caught it: the plate is not a solid in `levels.json`, so the reachability flood below
+ * never sees it, and a hoist parked one row too low turns the tread beneath it into a
+ * dead end — the player can still walk under the plate but can no longer hop up off
+ * that tread, and the only route up the maze is sealed. 84px is the same figure the
+ * whole level obeys (a 44px player has to jump 40px to make the next tread).
+ *
+ * Only rising plates are checked. The lift descends *into* the ground band on purpose,
+ * so the same rule applied to it would fail for being correct.
+ */
+function validatePlates(s: ScreenData): Problem[] {
+  const problems: Problem[] = [];
+  const plates: [string, LiftSpec][] = [];
+  if (s.lift) plates.push(['lift', s.lift]);
+  if (s.hoist) plates.push(['hoist', s.hoist]);
+  for (const [name, spec] of plates) {
+    if (spec.toGy >= spec.gy) continue; // descends — see above
+    const parked = plateBox(spec, 'park');
+    const under = parked.y + parked.h;
+    for (const solid of screenSolids(s)) {
+      if (solid.x >= parked.x + parked.w || solid.x + solid.w <= parked.x) continue;
+      if (solid.y < under) continue; // above or level with the plate
+      const headroom = solid.y - under;
+      if (headroom < 84) {
+        problems.push({
+          screen: s.id,
+          message:
+            `${name} parks ${Math.round(headroom)}px over the surface at ` +
+            `(${solid.x / T},${solid.y / T}) — a rising plate needs 84px of headroom ` +
+            'under it or the surface beneath it stops being jumpable',
+        });
+      }
+    }
+    // And its travel must stay inside the frame.
+    const top = plateBox(spec, 'travel');
+    if (top.y < 0) {
+      problems.push({ screen: s.id, message: `${name} travels above the frame (y=${top.y})` });
+    }
+  }
+  return problems;
+}
+
 /** Static, collidable solids in pixels (decorative facades are skipped). */
 function screenSolids(s: ScreenData): AABB[] {
   const out: AABB[] = [];
@@ -337,6 +476,10 @@ function screenSolids(s: ScreenData): AABB[] {
  */
 function badgeBox(s: ScreenData): AABB | null {
   if (!s.badge) return null;
+  // A perch does not float, so the "easiest phase" is the only phase — and a ceiling
+  // drop has exactly one place it can ever be taken from, which is where it lands.
+  if (isPerched(s.badge)) return perchBox(s.badge);
+  if (isCeilingDrop(s.badge)) return ceilingRestBox(s.badge);
   return badgeLowestBox(s.badge);
 }
 
@@ -366,6 +509,45 @@ function validateAirdropTiming(s: ScreenData): Problem[] {
       message:
         `first air-drop at gx=${cols[0]} expires ${gone.toFixed(2)}s in but takes ` +
         `${walk.toFixed(2)}s to walk to from spawn — only ${margin.toFixed(2)}s of slack`,
+    });
+  }
+  return problems;
+}
+
+/**
+ * Ceiling-drop fairness: is the FIRST drop makeable from the spawn?
+ *
+ * Same class of gate as the air-drop's, and the same reasoning — the mark expires, so
+ * "reachable" is not enough, it has to be reachable inside the window. The difference is
+ * which way the slack runs: this delivery *waits* before it falls, so the walk is
+ * comfortably inside the hold and what has to be checked is that the hold has not been
+ * tuned shorter than the walk. A player who runs straight at the column and arrives after
+ * the mark has already been and gone would be a screen that opens by taking the
+ * capability away from somebody who did nothing wrong.
+ */
+function validateCeilingTiming(s: ScreenData): Problem[] {
+  const problems: Problem[] = [];
+  if (!s.badge || !isCeilingDrop(s.badge)) return problems;
+  const spawnX = s.spawn.gx * T;
+  const restX = s.badge.gx * T + T / 2;
+  const walk = Math.abs(restX - spawnX) / PLAYER.WALK_SPEED;
+  const gone = ceilingLandsAt(0) + POWERUPS.CEILING.LIFETIME;
+  const margin = gone - walk;
+  if (margin < 1) {
+    problems.push({
+      screen: s.id,
+      message:
+        `the first ceiling drop at gx=${s.badge.gx} expires ${gone.toFixed(2)}s in but takes ` +
+        `${walk.toFixed(2)}s to walk to from spawn — only ${margin.toFixed(2)}s of slack`,
+    });
+  }
+  // …and the mark has to be *up there* before it is down here: a hold shorter than the
+  // fall would mean the pickup never has a beat in the fitting, which is the whole point
+  // of this delivery (owner call: it is visible before it is takeable).
+  if (POWERUPS.CEILING.HOLD < POWERUPS.CEILING.FALL_TIME) {
+    problems.push({
+      screen: s.id,
+      message: 'POWERUPS.CEILING.HOLD is shorter than FALL_TIME — the mark never waits in the light',
     });
   }
   return problems;
@@ -455,8 +637,37 @@ function validatePhysics(s: ScreenData): Problem[] {
   if (targetX === undefined) return problems; // structural layer already flagged this
 
   const base = screenSolids(s);
-  const reachesTarget = (solids: AABB[]) =>
-    flood(solids, spawn, (box) => box.x + box.w >= targetX);
+  const reachesTarget = (solids: AABB[], from = spawn) =>
+    flood(solids, from, (box) => box.x + box.w >= targetX);
+
+  /*
+   * A RISING plate is part of the route, and it is not in `solids`, so the flood has to
+   * be told about it — in two halves, because the plate is only ever in one place at a
+   * time and pretending it is in both would prove a jump nobody can make.
+   *
+   *   1. with the plate PARKED: can the player get onto it at all?
+   *   2. starting from on top of the plate at the far end of its travel: does the route
+   *      continue from there?
+   *
+   * That is the honest reading of "board it, ride it, walk off the top", and it is the
+   * same shape as proving a floating badge against the bottom of its band: pick the one
+   * position each question is actually asked at.
+   */
+  const hoist = s.hoist && s.hoist.toGy < s.hoist.gy ? s.hoist : null;
+  if (hoist) {
+    const parked = onPlateBox(hoist, 'park');
+    if (!flood(base.concat(plateBox(hoist, 'park')), spawn, (box) => aabbOverlap(box, parked))) {
+      push(`the hoist parked at gy=${hoist.gy} cannot be boarded from spawn`);
+    }
+    const top = plateBox(hoist, 'travel');
+    const rider = { x: top.x + T, y: top.y - PLAYER.HEIGHT };
+    if (!reachesTarget(base.concat(top), rider)) {
+      push(
+        `riding the hoist to gy=${hoist.toGy} does not lead anywhere — the exit is not ` +
+          'reachable from the top of its travel',
+      );
+    }
+  }
 
   // Badge reachability. On a rail screen that is the bottom of the float; on the
   // air-drop screen it is every authored resting place, because a drop the player
@@ -475,14 +686,24 @@ function validatePhysics(s: ScreenData): Problem[] {
       const found = flood(base, spawn, (box) => aabbOverlap(box, badge));
       if (!found) {
         push(
-          `badge anchored at (${s.badge!.gx},${s.badge!.gy}) is not reachable from spawn ` +
-            'even at the bottom of its float',
+          s.badge && isPerched(s.badge)
+            ? `perched badge at (${s.badge.gx},${s.badge.restGy ?? s.badge.gy}) is not ` +
+                'reachable from spawn — the wall it stands on cannot be jumped onto'
+            : `badge anchored at (${s.badge!.gx},${s.badge!.gy}) is not reachable from spawn ` +
+                'even at the bottom of its float',
         );
       }
     }
   }
 
-  if (!reachesTarget(base)) {
+  /*
+   * Completability. On a screen with a rising plate the two floods above ARE this
+   * check — the plate is the route, and a flood over static solids alone would report
+   * the Compliance maze as impossible for the same reason a flood that ignored the
+   * clearance lift would once have reported the far bay as unreachable (it does not,
+   * because a fall gets you there; the hoist has no such second way).
+   */
+  if (!hoist && !reachesTarget(base)) {
     push('exit / win trigger is not reachable from spawn (screen not completable)');
   }
 
@@ -502,8 +723,10 @@ function main(): void {
   problems.push(...validateModel());
   for (const s of SCREENS) {
     problems.push(...validateStructure(s));
+    problems.push(...validatePlates(s));
     problems.push(...validateNarrative(s));
     problems.push(...validateAirdropTiming(s));
+    problems.push(...validateCeilingTiming(s));
     problems.push(...validatePhysics(s));
   }
 

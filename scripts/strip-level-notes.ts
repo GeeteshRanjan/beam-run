@@ -4,7 +4,7 @@
  * `levels.json` is imported by the engine, so every byte of it ships — including
  * the fields that exist purely to explain the level to the next person reading the
  * file: `meta.notes`, `meta.structure`, `meta.clock`, `meta.conventions`, and the
- * `note` on a screen, a badge or the lift. Nothing renders them; nothing reads
+ * `note` on a screen, a badge, a hazard entry or either moving plate. Nothing renders them; nothing reads
  * them at runtime.
  *
  * They are worth keeping (they are the level designer's brief and the reason a
@@ -26,6 +26,7 @@ interface LevelDoc {
     solids?: { role?: string; note?: unknown }[];
     badge?: { note?: unknown };
     lift?: { note?: unknown };
+    hoist?: { note?: unknown };
   })[];
 }
 
@@ -68,6 +69,9 @@ export function stripLevelNotes(json: string): string {
     delete screen.meaningTag;
     if (screen.badge) delete screen.badge.note;
     if (screen.lift) delete screen.lift.note;
+    // The hoist is the lift's twin and carries prose for the same reason: its parking
+    // row is load-bearing and the next person needs to know why.
+    if (screen.hoist) delete screen.hoist.note;
     // `role` is documentation too, with two exceptions: `Screen` reads it to skip
     // decorative facades (`noncollide`) and the renderer reads it to paint a
     // `pedestal` as its screen's own prop instead of as level material. A solid may

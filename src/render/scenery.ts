@@ -96,9 +96,22 @@ export const TILE_MATERIALS: Record<number, TileMaterial> = {
   // (kraft/manila — filed paper stacked into architecture, which is the read this
   // screen wants) and its course is a clean 20×20 grid at low speckle, where
   // screen 1's is a rough 24×16 at 0.22. Material, not colour.
+  //
+  // Refined on the same pass that gave this screen its weather (owner: "see what we
+  // can do to make this look better and less cognitive overload"), the same three
+  // moves that quietened screen 1's clay, for the same reasons. It was a 20×20 grid at
+  // 0.1 speckle: a 20px course over a 240px block is 12 rows of joint, which reads as
+  // a mesh laid over the whole climb rather than as masonry, and this screen has more
+  // stone in it than any other. A 40×20 course halves the joint count and lands on the
+  // tile grid, so a one-tile step is exactly one brick; the variation moves
+  // brick-to-brick (`faces`) where it looks laid instead of dotted; and the `bevel`
+  // gives each course its own shadow, which is what carries depth now that there is a
+  // bright sky behind the maze to silhouette against.
   2: {
-    face: '#7A5A3C', shade: '#553D28', highlight: '#A2794F', mortar: '#2A1B10',
-    brickW: 20, brickH: 20, speckle: 0.1, edge: '#C29A66',
+    face: '#6E5238', shade: '#4A3826', highlight: '#936E48', mortar: '#241708',
+    brickW: 40, brickH: 20, speckle: 0.05, edge: '#C29A66',
+    faces: ['#6E5238', '#66492F', '#75593D', '#614529'],
+    bevel: true,
   },
   /*
    * L3 Workplace — office floor tile: a big cool grey-green square. Not the
@@ -113,10 +126,27 @@ export const TILE_MATERIALS: Record<number, TileMaterial> = {
    * down to 0.05, the variation moved tile-to-tile (`faces`), and a `bevel` so the
    * courses have depth — a floor that is *laid* rather than a slab with dirt on it.
    */
+  /*
+   * …and then moved OFF the teal axis entirely (owner call: "the player and the
+   * brick and background feels the same").
+   *
+   * It was `#28383D`, a cool grey-green two steps off the wall's own `#0A2B33` — so
+   * the wall, the floor and a hero whose blazer is brand Light Teal were three
+   * variations on one hue, and the frame read as a single dark field with shapes
+   * scored into it. The floor is a **warm grey-olive** now: the same *value* family,
+   * a different temperature, which is what buys the separation without introducing a
+   * fifth colour to the screen or touching the hero (he appears on six screens and
+   * cannot be tuned for one). Same reasoning as screen 2 going brown — two adjacent
+   * surfaces may share a value if they do not share a temperature.
+   *
+   * It is also a step LIGHTER, and the walkable edge two steps lighter again, because
+   * the one line on this screen the player has to read at a glance is the floor they
+   * are standing on.
+   */
   3: {
-    face: '#28383D', shade: '#1A2528', highlight: '#42585E', mortar: '#101819',
-    brickW: 40, brickH: 40, speckle: 0.03, edge: '#63797F',
-    faces: ['#28383D', '#233237', '#2C3E43', '#1F2E32'],
+    face: '#3C443A', shade: '#282E27', highlight: '#5C6656', mortar: '#171B16',
+    brickW: 40, brickH: 40, speckle: 0.03, edge: '#96A38C',
+    faces: ['#3C443A', '#363E34', '#424B3F', '#313930'],
     bevel: true,
   },
   // L4 Hire Under Fire — scorched brick: warm burnt terracotta.
@@ -158,10 +188,20 @@ export function drawTileRect(
 
 /** Vertical dithered sky (deep teal), with a per-level tint at the horizon. */
 function drawSky(ctx: CanvasRenderingContext2D, horizonTint: string): void {
+  drawSkyBand(ctx, ['#00212B', '#002B37', horizonTint]);
+}
+
+/**
+ * The same sky, with all three stops given — top, 60% and horizon.
+ *
+ * Screen 2's weather moves every one of them (`mixHex`), so it cannot use the fixed
+ * night-teal top the other four skies share.
+ */
+function drawSkyBand(ctx: CanvasRenderingContext2D, stops: [string, string, string]): void {
   const grad = ctx.createLinearGradient(0, 0, 0, GROUND_TOP);
-  grad.addColorStop(0, '#00212B');
-  grad.addColorStop(0.6, '#002B37');
-  grad.addColorStop(1, horizonTint);
+  grad.addColorStop(0, stops[0]);
+  grad.addColorStop(0.6, stops[1]);
+  grad.addColorStop(1, stops[2]);
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, W, GROUND_TOP);
 
@@ -173,6 +213,362 @@ function drawSky(ctx: CanvasRenderingContext2D, horizonTint: string): void {
       if (hash2(x >> 3, y >> 3) < 0.5 - density * 0.4) {
         ctx.fillRect(x, y, 4, 4);
       }
+    }
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * The Compliance maze's WEATHER (screen 2).
+ *
+ * This screen is the one place in the game where the badge's effect is painted on
+ * the world instead of on the player (owner call: "when the user takes the powerup
+ * just make the gloomy weather brighter, signalling happiness and change and that
+ * the environment is fresh" — and no orange halo on the hero). So the backdrop needs
+ * two states and a dial between them, exactly like the Workplace's `restore`:
+ *
+ *   clear = 0  a leaden overcast lid, rain, a dark horizon, dim windows
+ *   clear = 1  daylight: a bright horizon, the cloud bank broken into small lit
+ *              cumulus, the rain gone, and a low sun through the gap
+ *
+ * Two rules borrowed from that screen, both of them paid for there: the *good* state
+ * is what the geometry is authored against and the gloom is a layer over it, and the
+ * change has to be visible across the whole frame rather than in one corner (the
+ * full-frame part is `drawWeatherWash` in `render/maze.ts`, which goes over the
+ * masonry and under the cast).
+ *
+ * `clear` arrives as a plain number. `drawSceneBackground` still knows nothing about
+ * hazards, badges or the simulation — it is handed a weather dial, and the fact that
+ * a compliance monster is what moved it is none of its business.
+ * ------------------------------------------------------------------------- */
+
+/** Blend two `#rrggbb` strings. `f` 0 → a, 1 → b. */
+function mixHex(a: string, b: string, f: number): string {
+  const p = Math.max(0, Math.min(1, f));
+  const ch = (s: string, i: number) => parseInt(s.slice(1 + i * 2, 3 + i * 2), 16);
+  const out = [0, 1, 2].map((i) => Math.round(ch(a, i) + (ch(b, i) - ch(a, i)) * p));
+  return `#${out.map((v) => v.toString(16).padStart(2, '0')).join('')}`;
+}
+
+/**
+ * The cloud bank, authored rather than random so it is the same picture every run.
+ *
+ * Each entry is a cloud's centre, its half-width and its row. Under gloom they are
+ * drawn at full width in a value just above the sky, which is what an overcast lid
+ * looks like — one continuous mass with no gaps. As `clear` rises they contract
+ * towards their own centres and lighten to lit cumulus, so the sky *opens* rather
+ * than the clouds fading out (a cloud that fades is a rendering fault; a cloud that
+ * shrinks is weather).
+ */
+const CLOUDS: readonly { cx: number; hw: number; y: number; lobes: number }[] = [
+  { cx: 120, hw: 150, y: 140, lobes: 0 },
+  { cx: 420, hw: 190, y: 112, lobes: 1 },
+  { cx: 700, hw: 160, y: 152, lobes: 2 },
+  { cx: 980, hw: 200, y: 120, lobes: 0 },
+  { cx: 1230, hw: 140, y: 148, lobes: 1 },
+];
+
+/**
+ * One cell of weather. 4px — the same cell the rain, the sun and the badge's halo use.
+ *
+ * The first version of this sky drew each cloud as three stacked `pxRect`s snapped to 4,
+ * which is 8-bit in the sense that a barcode is: the steps were 20px and 40px wide, so
+ * the silhouette was a bar chart (owner: "way too pixelated and not refined"). A cloud
+ * needs a *profile* — a height per column, quantised — which is what an 8-bit machine
+ * would have drawn from a tile mask, and it costs one fill per column.
+ */
+export const WEATHER_CELL = 4;
+
+/**
+ * Cloud silhouettes, as overlapping lobes: `dx` is the lobe's centre across the cloud
+ * (−1..1), `r` its half-width and `h` how tall it stands. Three authored sets, so the
+ * five clouds are not one shape repeated, and authored rather than random so the sky is
+ * the same picture every run.
+ *
+ * The lobes are what make a cumulus: a tall one off-centre, a couple of shoulders and a
+ * low one trailing off. A single lobe is a hill and two symmetrical ones are a bow tie.
+ */
+const CLOUD_LOBES: readonly { dx: number; r: number; h: number }[][] = [
+  [
+    { dx: -0.58, r: 0.44, h: 0.52 },
+    { dx: -0.12, r: 0.52, h: 0.9 },
+    { dx: 0.36, r: 0.46, h: 0.66 },
+    { dx: 0.78, r: 0.3, h: 0.4 },
+  ],
+  [
+    { dx: -0.74, r: 0.32, h: 0.38 },
+    { dx: -0.34, r: 0.44, h: 0.72 },
+    { dx: 0.14, r: 0.5, h: 1 },
+    { dx: 0.62, r: 0.42, h: 0.58 },
+  ],
+  [
+    { dx: -0.5, r: 0.5, h: 0.8 },
+    { dx: 0.06, r: 0.42, h: 0.56 },
+    { dx: 0.5, r: 0.48, h: 0.86 },
+  ],
+];
+
+/**
+ * One cloud: a flat base with a lobed top, a lit crown and a shaded underside.
+ *
+ * Whole cells throughout, and every column's height is quantised to the cell — so it is
+ * a hard-edged pixel silhouette rather than a smooth curve, which is the distinction
+ * that matters. The light comes from the upper left (the same direction every other
+ * object on these screens is lit from), so the crown is two cells thick on the left of
+ * each lobe and one on the right.
+ */
+function drawCloud(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  baseY: number,
+  hw: number,
+  lobeSet: number,
+  body: string,
+  lit: string,
+  crown: string,
+  shade: string,
+): void {
+  const C = WEATHER_CELL;
+  const cols = Math.max(6, Math.round((hw * 2) / C));
+  const lobes = CLOUD_LOBES[lobeSet % CLOUD_LOBES.length]!;
+  const tall = hw * 0.42; // a cumulus is about a fifth as tall as it is wide
+  let prev = 0;
+  for (let i = 0; i < cols; i += 1) {
+    const u = ((i + 0.5) / cols) * 2 - 1;
+    let h = 0;
+    for (const l of lobes) {
+      const d = (u - l.dx) / l.r;
+      if (Math.abs(d) < 1) h = Math.max(h, Math.sqrt(1 - d * d) * l.h);
+    }
+    const height = Math.round((h * tall) / C) * C;
+    if (height < C) {
+      prev = 0;
+      continue;
+    }
+    const x = cx - hw + i * C;
+    const top = baseY - height;
+    pxRect(ctx, body, x, top, C, height, C);
+    // Crown: the lit cell along the top, thicker where the silhouette is climbing
+    // (i.e. on the left flank of each lobe), which is what reads as a light source.
+    pxRect(ctx, lit, x, top, C, C, C);
+    if (height > prev && height > C * 2) pxRect(ctx, crown, x, top + C, C, C, C);
+    // Shaded underside, so the cloud has a bottom instead of ending on nothing.
+    pxRect(ctx, shade, x, baseY - C, C, C, C);
+    prev = height;
+  }
+}
+
+/**
+ * The bank. Under gloom it is a wide, low, dark lid; as `clear` rises the clouds
+ * **contract towards their own centres** and lighten into cumulus, so the sky opens.
+ */
+export function drawCloudBank(ctx: CanvasRenderingContext2D, clear: number): void {
+  const body = mixHex('#0B333C', '#B4DAE4', clear);
+  const lit = mixHex('#13454F', '#F2FBFD', clear);
+  const crown = mixHex('#0F3D47', '#DCF1F6', clear);
+  const shade = mixHex('#06222A', '#7FB0BF', clear);
+  for (const c of CLOUDS) {
+    drawCloud(
+      ctx,
+      c.cx,
+      c.y - 26 * clear,
+      c.hw * (1 - 0.42 * clear),
+      c.lobes,
+      body,
+      lit,
+      crown,
+      shade,
+    );
+  }
+}
+
+/**
+ * Rain — two parallax sheets of slanted streaks, falling continuously.
+ *
+ * **The version this replaced snapped back up the screen twice a second**, and it is
+ * worth writing down why, because the code looked fine: the whole field shared one
+ * offset, `drift = (t * 620) % 240`, so every drop advanced 240px and then *all of them*
+ * jumped back to where they started at the same instant. The owner saw exactly what was
+ * happening — "a boomerang loop that's going on and not continuous".
+ *
+ * The fix is the rule: **a scrolling field must wrap PER PARTICLE and over its OWN
+ * span, never as a shared offset over a shorter one.** Each drop's position is
+ * `(itsOwnPhase + t × speed) mod span`, where `span` is the full height it falls
+ * through. Every drop then wraps at a different moment, and each wrap is a drop
+ * *leaving at the bottom and re-entering at the top* — which is what rain does — instead
+ * of the sheet rewinding.
+ *
+ * Three things make it read as weather rather than as dots:
+ *  - **Two sheets at different speeds and values.** A single sheet is a pattern; near
+ *    (fast, brighter, longer) over far (slow, dimmer, shorter) is depth, and it is what
+ *    stops the eye locking onto individual drops.
+ *  - **The streaks travel along their own slant.** A tilted sprite falling straight down
+ *    reads as a stripe, not as a drop, so `x` is derived from the drop's own progress
+ *    (`RAIN_TILT`) and the streak is stepped along the same line.
+ *  - **Few and bright, never many and faint.** The near sheet is 0.5 alpha, the far one
+ *    0.28, and both are three-pixel cells — a dense low-alpha field reads as grime on the
+ *    screen, which this build has paid for three times (the badge's dithered halo, the
+ *    dragon's embers, screen 1's speckle).
+ *
+ * `wet` (1 → 0 as the sky clears) thins the sheets by dropping whole lanes, so the rain
+ * *stops* rather than fading to a ghost. Under `prefers-reduced-motion` the same drops
+ * are drawn at their phase with no time term: a still sheet of rain, because the weather
+ * is information on this screen and holding it is honest where hiding it is not.
+ */
+const RAIN_TILT = 0.16; // px sideways per px of fall — ~9° off vertical
+
+interface RainSheet {
+  /** px between lanes. */
+  lane: number;
+  /** px/s down. */
+  speed: number;
+  /** px between drops in one lane. */
+  gap: number;
+  /** streak length and cell width, in px. */
+  len: number;
+  w: number;
+  tone: string;
+  /** A brighter cell at the head of each streak (the near sheet only). */
+  head?: string;
+  seed: number;
+}
+
+const RAIN_NEAR: RainSheet = {
+  lane: 46,
+  speed: 880,
+  gap: 210,
+  len: 18,
+  w: 3,
+  tone: 'rgba(186,226,236,0.50)',
+  head: 'rgba(226,246,250,0.72)',
+  seed: 13,
+};
+const RAIN_FAR: RainSheet = {
+  lane: 34,
+  speed: 520,
+  gap: 260,
+  len: 11,
+  w: 2,
+  tone: 'rgba(146,192,204,0.28)',
+  seed: 41,
+};
+
+function drawRainSheet(
+  ctx: CanvasRenderingContext2D,
+  t: number,
+  reduced: boolean,
+  wet: number,
+  s: RainSheet,
+): void {
+  // The span is the whole fall plus a streak, so a drop is fully off the bottom before it
+  // is reused at the top. Lanes start off-frame to the left because the fall drifts right.
+  const span = GROUND_TOP + s.len;
+  const lanes = Math.ceil((W + span * RAIN_TILT + s.lane * 2) / s.lane);
+  for (let i = 0; i < lanes; i += 1) {
+    const lane = -s.lane - span * RAIN_TILT + i * s.lane;
+    const n = hash2(i, s.seed);
+    // Whole lanes go out as the sky clears, so the rain thins rather than dimming.
+    if (n > wet) continue;
+    const drops = Math.ceil(span / s.gap);
+    for (let j = 0; j < drops; j += 1) {
+      // Its own phase: the lane's hash spreads the train, and `j` spaces it out.
+      const phase = n * s.gap + j * s.gap;
+      const pos = reduced ? phase % span : (phase + t * s.speed) % span;
+      // No culling needed, and that is deliberate: `pos` is in [0, span) and
+      // `span = GROUND_TOP + len`, so every drop is always inside the frame's fall. It
+      // also means the sheet has a FIXED number of streaks, which is what lets a test
+      // follow one drop from frame to frame and prove it never rewinds.
+      const y = pos - s.len;
+      const x = lane + pos * RAIN_TILT;
+      // Two cells stepped along the slant: the streak leans the way it is travelling.
+      const half = s.len / 2;
+      pxRect(ctx, s.tone, x, y, s.w, half, 1);
+      pxRect(ctx, s.head ?? s.tone, x + half * RAIN_TILT, y + half, s.w, half, 1);
+    }
+  }
+}
+
+export function drawRain(
+  ctx: CanvasRenderingContext2D,
+  t: number,
+  reduced: boolean,
+  wet: number,
+): void {
+  if (wet <= 0.02) return;
+  drawRainSheet(ctx, t, reduced, wet, RAIN_FAR);
+  drawRainSheet(ctx, t, reduced, wet, RAIN_NEAR);
+}
+
+/**
+ * The sun through the gap, once the sky has started to open.
+ *
+ * Pale cream, never the value orange — orange on this screen would be the badge's own
+ * accent, and a sunrise the size of a building is not a badge. It is placed left of
+ * centre and low enough to clear the HUD's left stack (which reaches y≈150), directly
+ * over the wall the ANSR mark stands on, so the light lands where the answer came from.
+ */
+export function drawSunBreak(ctx: CanvasRenderingContext2D, clear: number): void {
+  if (clear <= 0.08) return;
+  // 262/168 is measured, not chosen: it is the one clear patch of sky on the left of
+  // this frame. At 322 it rasterised **behind the hoist's brick guide pier** (x 320-360)
+  // and read as a lamp on a post — the occluded-sun defect this build has now paid for
+  // twice. Its left ray reaches x=206, which keeps it clear of the HUD's left column
+  // (x≈194), and its top is at y=112, above the badge wall it is lighting.
+  const cx = 262;
+  const cy = 168;
+  const a = Math.min(1, (clear - 0.08) / 0.5);
+  const C = WEATHER_CELL;
+  const R = 32;
+  const core = `rgba(255,250,226,${a.toFixed(2)})`;
+  const face = `rgba(255,238,186,${a.toFixed(2)})`;
+  const rim = `rgba(252,214,138,${a.toFixed(2)})`;
+  const ray = `rgba(255,228,158,${(0.85 * a).toFixed(2)})`;
+  const rayFar = `rgba(255,228,158,${(0.45 * a).toFixed(2)})`;
+  /*
+   * A real pixel circle: every 4px cell whose centre is inside R, and three bands inside
+   * it — a bright core, a face and a rim.
+   *
+   * The two earlier versions were both **profiles of 8px rows**, and that is why they
+   * kept coming out wrong (a light bulb, then a light bulb with a gap). At 8px a 64px
+   * sun has eight rows, so the "curve" is eight steps and every one of them is visible as
+   * a slab; at 4px it has sixteen, which is where a stepped circle stops reading as a
+   * polygon. The bands are concentric and the light source is up-left, so the core sits
+   * slightly off centre — which is what makes a disc read as a sphere of light rather
+   * than as a coin.
+   */
+  for (let dy = -R; dy < R; dy += C) {
+    for (let dx = -R; dx < R; dx += C) {
+      const px = dx + C / 2;
+      const py = dy + C / 2;
+      const d = Math.sqrt(px * px + py * py);
+      if (d > R) continue;
+      const off = Math.sqrt((px + 5) * (px + 5) + (py + 5) * (py + 5));
+      const tone = off < R * 0.46 ? core : d < R * 0.82 ? face : rim;
+      pxRect(ctx, tone, cx + dx, cy + dy, C, C, C);
+    }
+  }
+  /*
+   * Twelve rays, in whole cells, tapering outwards: three cells on the cardinals and two
+   * on the rest, starting one cell clear of the rim.
+   *
+   * Few and bright rather than many and faint — the halo lesson, third time. Twelve short
+   * spokes read as light *coming off* the disc; the four long bars this replaced sat out
+   * at 34-48px with a hole between them and the sun, so they read as four detached
+   * dashes. Nothing here is a gradient and nothing is under 0.45 alpha.
+   */
+  for (let k = 0; k < 12; k += 1) {
+    const ang = (k / 12) * Math.PI * 2;
+    const long = k % 3 === 0;
+    for (let j = 0; j < (long ? 3 : 2); j += 1) {
+      const r = R + C + j * C;
+      pxRect(
+        ctx,
+        j === 0 ? ray : rayFar,
+        cx + Math.cos(ang) * r - C / 2,
+        cy + Math.sin(ang) * r - C / 2,
+        C,
+        C,
+        C,
+      );
     }
   }
 }
@@ -403,8 +799,22 @@ export const CEILING = {
   GAPS: [320, 640] as const,
   /** Where the ceiling is stained rather than gone, and a bucket stands under it. */
   STAIN: 500,
-  /** Centres of the four strip fittings. */
-  LIGHTS: [200, 500, 800, 1100] as const,
+  /**
+   * Centres of the four ceiling **spotlights** (owner call: "add 4 big spot lights
+   * from the ceiling facing down, glow up when things restore" — `render/workplace.ts`
+   * draws the fittings themselves).
+   *
+   * The first one is at **220 rather than 200**, and that is not a nudge: it is the
+   * badge's own column (gx 5). The Workplace's rail is gone and the mark now falls out
+   * of this fitting straight down its own axis onto the cabinet under it
+   * (`world/badgeCeiling.ts`), so the light's centre and the pickup's centre are one
+   * number. Moving it means moving the badge, the cabinet and the level data together.
+   *
+   * The spacing is what keeps the floor pools apart: at 130px of half-width (see
+   * `floorPool`) four pools 300px apart leave 40px of unlit floor between them, and the
+   * dark between the pools is as much of the picture as the pools are.
+   */
+  LIGHTS: [220, 500, 800, 1100] as const,
   /**
    * The aperture a fitting sits in — **exactly two tiles**, so it lands on the same
    * grid the holes do. At 168 it overhung its tiles by 4px each side, which was
@@ -414,10 +824,37 @@ export const CEILING = {
   FIT_W: 160,
   FIT_Y: 54,
   FIT_H: 32,
+  /**
+   * How wide a hole the services duct leaves for each spotlight to come through.
+   *
+   * The fittings are **spots hanging below the ceiling line** now, not strips recessed
+   * into it, so the duct at y 108–132 is in their way. `render/workplace.ts` draws a
+   * 64px barrel; 96 gives it 16px of daylight either side, which is what makes the two
+   * read as one piece of ceiling equipment rather than as one drawn over the other.
+   */
+  DUCT_GAP: 96,
+  /** The bottom of a spotlight's barrel — where its lens is, and what the mark hangs under. */
+  SPOT_BOTTOM: 130,
 } as const;
 
-/** Left edge of each workstation pod, and where its monitor screen sits. */
-export const WORK_PODS = [190, 430, 668] as const;
+/**
+ * Left edge of each workstation pod, and where its monitor screen sits.
+ *
+ * **There are two, and there used to be three at [190, 430, 668].** The one at 190 was
+ * the defect the owner reported ("the first computer screen that comes after things are
+ * restored is overlaying on the brick obstacle we have in the beginning"): its divider
+ * ran 190–386 and its monitor 224–272, straight through the partition wall's column —
+ * so the lit screen of the payoff was painted on top of the one solid the player has to
+ * jump. That is the "a backdrop prop may not stand in a column a solid stands in" rule,
+ * and this screen now has *three* solids to keep clear of, not one: the partition at
+ * 280–320 and the badge cabinet floating at 160–240.
+ *
+ * Which leaves the floor right of 340 for furniture, and 196px pods do not fit three
+ * times between there and the terminal (922). So the room lost a pod and the two that
+ * are left were redrawn properly, which is the other half of the same note ("the desk
+ * and computer screen doesn't look refined").
+ */
+export const WORK_PODS = [470, 690] as const;
 /** Monitor screen, relative to a pod's left edge and to the floor line. */
 export const POD_SCREEN = { dx: 34, dy: -76, w: 48, h: 30 } as const;
 /**
@@ -431,11 +868,87 @@ export const POD_SCREEN = { dx: 34, dy: -76, w: 48, h: 30 } as const;
  * every sweep at x 360–420, which level data keeps clear of props for exactly the
  * same reason.
  */
-export const CABINETS = { rackX: 100, x: 290, y: GROUND_TOP - 100, w: 104, drawerH: 24 } as const;
+export const CABINETS = { rackX: 56, x: 340, y: GROUND_TOP - 100, w: 104, drawerH: 24 } as const;
 /** The glazing on the right third — the market, outside, where it belongs. */
 export const WINDOW = { x: 830, y: 176, w: W - 830 - 40, h: 210 } as const;
 
-/** A monitor: shell, bezel and screen. `screen` decides whether it is awake. */
+/**
+ * The Workplace's shell, off the teal axis (owner call: "change the background wall
+ * colour, it's almost the same colour as the outer view from the window and also almost
+ * the same colour as our character").
+ *
+ * The complaint is one problem with three sides to it. The wall registers were
+ * `#0A2B33` / `#0E3846` / `#051B23`, the glazing behind them `#06303C`, and the hero's
+ * blazer brand Light Teal `#005465` — four dark teals, so the room, the view and the
+ * person were one field with shapes scored into it. The hero cannot move (he is on six
+ * screens), so the fix is on the room, and it is the same move the floor already made
+ * and screen 2 made going brown: **same value family, different temperature.** The
+ * plaster is a warm grey-olive now, the ceiling grid and the services stay cool slate —
+ * which gives the room two materials where it had one — and the glazing goes the other
+ * way entirely, up to a genuine cool daylight (below).
+ *
+ * Values are held close to what they replaced on purpose, because the value structure
+ * of this screen was already right: dark at the top, a lighter mid register the
+ * furniture reads against, and the darkest band at the bottom, which is the 140px the
+ * hero's whole body stands against.
+ */
+const WALL = {
+  /** 0–160: the upper wall, in shadow under the services. */
+  upper: '#231F1A',
+  /** 160–460: the register the furniture is read against. */
+  mid: '#35322A',
+  /** 334–460: the dado panel, a step down from the mid register. */
+  dado: '#2C2A23',
+  /** 460–ground: the darkest band on the wall — the hero stands against this one. */
+  base: '#1A1712',
+  /** Up-facing edges: the mid rail, the dado rail, the sill course, the skirting top. */
+  rail: '#4A4536',
+  /** …and the brightest of them, on the skirting, where the floor throws light back. */
+  railLit: '#5E5847',
+  /** Panel joints, so a 300px register is a run of panels rather than one surface. */
+  joint: 'rgba(12,9,5,0.34)',
+  /** Skirting board. */
+  skirting: '#1E1B15',
+} as const;
+
+/**
+ * The Workplace's FURNITURE palette — warm dark, off the teal axis.
+ *
+ * Owner call: "change the colour of the desks, it's interfering with the character."
+ * Every piece of furniture on this floor was in the teal family (`#17566A` worktops,
+ * `#46A6BC` lit edges) and so is the hero's blazer, so at floor level — which is the
+ * only level he is ever at — he was one more teal shape in a row of them. The rule that
+ * furniture goes *darker than the wall with one lit edge each* is untouched; what
+ * changes is the temperature, which is the one axis left once the values are decided
+ * and the hero is fixed. Now the only teal below the dado rail is the player.
+ */
+const FURN = {
+  /** Carcase and modesty panels: the darkest thing in the room after the ceiling void. */
+  body: '#1D1A15',
+  /** A step up, for a face that is turned towards the camera. */
+  face: '#2A251E',
+  /** Worktops and drawer fronts. */
+  top: '#3A3328',
+  /** The one lit edge per object — warm pale, the colour the ceiling spots throw. */
+  lit: '#8E8672',
+  /** …and its quieter version, for a second edge that must not compete with the first. */
+  edge: '#5E5747',
+  /** Shadow line under a lit edge, which is what gives the edge its thickness. */
+  shade: '#100E0A',
+  /** Aluminium: monitor stands, drawer handles, chair frames. Neutral, not teal. */
+  metal: '#6F7570',
+} as const;
+
+/**
+ * A monitor: shell, bezel, screen, stand.
+ *
+ * Refined on the owner's note that the desk and the computer screen did not look
+ * finished. What it was: one dark rectangle, one screen rectangle, a 10px neck and a
+ * 28px foot — a television on a stick. What a monitor actually reads as at this size is
+ * a **thin bezel with a wide screen inside it**, a shallow lower chin, a slim stand and
+ * a *wide* flat foot, plus the one detail that says the thing is switched off rather
+ * than missing: a highlight running along the top of the bezel.
+ */
 function drawMonitor(
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -444,11 +957,15 @@ function drawMonitor(
   h: number,
   screen: string,
 ): void {
-  pxRect(ctx, '#04161B', x - 4, y - 4, w + 8, h + 8, 2); // shell
-  pxRect(ctx, '#2A7C90', x - 4, y - 4, w + 8, 3, 2); // lit top edge of the shell
-  pxRect(ctx, screen, x, y, w, h, 2);
-  pxRect(ctx, '#04161B', x + w / 2 - 5, y + h + 4, 10, 6, 2); // neck
-  pxRect(ctx, '#0C2E38', x + w / 2 - 14, y + h + 10, 28, 4, 2); // foot
+  pxRect(ctx, FURN.shade, x - 5, y - 5, w + 10, h + 16, 2); // keyline / shadow
+  pxRect(ctx, FURN.face, x - 3, y - 3, w + 6, h + 12, 2); // bezel
+  pxRect(ctx, FURN.lit, x - 3, y - 3, w + 6, 2, 2); // lit top edge of the bezel
+  pxRect(ctx, screen, x, y, w, h, 2); // the panel itself
+  pxRect(ctx, 'rgba(255,255,255,0.06)', x, y, w, 3, 2); // reflection on the glass
+  pxRect(ctx, FURN.edge, x + w / 2 - 4, y + h + 3, 8, 4, 2); // chin badge
+  pxRect(ctx, FURN.metal, x + w / 2 - 3, y + h + 9, 6, 7, 2); // stand
+  pxRect(ctx, FURN.metal, x + w / 2 - 17, y + h + 15, 34, 3, 2); // foot
+  pxRect(ctx, FURN.shade, x + w / 2 - 17, y + h + 18, 34, 2, 2);
 }
 
 /**
@@ -482,35 +999,65 @@ function drawWorkPod(ctx: CanvasRenderingContext2D, x: number, seed: number): vo
    * monitor on it, so the pod had nothing in it but a wall. At 50 the monitor crests
    * it and the payoff can put somebody back behind it.
    */
-  pxRect(ctx, '#072229', x, b - 50, 196, 50, 2); // divider panel
-  pxRect(ctx, '#2A7C90', x, b - 50, 196, 4, 2); // lit top rail
-  pxRect(ctx, '#04161B', x + 4, b - 44, 188, 4, 2); // shadow under the rail
-  pxRect(ctx, '#0C3340', x + 92, b - 44, 3, 44, 2); // the joint between two panels
+  /*
+   * The divider: a fabric panel in a frame, not a flat slab.
+   *
+   * Two courses of a slightly different value with a post at each end and one in the
+   * middle is what an office screen looks like; one rectangle with a rail on top is a
+   * wall. It costs four fills and it is most of why the pod now reads as furniture.
+   */
+  pxRect(ctx, FURN.body, x, b - 50, 196, 50, 2); // panel
+  pxRect(ctx, FURN.face, x + 6, b - 44, 184, 20, 2); // upper fabric course
+  pxRect(ctx, FURN.body, x + 6, b - 24, 184, 20, 2); // lower course, a value down
+  pxRect(ctx, FURN.lit, x, b - 50, 196, 3, 2); // lit top rail
+  pxRect(ctx, FURN.shade, x + 4, b - 47, 188, 3, 2); // shadow under the rail
+  for (const px of [x + 2, x + 95, x + 190]) pxRect(ctx, FURN.edge, px, b - 47, 4, 47, 2); // posts
 
-  // Desk: a slab on a modesty panel, with the light catching its front edge.
-  pxRect(ctx, '#04161B', x + 18, b - 30, 152, 30, 2);
-  pxRect(ctx, '#17566A', x + 12, b - 36, 164, 8, 2);
-  pxRect(ctx, '#46A6BC', x + 12, b - 36, 164, 3, 2);
+  /*
+   * Desk: a worktop with a real front apron, a cable tray under it and a drawer
+   * pedestal at one end.
+   *
+   * The old desk was a 30px black box with an 8px slab on top, which at this size is a
+   * shelf. What says "desk" is the *thickness* of the top, the shadow it casts on the
+   * apron under it, and something in the leg space — so there is a tray of cables and a
+   * three-drawer pedestal, and the pedestal alternates ends pod to pod.
+   */
+  pxRect(ctx, FURN.body, x + 18, b - 30, 152, 30, 2); // modesty panel / leg space
+  pxRect(ctx, FURN.shade, x + 18, b - 30, 152, 4, 2); // shadow the top casts on it
+  pxRect(ctx, FURN.metal, x + 40, b - 18, 108, 3, 2); // cable tray
+  pxRect(ctx, FURN.top, x + 12, b - 36, 164, 8, 2); // worktop
+  pxRect(ctx, FURN.lit, x + 12, b - 36, 164, 3, 2); // its lit front edge
+  pxRect(ctx, FURN.shade, x + 12, b - 29, 164, 2, 2);
+  const pedX = hash2(seed, 11) > 0.5 ? x + 20 : x + 122;
+  pxRect(ctx, FURN.face, pedX, b - 28, 46, 28, 2); // drawer pedestal
+  for (let i = 0; i < 3; i += 1) {
+    pxRect(ctx, FURN.top, pedX + 4, b - 25 + i * 9, 38, 6, 2);
+    pxRect(ctx, FURN.metal, pedX + 16, b - 23 + i * 9, 14, 2, 2); // handle
+  }
 
-  drawMonitor(ctx, x + POD_SCREEN.dx, b + POD_SCREEN.dy, POD_SCREEN.w, POD_SCREEN.h, '#0C3340');
-  // Keyboard, a mug and a stack of paper — stable positions, never a scatter.
-  pxRect(ctx, '#0E3B47', x + 30, b - 40, 46, 4, 2);
-  pxRect(ctx, '#9FBAC2', x + 104, b - 44, 10, 8, 2);
-  pxRect(ctx, '#A9BEC4', x + 124, b - 40, 30, 4, 2);
-  pxRect(ctx, '#8CA8B4', x + 124, b - 44, 30, 4, 2);
+  drawMonitor(ctx, x + POD_SCREEN.dx, b + POD_SCREEN.dy, POD_SCREEN.w, POD_SCREEN.h, '#22343A');
+  // Keyboard, a mug and a stack of paper — stable positions, never a scatter. The mug
+  // and the paper are the only light values on the desk, so they are what the eye finds.
+  pxRect(ctx, FURN.face, x + 30, b - 40, 46, 4, 2);
+  pxRect(ctx, FURN.metal, x + 30, b - 40, 46, 2, 2);
+  pxRect(ctx, '#B9AE96', x + 104, b - 45, 11, 9, 2); // mug
+  pxRect(ctx, '#8E8672', x + 113, b - 43, 4, 5, 2); // …and its handle
+  pxRect(ctx, '#A9A08A', x + 124, b - 41, 30, 5, 2); // paper
+  pxRect(ctx, '#C4BCA6', x + 126, b - 44, 30, 4, 2);
 
   // Task chair, pushed in on one pod and out on the next so the row is not a
   // pattern. It is drawn in front of the desk, which is where a chair is.
   const out = hash2(seed, 3) > 0.5 ? 34 : 6;
   const cx = x + 60 + out;
-  pxRect(ctx, '#051A20', cx - 20, b - 56, 40, 28, 2); // back
-  pxRect(ctx, '#2A7C90', cx - 20, b - 56, 40, 3, 2);
-  pxRect(ctx, '#04161B', cx - 24, b - 28, 48, 7, 2); // seat
-  pxRect(ctx, '#17566A', cx - 24, b - 28, 48, 3, 2);
-  pxRect(ctx, '#04161B', cx - 3, b - 21, 6, 14, 2); // post
-  pxRect(ctx, '#0C2E38', cx - 22, b - 7, 44, 4, 2); // base
-  pxRect(ctx, '#0C2E38', cx - 22, b - 3, 6, 3, 2);
-  pxRect(ctx, '#0C2E38', cx + 16, b - 3, 6, 3, 2);
+  pxRect(ctx, FURN.body, cx - 20, b - 58, 40, 30, 2); // back
+  pxRect(ctx, FURN.edge, cx - 20, b - 58, 40, 3, 2);
+  pxRect(ctx, FURN.face, cx - 16, b - 52, 32, 18, 2); // its upholstered face
+  pxRect(ctx, FURN.face, cx - 24, b - 28, 48, 7, 2); // seat
+  pxRect(ctx, FURN.edge, cx - 24, b - 28, 48, 3, 2);
+  pxRect(ctx, FURN.metal, cx - 3, b - 21, 6, 14, 2); // post
+  pxRect(ctx, FURN.metal, cx - 22, b - 7, 44, 4, 2); // base
+  pxRect(ctx, FURN.body, cx - 22, b - 3, 6, 3, 2);
+  pxRect(ctx, FURN.body, cx + 16, b - 3, 6, 3, 2);
 }
 
 /**
@@ -523,24 +1070,25 @@ function drawStorageWall(ctx: CanvasRenderingContext2D): void {
   const { rackX, x, y, w, drawerH } = CABINETS;
   // Server rack, floor to head height: the one piece of equipment on this floor at
   // more than furniture scale, so the left end of the room has a vertical in it.
-  pxRect(ctx, '#0A2A33', rackX - 6, GROUND_TOP - 216, 88, 216, 2);
-  pxRect(ctx, '#154C5A', rackX - 6, GROUND_TOP - 216, 88, 4, 2);
+  pxRect(ctx, FURN.body, rackX - 6, GROUND_TOP - 216, 88, 216, 2);
+  pxRect(ctx, FURN.lit, rackX - 6, GROUND_TOP - 216, 88, 3, 2);
   for (let ry = GROUND_TOP - 204; ry < GROUND_TOP - 20; ry += 18) {
-    pxRect(ctx, '#123F4C', rackX, ry, 62, 11, 2);
-    pxRect(ctx, '#08222A', rackX, ry + 11, 62, 3, 2);
-    // One status light per shelf, stable (hash2) rather than blinking at random.
-    pxRect(ctx, hash2(ry, 5) > 0.45 ? '#2E7F5E' : '#0E3B47', rackX + 66, ry + 3, 5, 5, 2);
+    pxRect(ctx, FURN.face, rackX, ry, 62, 11, 2);
+    pxRect(ctx, FURN.shade, rackX, ry + 11, 62, 3, 2);
+    // One status light per shelf, stable (hash2) rather than blinking at random. Kept
+    // in the cool greens — a live LED is the one thing in this room that may be.
+    pxRect(ctx, hash2(ry, 5) > 0.45 ? '#2E7F5E' : '#1E2A2C', rackX + 66, ry + 3, 5, 5, 2);
   }
   // Cabinet bank, four drawers, closed. The damage layer pulls two of them out.
   // Same value rule as the pods: a dark mass with one lit edge per drawer.
-  pxRect(ctx, '#051A20', x, y, w, GROUND_TOP - y, 2);
-  pxRect(ctx, '#2A7C90', x, y, w, 4, 2);
+  pxRect(ctx, FURN.body, x, y, w, GROUND_TOP - y, 2);
+  pxRect(ctx, FURN.lit, x, y, w, 3, 2);
   for (let i = 0; i < 4; i += 1) {
     const dy = y + 6 + i * drawerH;
-    pxRect(ctx, '#0C3340', x + 6, dy, w - 12, drawerH - 6, 2);
-    pxRect(ctx, '#17566A', x + 6, dy, w - 12, 3, 2);
-    pxRect(ctx, '#04161B', x + 6, dy + drawerH - 6, w - 12, 3, 2);
-    pxRect(ctx, '#8CA8B4', x + w / 2 - 12, dy + 8, 24, 4, 2); // handle
+    pxRect(ctx, FURN.top, x + 6, dy, w - 12, drawerH - 6, 2);
+    pxRect(ctx, FURN.edge, x + 6, dy, w - 12, 3, 2);
+    pxRect(ctx, FURN.shade, x + 6, dy + drawerH - 6, w - 12, 3, 2);
+    pxRect(ctx, FURN.metal, x + w / 2 - 12, dy + 8, 24, 4, 2); // handle
   }
 }
 
@@ -556,9 +1104,9 @@ function drawStorageWall(ctx: CanvasRenderingContext2D): void {
 function drawWhiteboard(ctx: CanvasRenderingContext2D, x: number, y: number): void {
   const w = 196;
   const h = 116;
-  pxRect(ctx, '#0A2A33', x - 5, y - 5, w + 10, h + 10, 2); // shadow
-  pxRect(ctx, '#123F4C', x - 4, y - 4, w + 8, h + 8, 2); // frame
-  pxRect(ctx, '#2A7C90', x - 4, y - 4, w + 8, 3, 2);
+  pxRect(ctx, FURN.shade, x - 5, y - 5, w + 10, h + 10, 2); // shadow
+  pxRect(ctx, FURN.face, x - 4, y - 4, w + 8, h + 8, 2); // frame
+  pxRect(ctx, FURN.lit, x - 4, y - 4, w + 8, 3, 2);
   /*
    * The surface is a mid grey-teal, not the near-white a real whiteboard is.
    *
@@ -588,8 +1136,8 @@ function drawWhiteboard(ctx: CanvasRenderingContext2D, x: number, y: number): vo
   pxRect(ctx, '#157287', x + 132, y + 56, 3, 26, 2);
   pxRect(ctx, '#157287', x + 126, y + 74, 15, 3, 2);
   pxRect(ctx, '#5E8794', x + 112, y + 90, 60, 4, 2);
-  pxRect(ctx, '#123F4C', x - 4, y + h + 4, w + 8, 7, 2); // pen tray
-  pxRect(ctx, '#8CA8B4', x + 20, y + h + 4, 22, 3, 2); // a marker on it
+  pxRect(ctx, FURN.face, x - 4, y + h + 4, w + 8, 7, 2); // pen tray
+  pxRect(ctx, FURN.metal, x + 20, y + h + 4, 22, 3, 2); // a marker on it
 }
 
 /**
@@ -601,24 +1149,45 @@ function drawWhiteboard(ctx: CanvasRenderingContext2D, x: number, y: number): vo
  * floor so the ground has something to sit on.
  */
 function drawOfficeInterior(ctx: CanvasRenderingContext2D, t: number, reduced: boolean): void {
-  ctx.fillStyle = '#0A2B33';
+  /*
+   * The plaster is WARM now, and the ceiling above it stays cool (see `WALL`).
+   *
+   * Owner call, and the third time this screen has paid the same bill: the wall, the
+   * view through the window and the hero were three dark teals, so the room read as one
+   * field. The hero is on six screens and cannot be tuned for this one, so the room
+   * moves — same values, different temperature. Keeping the *ceiling* cool is what stops
+   * that reading as a sepia filter: plaster and painted metal are different materials
+   * and now they look like it.
+   */
+  ctx.fillStyle = WALL.upper;
   ctx.fillRect(0, 0, W, GROUND_TOP);
-  ctx.fillStyle = '#0E3846';
+  ctx.fillStyle = WALL.mid;
   ctx.fillRect(0, 160, W, 300);
-  pxRect(ctx, '#175565', 0, 156, W, 4, 2);
+  pxRect(ctx, WALL.rail, 0, 156, W, 4, 2);
   // A dado rail two thirds of the way down the light register. Without it that
   // register is 300px of one value, and 300px of one value is a painted flat
   // whatever is standing in front of it.
-  pxRect(ctx, '#0C3441', 0, 334, W, 126, 2);
-  pxRect(ctx, '#175565', 0, 330, W, 4, 2);
-  ctx.fillStyle = '#0A2E39';
+  pxRect(ctx, WALL.dado, 0, 334, W, 126, 2);
+  pxRect(ctx, WALL.rail, 0, 330, W, 4, 2);
+  /*
+   * The lowest register — the 140px the hero's whole body stands against — is the
+   * DARKEST thing on the wall.
+   *
+   * This is the other half of the answer to "the player and the background feel the
+   * same". The floor moved off the teal axis; the hero cannot move at all, so the
+   * band directly behind him had to. His blazer is brand Light Teal `#005465`, and
+   * against a warm near-black at a third of its value the whole figure reads rather
+   * than just his shirt. It costs nothing, because the register is behind furniture for
+   * most of its length and behind a lit skirting course at its foot.
+   */
+  ctx.fillStyle = WALL.base;
   ctx.fillRect(0, 460, W, GROUND_TOP - 460);
-  pxRect(ctx, '#12475A', 0, 458, W, 3, 2);
+  pxRect(ctx, WALL.rail, 0, 458, W, 3, 2);
   // Panel joints: an office wall is a run of panels, and the joints are what stop
   // each band reading as one continuous surface.
-  for (let x = 0; x < W; x += 160) pxRect(ctx, 'rgba(0,18,26,0.30)', x, 160, 3, 300, 1);
-  pxRect(ctx, '#06202A', 0, GROUND_TOP - 22, W, 22, 2); // skirting
-  pxRect(ctx, '#15606E', 0, GROUND_TOP - 25, W, 3, 2);
+  for (let x = 0; x < W; x += 160) pxRect(ctx, WALL.joint, x, 160, 3, 300, 1);
+  pxRect(ctx, WALL.skirting, 0, GROUND_TOP - 22, W, 22, 2); // skirting
+  pxRect(ctx, WALL.railLit, 0, GROUND_TOP - 25, W, 3, 2);
 
   // --- suspended ceiling -------------------------------------------------
   // Four courses of tile receding upwards, darkest at the top, on a T-bar grid.
@@ -637,14 +1206,40 @@ function drawOfficeInterior(ctx: CanvasRenderingContext2D, t: number, reduced: b
     pxRect(ctx, '#061C23', cx - CEILING.FIT_W / 2, CEILING.FIT_Y, CEILING.FIT_W, CEILING.FIT_H, 2);
   }
 
-  // Services under the ceiling: a duct and a cable tray, the horizontal that ties
-  // the top of the frame to the room.
-  pxRect(ctx, '#0C2E38', 0, 108, W, 24, 2);
-  pxRect(ctx, '#154C5A', 0, 108, W, 4, 2);
-  pxRect(ctx, '#06202A', 0, 128, W, 4, 2);
+  /*
+   * Services under the ceiling: a duct and a cable tray, the horizontal that ties the
+   * top of the frame to the room — **cut around every spotlight.**
+   *
+   * It used to run the full width, and it had to stop doing that the moment the
+   * fittings became spotlights that hang *below* the ceiling line (owner call: four big
+   * spots facing down). A 52px barrel coming through an unbroken duct is two objects
+   * occupying one space, and no draw order rescues it. Real services drop out where a
+   * fitting comes through, so these do: `DUCT_GAP` is the aperture plus a margin, and
+   * the run is painted in the spans between.
+   */
+  const gaps = CEILING.LIGHTS.map(
+    (cx) => [cx - CEILING.DUCT_GAP / 2, cx + CEILING.DUCT_GAP / 2] as const,
+  );
+  let from = 0;
+  for (const [gapL, gapR] of [...gaps, [W, W] as const]) {
+    const to = Math.min(gapL, W);
+    if (to > from) {
+      pxRect(ctx, '#0C2E38', from, 108, to - from, 24, 2);
+      pxRect(ctx, '#154C5A', from, 108, to - from, 4, 2);
+      pxRect(ctx, '#06202A', from, 128, to - from, 4, 2);
+      // A capped end where the run stops at a fitting, so it reads as cut rather than
+      // as a duct that happens to be missing.
+      if (gapL < W) pxRect(ctx, '#061C23', to - 4, 108, 4, 24, 2);
+      if (from > 0) pxRect(ctx, '#061C23', from, 108, 4, 24, 2);
+    }
+    from = Math.max(from, gapR);
+  }
   for (let x = 20; x < W; x += 120) {
+    if (gaps.some(([l, r]) => x + 6 > l && x < r)) continue;
     pxRect(ctx, '#0C2E38', x, CEILING.H, 6, 8, 2); // hanger into the ceiling
-    pxRect(ctx, '#154C5A', x + 40, 132, 44, 4, 2); // a run of trunking dropping away
+    if (!gaps.some(([l, r]) => x + 84 > l && x + 40 < r)) {
+      pxRect(ctx, '#154C5A', x + 40, 132, 44, 4, 2); // a run of trunking dropping away
+    }
   }
 
   // --- glazing -----------------------------------------------------------
@@ -653,16 +1248,34 @@ function drawOfficeInterior(ctx: CanvasRenderingContext2D, t: number, reduced: b
   ctx.beginPath();
   ctx.rect(winX, winY, winW, winH);
   ctx.clip();
-  ctx.fillStyle = '#06303C';
-  ctx.fillRect(winX, winY, winW, winH);
+  /*
+   * The view out is COOL DAYLIGHT, and it is the other half of the owner's colour note.
+   *
+   * It was `#06303C` behind a `#083744` skyline: a dark teal city in a dark teal
+   * opening, in a dark teal wall. Two surfaces at the same end of the value scale in the
+   * same hue is an invisible object, and here it made the window a slightly different
+   * patch of wall. Daylight is the one thing on this screen that is genuinely *outside*,
+   * so it goes the other way — a graded cool sky, brightest at the top, with the city in
+   * near-silhouette against it. Value discipline still applies: at `#7FA8B8` the sky is
+   * a long way below the wrapped figure's near-white cloth, so the window is the
+   * lightest thing on the WALL and never the lightest thing in the frame.
+   */
+  // Six stepped courses rather than a gradient: hard steps are how this build says
+  // "sky", and inside a 210px opening six of them is plenty to read as a graded one.
+  const daylight = ['#8FB6C4', '#86AEBE', '#7CA6B6', '#729EAE', '#6995A6', '#5F8C9E'];
+  for (let i = 0; i < daylight.length; i += 1) {
+    const bandH = Math.ceil(winH / daylight.length);
+    pxRect(ctx, daylight[i]!, winX, winY + i * bandH, winW, bandH, 2);
+  }
   // The skyline generator draws up from the ground band, so it is lifted into the
-  // opening. Its windows are two values up on the old call: through glass, on the
-  // one screen with no sky, the city is the only daylight in the room.
+  // opening. Dark against the daylight now, with its windows only a step lighter —
+  // a city read as silhouette is a city that stays outside the room.
   ctx.translate(0, winY + winH - GROUND_TOP + 60);
-  drawSkyline(ctx, 67, '#083744', '#9FD2DE', t, reduced);
+  drawSkyline(ctx, 67, '#2C4652', '#5E7E8C', t, reduced);
   ctx.restore();
-  // Frame, transom and mullions, so it reads as glazing rather than as a hole.
-  const bar = '#175565';
+  // Frame, transom and mullions, so it reads as glazing rather than as a hole. Dark
+  // against the daylight, which is what a frame does when the light is behind it.
+  const bar = '#1B2620';
   pxRect(ctx, bar, winX - 7, winY - 7, winW + 14, 7, 2);
   pxRect(ctx, bar, winX - 7, winY + winH, winW + 14, 7, 2);
   pxRect(ctx, bar, winX - 7, winY, 7, winH, 2);
@@ -703,9 +1316,9 @@ function drawWallClock(
   reduced: boolean,
 ): void {
   const R = 40;
-  pxRect(ctx, '#061C23', cx - R, cy - R, R * 2, R * 2, 4); // shadow of the case
-  pxRect(ctx, '#123F4C', cx - R + 4, cy - R + 4, R * 2 - 8, R * 2 - 8, 4);
-  pxRect(ctx, '#2A7C90', cx - R + 4, cy - R + 4, R * 2 - 8, 4, 4); // lit top of the bezel
+  pxRect(ctx, FURN.shade, cx - R, cy - R, R * 2, R * 2, 4); // shadow of the case
+  pxRect(ctx, FURN.face, cx - R + 4, cy - R + 4, R * 2 - 8, R * 2 - 8, 4);
+  pxRect(ctx, FURN.lit, cx - R + 4, cy - R + 4, R * 2 - 8, 4, 4); // lit top of the bezel
   // A mid grey dial, not the near-white a clock face is: it is a 56px light shape in
   // the middle of the wall, and near-white on this screen belongs to the wrapped
   // figure's cloth. Same call as the whiteboard's surface.
@@ -1015,16 +1628,145 @@ function drawLobbyInterior(
  * in the sky are also fourteen things that look like they might hurt you. What is
  * left is the shimmer, which is *on* the floor rather than floating over it.
  */
-function drawHeatShimmer(ctx: CanvasRenderingContext2D): void {
+function drawHeatShimmer(ctx: CanvasRenderingContext2D, amount = 1): void {
   // One course of dithered cells just above the ground, densest at the dragon's end.
-  // Whole cells, so it stays 8-bit.
+  // Whole cells, so it stays 8-bit. `amount` takes it away with the danger.
   for (let x = 420; x < W; x += 8) {
     const f = (x - 420) / (W - 420);
     for (let y = GROUND_TOP - 24; y < GROUND_TOP; y += 8) {
       const n = hash2(x >> 3, y >> 3);
-      if (n > 0.1 + f * 0.22) continue;
+      if (n > (0.1 + f * 0.22) * amount) continue;
       pxRect(ctx, 'rgba(255,176,122,0.22)', x, y, 8, 8, 8);
     }
+  }
+}
+
+/**
+ * The market behind the fire lane (screen 4): a ridge of low roofs, a water tower and two
+ * stall canopies, all of it **left of x=760**.
+ *
+ * The screen was a sky, a skyline and three small figures, which is why the owner's first
+ * note on it was that it "doesn't look refined and polished": between the horizon and the
+ * floor there was 200px of nothing, so the eye had the brick band, the beast, and no middle
+ * distance to place either of them in. This is that middle distance, and it obeys the rule
+ * the deleted crag paid for — **nothing dark in the beast's own columns**, because two dark
+ * warm masses in one place is one mass and the animal loses its silhouette.
+ *
+ * `rel` brightens it with the morning and puts awnings and lit windows on it: the same
+ * buildings, open for business rather than shuttered.
+ */
+function drawMarketRow(ctx: CanvasRenderingContext2D, rel: number): void {
+  const base = GROUND_TOP;
+  const roof = mixHex('#0A222A', '#2B4E56', rel);
+  const roofLit = mixHex('#153A44', '#4E7C84', rel);
+  const wall = mixHex('#08191F', '#22434B', rel);
+  // Four low blocks with pitched-looking stepped roofs, uneven heights and widths.
+  const blocks: [number, number, number][] = [
+    [60, 168, 96],
+    [240, 120, 74],
+    [372, 200, 110],
+    [560, 148, 88],
+  ];
+  for (const [x, w, h] of blocks) {
+    pxRect(ctx, wall, x, base - h, w, h, 4);
+    // A stepped parapet, so a block is a building rather than a rectangle.
+    pxRect(ctx, roof, x - 4, base - h, w + 8, 10, 4);
+    pxRect(ctx, roofLit, x - 4, base - h, w + 8, 4, 4);
+    // Windows: dark by night with a couple lit, all of them out by morning.
+    for (let wy = base - h + 22; wy < base - 26; wy += 26) {
+      for (let wx = x + 10; wx < x + w - 14; wx += 24) {
+        const n = hash2(wx >> 3, wy >> 3);
+        const lit = n < 0.3 ? 1 - rel : 0;
+        pxRect(
+          ctx,
+          lit > 0.4 ? 'rgba(226,138,86,0.75)' : mixHex('#04121A', '#38626B', rel),
+          wx,
+          wy,
+          12,
+          14,
+          2,
+        );
+      }
+    }
+  }
+  // A water tower on legs over the second block: one tall silhouette breaks a row of boxes.
+  pxRect(ctx, wall, 250, base - 200, 56, 44, 4);
+  pxRect(ctx, roofLit, 250, base - 200, 56, 5, 4);
+  pxRect(ctx, roof, 246, base - 208, 64, 8, 4);
+  for (const lx of [256, 296]) pxRect(ctx, wall, lx, base - 156, 6, 36, 2);
+  // Two market canopies at street level, striped, and only in daylight is anybody trading:
+  // by night they are down (a shuttered stall is a dark box, which is what the wall does).
+  if (rel > 0.25) {
+    const a = Math.min(1, (rel - 0.25) / 0.75);
+    for (const [cx2, wid] of [
+      [188, 92],
+      [470, 108],
+    ] as const) {
+      const y = base - 78;
+      for (let i = 0; i < wid; i += 12) {
+        pxRect(
+          ctx,
+          i % 24 === 0 ? `rgba(226,232,232,${0.9 * a})` : `rgba(88,168,150,${0.9 * a})`,
+          cx2 - wid / 2 + i,
+          y,
+          12,
+          10,
+          2,
+        );
+      }
+      pxRect(ctx, `rgba(10,26,32,${0.9 * a})`, cx2 - wid / 2, y + 10, wid, 4, 2);
+      for (const px of [cx2 - wid / 2 + 2, cx2 + wid / 2 - 6]) {
+        pxRect(ctx, `rgba(20,44,50,${0.9 * a})`, px, y + 14, 4, 64, 2);
+      }
+    }
+  }
+}
+
+/**
+ * The queue of candidates waiting to be hired, behind a rope (screen 4).
+ *
+ * Three loose figures used to stand here and read as three teal smudges. A **queue** says
+ * what they are — people waiting on this process — and the rope and posts are what make it
+ * a queue rather than a group. They warm up and turn to face the line-up once the beast is
+ * beaten, because by then the thing they were waiting for has happened.
+ */
+function drawHiringQueue(ctx: CanvasRenderingContext2D, rel: number): void {
+  const tone = (base: string) => mixHex(base, '#2E6E7A', rel * 0.8);
+  const at = [104, 136, 168, 200];
+  for (const [i, x] of at.entries()) {
+    drawPerson(ctx, x, GROUND_TOP, tone(i % 2 === 0 ? '#0B3B45' : '#0E4854'));
+  }
+  // Two posts and the rope between them, at hand height on a 60px figure.
+  const y = GROUND_TOP - 34;
+  for (const px of [86, 224]) {
+    pxRect(ctx, mixHex('#123039', '#3C6C74', rel), px, y - 4, 6, 38, 2);
+    pxRect(ctx, mixHex('#1E4E58', '#5A8E96', rel), px - 2, y - 10, 10, 7, 2);
+  }
+  for (let x = 92; x < 224; x += 8) {
+    // A sag, so it is a rope and not a rail: two courses, dipping in the middle.
+    const f = Math.abs(x - 158) / 66;
+    pxRect(ctx, mixHex('#1E4E58', '#6E9AA0', rel), x, y + Math.round((1 - f * f) * 6), 8, 4, 2);
+  }
+}
+
+/**
+ * The full-frame half of the payoff (screen 4), drawn over the level material and under
+ * the cast — the same two layers the Compliance maze's weather needs, for the same reason:
+ * brightening the sky alone rasterises as a bright sky in front of an unchanged dark level.
+ *
+ * A cool dark veil that lifts, and a pale wash that comes up. "Un-gloomed" is not "lit",
+ * so both halves are here rather than only the first.
+ */
+export function drawReliefWash(ctx: CanvasRenderingContext2D, relief: number): void {
+  const rel = Math.max(0, Math.min(1, relief));
+  const veil = 0.2 * (1 - rel);
+  if (veil > 0.01) {
+    ctx.fillStyle = `rgba(6,14,22,${veil})`;
+    ctx.fillRect(0, 0, W, RESOLUTION.HEIGHT);
+  }
+  if (rel > 0.01) {
+    ctx.fillStyle = `rgba(226,240,236,${0.085 * rel})`;
+    ctx.fillRect(0, 0, W, RESOLUTION.HEIGHT);
   }
 }
 
@@ -1037,6 +1779,24 @@ export function drawSceneBackground(
   id: number,
   t: number,
   reduced: boolean,
+  /**
+   * 0..1 weather dial, read by screen 2 only: 0 is the overcast the maze opens under,
+   * 1 is the daylight GCC-BOT leaves behind. A number rather than a flag so the change
+   * is a change, and a *weather* dial rather than a badge one so this module stays
+   * ignorant of the simulation.
+   */
+  weather = 0,
+  /**
+   * 0..1 relief dial, read by screen 4 only: 0 while the beast holds the far end, 1 once
+   * it is beaten and the five have walked out (owner call: "when the Godzilla dies make the
+   * environment beautiful and well lit up — from the dangerous environment it turns all
+   * bright and happy").
+   *
+   * A **second** parameter rather than a second meaning for `weather`, because the two
+   * dials mean different things on different screens and one number doing both jobs is the
+   * sort of economy that reads as a bug the first time a screen wants both.
+   */
+  relief = 0,
 ): void {
   switch (id) {
     case 0: {
@@ -1091,8 +1851,39 @@ export function drawSceneBackground(
       break;
     }
     case 2: {
-      drawSky(ctx, '#062E38');
-      drawSkyline(ctx, 51, '#04262F', '#8FCAD6', t, reduced);
+      /*
+       * The one screen with WEATHER, and the one screen where the badge's effect is
+       * painted on the world rather than on the player (owner call — see the block
+       * above `mixHex`). `weather` is 0 while the market is under an overcast lid and
+       * 1 once GCC-BOT has filed everything and the sky has opened.
+       *
+       * The old backdrop here was a flat night sky, a skyline with `#8FCAD6` windows
+       * and one sign. Two things were wrong with it and the weather fixed both: those
+       * windows were the brightest thing on the frame, brighter than the monsters they
+       * sat behind (screen 1 paid for exactly this), and a screen whose whole subject
+       * is "this is grinding" had nothing in it that said so.
+       */
+      const clear = Math.max(0, Math.min(1, weather));
+      drawSkyBand(ctx, [
+        mixHex('#001A22', '#0A4E63', clear),
+        mixHex('#032B36', '#12708A', clear),
+        mixHex('#083A44', '#59B3C6', clear),
+      ]);
+      drawCloudBank(ctx, clear);
+      drawSunBreak(ctx, clear);
+      // The skyline hazes and its windows dim as the light comes up: at night the lit
+      // windows are the only thing in the city you can see, and in daylight they are
+      // the last. Both values stay under the monsters' pale heads, which is the rule
+      // screen 1's invisible stamps taught us.
+      drawSkyline(
+        ctx,
+        51,
+        mixHex('#04262F', '#1E6274', clear),
+        mixHex('#3E7280', '#2C6E7E', clear),
+        t,
+        reduced,
+      );
+      drawRain(ctx, t, reduced, 1 - clear);
       /*
        * Nothing hangs in this sky but the stage sign (owner call, twice).
        *
@@ -1149,8 +1940,47 @@ export function drawSceneBackground(
        *    the skyline steps down into it, so "further right is worse" is visible
        *    before anything is on fire.
        */
-      drawSky(ctx, '#2A1A18'); // an ember horizon, warm into the scorched ground
-      drawSkyline(ctx, 37, '#062930', '#8A3A2A', t, reduced);
+      /*
+       * **Two states and a dial between them**, the same shape as the Compliance maze's
+       * weather (owner call). `relief` is 0 while the beast holds the far end and 1 once it
+       * has been beaten and the five have walked out of its costume.
+       *
+       *   relief = 0  an ember night: a warm dark horizon over a scorched market, the
+       *               skyline in near-silhouette with dim burnt windows, heat coming off
+       *               the floor
+       *   relief = 1  morning: a clear teal-blue sky, a sun up over the city, small lit
+       *               clouds, the skyline in daylight with its windows out, no heat haze —
+       *               and a market that is open rather than under siege
+       *
+       * The rule this screen inherits from that one: the change has to be visible across
+       * the **whole frame** or it reads as a bright sky in front of an unchanged dark level.
+       * The other half of it (the wash over the masonry and under the cast) is
+       * `drawReliefWash`, drawn from `Game.drawDragonScreen`.
+       */
+      const rel = Math.max(0, Math.min(1, relief));
+      drawSkyBand(ctx, [
+        mixHex('#150F18', '#0A4E63', rel),
+        mixHex('#241A1E', '#1E7E96', rel),
+        mixHex('#3A2320', '#8FC9D2', rel),
+      ]);
+      if (rel > 0.02) {
+        // The morning comes UP over the city rather than being switched on: the sun and the
+        // cloud bank are the same two functions screen 2 uses, so there is one sun in this
+        // game and one set of clouds.
+        drawCloudBank(ctx, rel);
+        drawSunBreak(ctx, rel);
+      }
+      drawSkyline(
+        ctx,
+        37,
+        mixHex('#062930', '#2C6E7E', rel),
+        // Burnt embers by night, and the windows go OUT in the morning: lit windows are the
+        // only thing you can see of a city at night and the last thing you see of one in
+        // daylight, which is the same value discipline screen 2's skyline follows.
+        mixHex('#8A3A2A', '#4F8A96', rel),
+        t,
+        reduced,
+      );
       /*
        * **The crag is gone.** It was authored under a dragon that *hovered* over this
        * end of the level, and it worked: a boss holding one end of a screen needs that
@@ -1160,11 +1990,16 @@ export function drawSceneBackground(
        * as a hole in the rock. What holds the far end now is the beast itself, plus the
        * scorch on the ground it is standing on (`render/dragon.ts`).
        */
-      drawHeatShimmer(ctx);
-      // The queue of candidates: who the five inside the costume are waiting to join.
-      drawPerson(ctx, 120, GROUND_TOP, '#0B3B45');
-      drawPerson(ctx, 150, GROUND_TOP, '#0E4854');
-      drawPerson(ctx, 178, GROUND_TOP, '#0B3B45');
+      // The market this screen is set in, in two registers: a low ridge of dark roofs
+      // behind the skyline's feet, and the street furniture the queue stands among. Both
+      // stop well short of the roost — anything dark in the beast's own columns takes its
+      // silhouette away, which is what the deleted crag proved.
+      drawMarketRow(ctx, rel);
+      // The heat coming off the floor is the *danger's* signature, so it goes with it.
+      if (rel < 0.98) drawHeatShimmer(ctx, 1 - rel);
+      // The queue of candidates waiting to join, behind a rope: who the five inside the
+      // costume are, before anybody gets them out.
+      drawHiringQueue(ctx, rel);
       drawFloorSign(ctx, W * 0.42, 70, 'HIRE UNDER FIRE');
       /*
        * The suspended job board and its HIRING label are gone (they hung at y≈130).

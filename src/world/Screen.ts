@@ -28,7 +28,8 @@ export class Screen {
    *
    * Same objects, by reference, so nothing is derived twice: they collide like any
    * other solid and the host simply skips them when it lays the brickwork. The ones
-   * on Hire Under Fire are the three floating bricks the badge is dropped onto —
+   * on Hire Under Fire it is the single floating brick the badge is dropped onto (there were three;
+   * the owner removed two on the pass that slowed the drone down) —
    * level material would draw them as lumps of scorched ground hanging in the air,
    * and the whole point of them is that they are placed blocks with a pickup on top.
    */

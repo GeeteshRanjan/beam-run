@@ -746,7 +746,12 @@ export const CSS = `
 .beam-run__touch--large .beam-run__touch-btn { width: 84px; height: 84px; }
 .beam-run__touch--large .beam-run__touch-btn--jump { width: 108px; height: 108px; }
 /* One-tap mode: the move pad is hidden and the whole lower area is the act button. */
-.beam-run__touch--autorun .beam-run__touch-zone--move { display: none; }
+/* One-tap keeps a single BACK button where the pad was, and hides only forward.
+   Auto-run makes forward automatic, so the right arrow is redundant - but the left one
+   is the only way to walk back, and the Compliance badge is deliberately reached by
+   jumping the opposite way (docs/SCREENS.md 4.9). Hiding the whole pad made that
+   pickup, and any future detour, unreachable for the audience this game is built for. */
+.beam-run__touch--autorun .beam-run__touch-btn--right { display: none; }
 .beam-run__touch--autorun .beam-run__touch-btn--jump { width: 116px; height: 116px; font-size: 34px; }
 .beam-run__touch--autorun.beam-run__touch--large .beam-run__touch-btn--jump { width: 140px; height: 140px; }
 

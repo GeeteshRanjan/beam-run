@@ -25,12 +25,7 @@
  *  2. **A levitation shaft** marking the band the badge travels: dashed cells with
  *     a bracket at each end of the swing, plus a short bright wake behind the
  *     badge so which way it is heading is readable at a glance.
- *  3. **A halo** — a dashed ring of 2px cells 8px clear of the ray tips, brighter
- *     across the upper-left where the light comes from, with the dash pattern
- *     crawling one cell per held frame. It replaced four lone cells that sat off
- *     the ray tips and alternated cardinals/diagonals: the owner called those out,
- *     and they were detached dots rather than light. Never a gradient.
- *  4. **A chevron on the ground** under the shaft. The band no longer dips into a
+ *  3. **A chevron on the ground** under the shaft. The band no longer dips into a
  *     standing player, so taking the badge is a jump; the chevron says where to
  *     stand to make it, which is the affordance a platformer owes the player.
  *
@@ -126,14 +121,14 @@ export interface BadgePickupView {
 }
 
 /**
- * The whole pickup: shaft, halo, mark, wake and ground chevron.
+ * The whole pickup: shaft, mark, wake and ground chevron. No ring round the mark — see
+ * the note above `CHEVRON` for the four that were tried and why none of them stayed.
  *
  * Pure: same view in, same cells out. The host owns the clock and the
  * reduced-motion decision.
  */
 export function drawBadgePickup(ctx: CanvasRenderingContext2D, v: BadgePickupView): void {
   drawShaft(ctx, v);
-  drawHalo(ctx, v.cx, v.cy, v.phase);
   drawAnsrBadgeMark(
     ctx,
     v.cx,
@@ -142,6 +137,148 @@ export function drawBadgePickup(ctx: CanvasRenderingContext2D, v: BadgePickupVie
     Math.floor(v.phase * 8) % 2 === 0 ? 0 : 1,
   );
   drawGroundChevron(ctx, v.cx, v.groundY, v.phase);
+}
+
+/**
+ * The badge STANDING ON SOMETHING: the Compliance maze's mark on its brick wall.
+ *
+ * No shaft, no band, no chevron — all three of those describe a pickup that moves,
+ * and this one does not (`world/badgePerch.ts`). What is left has to do two jobs the
+ * rail got for free:
+ *
+ *  1. **Say "pickup", not "ornament".** A 40px logo sitting still on masonry is a
+ *     decoration; the lit plinth and four flare cells at full alpha are what make
+ *     it a thing to go and take. Same call, and the same reasoning, as the four flare
+ *     cells on the air-dropped mark lying on scorched brick.
+ *  2. **Say where it is standing.** A lit course under the mark plus a short shadow
+ *     ties it to the wall's top — without it the mark floats a tile above the
+ *     brickwork, which is precisely the picture the rail used to draw.
+ *
+ * Pure, like the rest of this module: the host owns the phase and the reduced-motion
+ * decision, and `surfaceY` is the top of the wall it stands on.
+ */
+export function drawBadgePerch(
+  ctx: CanvasRenderingContext2D,
+  v: { cx: number; cy: number; surfaceY: number; phase: number },
+): void {
+  // Contact shadow on the top course, so the mark is *on* the wall.
+  pxRect(ctx, 'rgba(0,16,22,0.35)', v.cx - 14, v.surfaceY, 28, 3, 1);
+  // The course it stands on, lit: a plinth two cells deep, which is what tells the
+  // player the wall's top is a place they can be.
+  pxRect(ctx, 'rgba(255,138,77,0.55)', v.cx - 18, v.surfaceY - 4, 36, 4, 2);
+
+  drawAnsrBadgeMark(ctx, v.cx, v.cy, BADGE_MARK_D, Math.floor(v.phase * 8) % 2 === 0 ? 0 : 1);
+
+  // Four flare cells off the mark, at full alpha and few — the halo lesson. They are
+  // what carry the read from the far side of the frame, where the mark itself is 40px.
+  for (const [dx, dy] of [
+    [-26, -6],
+    [26, -6],
+    [-14, -26],
+    [14, -26],
+  ] as const) {
+    pxRect(ctx, RAY_LIT, v.cx + dx - 2, v.cy + dy - 2, 5, 5, 1);
+  }
+}
+
+/**
+ * The mark on its way out of a ceiling spotlight (the Workplace).
+ *
+ * The fourth delivery's painting, and it has one job the other three do not: for the
+ * first three seconds of every cycle the pickup is **visible and untakeable**, and the
+ * picture has to say so. It does it with the two things a pixel screen has — position
+ * and a countdown:
+ *
+ *  - `held` — the mark hangs under the fitting's lens with two short cables to it, and a
+ *    lit plate under the lens, so it reads as *in the fitting* rather than as floating in
+ *    the room. Nothing on the floor is marked yet.
+ *  - `falling` — the cables are gone, a wake of three cells trails above it, and a
+ *    contact shadow grows on the cabinet top it is heading for. The shadow is the whole
+ *    of the "it is going to land *there*" read, and it is what lets a player start the
+ *    run-up before it lands.
+ *  - `live` — the perch treatment (`drawBadgePerch`) plus a countdown: four pips over the
+ *    mark that go out one by one, and the whole thing blinking through the last
+ *    `WARN_TIME`. Blinking is the one honest way to say "now or never" at this size.
+ *
+ * Pure, like the rest of this module: it takes the delivery's own numbers and a phase.
+ */
+export function drawBadgeCeilingDrop(
+  ctx: CanvasRenderingContext2D,
+  v: {
+    phase: 'held' | 'falling' | 'live' | 'gone';
+    source: { x: number; y: number };
+    badge: { x: number; y: number };
+    restY: number;
+    remaining: number;
+    progress: number;
+    /** Animation phase for the mark's own two-frame shimmer. */
+    tick: number;
+    /** Seconds of life at which it starts blinking (`POWERUPS.CEILING.WARN_TIME`). */
+    warnAt: number;
+    /**
+     * The y the mark hangs FROM: the bottom of the spotlight's lens
+     * (`CEILING.SPOT_BOTTOM`), supplied by the host because it is the room's geometry
+     * rather than the pickup's.
+     *
+     * It is not `source.y`, and that distinction is a defect this drawing shipped once: in
+     * the `held` phase the mark *is* at `source`, so cables drawn between the two had zero
+     * length and the mark rasterised **floating in mid-air 50px under the fitting with
+     * nothing above it**. The pickup has to be visibly attached to the thing it is about
+     * to fall out of, or the whole delivery reads as a bug.
+     */
+    hangFromY: number;
+  },
+): void {
+  if (v.phase === 'gone') return;
+  const { x: cx } = v.badge;
+
+  if (v.phase === 'held') {
+    // Two cables from the lens down to the mark. Paired, because one cable is a fishing
+    // line — and they stop at the mark's top edge rather than at its centre.
+    const drop = v.badge.y - BADGE_MARK_D / 2 - v.hangFromY;
+    for (const dx of [-8, 6]) {
+      pxRect(ctx, 'rgba(255,246,220,0.75)', cx + dx, v.hangFromY, 2, Math.max(2, drop), 1);
+    }
+    // A clip at the top of each, on the lens itself, so they are fixed to something.
+    pxRect(ctx, 'rgba(255,250,232,0.9)', cx - 10, v.hangFromY, 20, 3, 1);
+  }
+
+  if (v.phase === 'falling') {
+    // A three-cell wake above it, and the shadow on the surface it is aimed at.
+    for (let i = 1; i <= 3; i += 1) {
+      pxRect(ctx, `rgba(${SHAFT}, ${0.5 - i * 0.13})`, cx - P / 2, v.badge.y - i * P * 3, P, P, P);
+    }
+    const tight = 6 + 14 * (1 - v.progress);
+    pxRect(ctx, 'rgba(0,16,22,0.4)', cx - tight, v.restY + BADGE_MARK_D / 2 - 3, tight * 2, 3, 1);
+  }
+
+  if (v.phase === 'live') {
+    // Blink through the last seconds of its life: the "now or never" tell, and the one
+    // thing that separates this pickup from a perched one that waits for ever.
+    if (v.remaining < v.warnAt && Math.floor(v.tick * 8) % 2 === 0) return;
+    drawBadgePerch(ctx, {
+      cx,
+      cy: v.badge.y,
+      surfaceY: v.badge.y + BADGE_MARK_D / 2,
+      phase: v.tick,
+    });
+    // Four pips going out, so the clock is legible without any type.
+    const lit = Math.ceil(4 * (1 - v.progress));
+    for (let i = 0; i < 4; i += 1) {
+      pxRect(
+        ctx,
+        i < lit ? RAY_LIT : 'rgba(207,230,236,0.22)',
+        cx - 17 + i * 9,
+        v.badge.y - 30,
+        6,
+        4,
+        2,
+      );
+    }
+    return;
+  }
+
+  drawAnsrBadgeMark(ctx, cx, v.badge.y, BADGE_MARK_D, Math.floor(v.tick * 8) % 2 === 0 ? 0 : 1);
 }
 
 /**
@@ -173,56 +310,30 @@ function drawShaft(ctx: CanvasRenderingContext2D, v: BadgePickupView): void {
   }
 }
 
-/**
- * The halo, in one cell size: a dashed ring 8px clear of the ray tips, lit across
- * the upper-left, its dash pattern crawling one cell per held frame.
+/*
+ * **There is no halo round the mark any anymore, and this is the fifth and final entry in
+ * that story** (owner call: "remove the halo effect that is around the ANSR powerup").
  *
- * Three earlier attempts and why they failed, so nobody spends the afternoon again
- * (all four rasterised side by side on screens 1, 2 and 5 — see `docs/JOURNAL.md`):
- *  - **A dithered field.** Warm cells at 0.15–0.4 alpha over the teal sky
- *    desaturate to grey-brown, so the mark came ringed in what looked like dirt.
- *    Same for stepped low-alpha *bands*: at 40px they read as a smudge, not a glow.
- *    Dither belongs on the player's bubble, where it is 46px of field around a
- *    figure, not 12px of edge around an icon.
- *  - **Four lone cells** off the ray tips (what shipped, and what the owner
- *    rejected). Detached dots read as stray pixels, not as light.
- *  - **A radial corona** of short ticks. It reads beautifully as light — and it
- *    also reads as *more rays*, so the brand mark stops being a closed shape and
- *    starts being the middle of a bigger sunburst. Rejected on fidelity: the logo
- *    has to read as itself.
+ * What was tried, in order, and what each one actually looked like:
+ *  - **A dithered field.** Warm cells at 0.15-0.4 alpha over the teal sky desaturate to
+ *    grey-brown, so the mark came ringed in what looked like dirt. Stepped low-alpha bands
+ *    did the same at 40px. Dither belongs on the player's bubble, where it is 46px of field
+ *    around a figure, not 12px of edge around an icon.
+ *  - **Four lone cells** off the ray tips: detached dots, not light.
+ *  - **A radial corona** of short ticks. It reads beautifully as light — and also as *more
+ *    rays*, so the brand mark stopped being a closed shape and became the middle of a
+ *    bigger sunburst. Rejected on fidelity: the logo has to read as itself.
+ *  - **A tangential dashed ring** (2px cells, 28px radius, crawling one cell per held
+ *    frame), which is what shipped for several passes. Round a 40px mark it reads as a
+ *    lasso drawn round the logo rather than as light coming off it, and on the Compliance
+ *    perch — where the mark stands still on masonry — there is nothing to explain why the
+ *    ring is turning.
  *
- * A tangential dashed ring says "halo" without adding rays, and it is the same
- * device as the ANSR bubble's rim on the player, so the two read as one family.
- * `HALO_PX` is deliberately 2, not the `P` = 4 field cell: at 4px the ring is as
- * thick as the ray tips are long and it swallows the mark.
+ * So the answer is **nothing**. The mark is the brand asset and it is allowed to be the
+ * brand asset. What carries "this is a pickup" is everything that is *not* the logo: the
+ * levitation shaft and its wake, the ground chevron, and on a perch the lit plinth plus
+ * four flare cells at full alpha. Do not add a fifth ring.
  */
-const HALO_PX = 2;
-/** Ring radius in halo cells (14 × 2px = 28px, clear of the 20px ray tips). */
-const HALO_R = 14;
-/** Dash pattern, in cells: 3 lit, 2 blank. */
-const HALO_ON = 3;
-const HALO_OFF = 2;
-
-function drawHalo(ctx: CanvasRenderingContext2D, cx: number, cy: number, phase: number): void {
-  const period = HALO_ON + HALO_OFF;
-  const steps = Math.round(2 * Math.PI * HALO_R);
-  // Two dash cycles per turn, in held steps — an 8-bit machine would not ease it.
-  const spin = Math.floor(phase * period * 2) % period;
-  // Snap the ring's origin the way `drawPixels` snaps a sprite's, so the cells sit
-  // on a stable lattice as the badge drifts instead of shivering against it.
-  const ox = Math.round(cx);
-  const oy = Math.round(cy);
-  for (let i = 0; i < steps; i += 1) {
-    if ((i + spin) % period >= HALO_ON) continue;
-    const ang = (i / steps) * Math.PI * 2;
-    // Radius in whole cells, so the ring is a real circle on the lattice.
-    const dx = Math.round(Math.cos(ang) * HALO_R) * HALO_PX;
-    const dy = Math.round(Math.sin(ang) * HALO_R) * HALO_PX;
-    // The upper-left quadrant catches the light, the way every 8-bit sphere does.
-    const lit = Math.cos(ang + Math.PI * 0.75) > 0.35;
-    pxRect(ctx, lit ? RAY_LIT : RAY, ox + dx, oy + dy, HALO_PX, HALO_PX, HALO_PX);
-  }
-}
 
 /** The "stand here and hop" chevron, on the ground under the shaft. */
 const CHEVRON: readonly string[] = ['..C..', '.C.C.', 'C...C'];

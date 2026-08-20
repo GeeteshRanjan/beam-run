@@ -121,14 +121,40 @@ export interface SteamState {
   progress: number;
 }
 
-/** One of the five people inside the costume. */
+/**
+ * One of the five people inside the costume, **walking out of it** (owner call).
+ *
+ * They used to drop out of the beast's chest. They come out of the suit's unzipped side
+ * now, one after another, which is why this carries a facing and a `walking` flag: a
+ * person crossing the floor is a different picture from a person landing, and the render
+ * needs to know which one it is drawing.
+ */
 export interface CandidateState {
   x: number;
-  /** Feet. */
+  /** Feet. Always the ground band: they walk, they no longer fall. */
   y: number;
-  /** 0..1 through the fall; 1 = landed and cheering. */
+  /** 0..1 through the walk out; 1 = arrived and cheering. */
   progress: number;
+  /** True once they have reached their place in the line-up. */
   landed: boolean;
+  /** −1 walking left, 1 walking right. */
+  dir: -1 | 1;
+}
+
+/**
+ * The empty costume on the floor, once the beast is beaten.
+ *
+ * `openness` runs the zip back along one side, `fade` takes the whole thing away after the
+ * last hire is out (owner call: "the costume after some time vanishes"). Two dials rather
+ * than one enum because both are continuous and the renderer paints them, and null instead
+ * of `fade: 1` so "there is nothing there any more" is not a state anybody has to check a
+ * number for.
+ */
+export interface CostumeState {
+  /** 0..1 as the zip runs back down its side. */
+  openness: number;
+  /** 0..1 as it disappears. */
+  fade: number;
 }
 
 /**
@@ -166,6 +192,11 @@ export interface DragonState {
   layers: number;
   /** A hit currently playing out, or null. */
   dissolve: DissolveState | null;
+  /**
+   * The empty suit on the floor once it is beaten, or null — before the fall, and again
+   * once it has vanished.
+   */
+  costume: CostumeState | null;
 }
 
 interface Water {
@@ -192,15 +223,17 @@ const STEAM_LIFE = 0.4;
  * here. Derived twice, they drift, and an earlier pass proved it: a hard-coded 0.38
  * put the flame 30px in front of a snout drawn at 0.23, so the fire left thin air.
  *
- * `MOUTH_Y_FRACTION` is 0.27 because the beast is a **Godzilla standing upright**
- * (owner call, with a reference image): the skull is the top of the silhouette, so
- * the jaw is high — 138px off the floor — and the fire leaves it on a long shallow
- * line down to the ground rather than out of a snout held at knee height. Every
- * `CONE_*` number in `tuning.config.ts` is measured against that height, so moving
- * this moves the size of the lane and has to be re-measured there.
+ * Both are read off the **drawn grid** rather than chosen: on the 46×38 beast the mouth
+ * line is row 5 and the muzzle tip is column 41, which against a 200×190 box centred on a
+ * 230px grid is 0.15 of the height down and 0.46 of the width forward of centre. The jaw
+ * is therefore high — 161px off the floor, because the skull is the top of an upright
+ * Godzilla's silhouette — and the fire leaves it on a long shallow line down to the ground
+ * rather than out of a snout held at knee height. Every `CONE_*` number in
+ * `tuning.config.ts` is solved against that height, so re-drawing the head moves the size
+ * of the lethal lane and has to be re-measured there.
  */
-export const MOUTH_X_FRACTION = 0.44;
-export const MOUTH_Y_FRACTION = 0.21;
+export const MOUTH_X_FRACTION = 0.46;
+export const MOUTH_Y_FRACTION = 0.15;
 
 /**
  * px above the floor the cone's axis ends.
@@ -291,10 +324,16 @@ export class Dragon implements Hazard {
 
   private readonly jets: Water[] = [];
   private readonly steam: Steam[] = [];
+  /**
+   * The five, walking out of the suit one at a time.
+   *
+   * `fromX` is the opening; `toX` is their place in the line-up; `t` starts negative so
+   * each one waits their turn (`CANDIDATE_STAGGER`) — which is the owner's "come out one by
+   * one" expressed as arithmetic rather than as a queue with state in it.
+   */
   private readonly candidates: {
-    x: number;
-    fromY: number;
-    toY: number;
+    fromX: number;
+    toX: number;
     t: number;
   }[] = [];
 
@@ -729,40 +768,45 @@ export class Dragon implements Hazard {
   }
 
   /**
-   * Five people, spaced across the width of the costume they were inside.
+   * Five people, walking out of the suit's open side one after another (owner call).
    *
-   * Authored positions rather than a scatter: the roll would have to come out of
-   * the seeded generator to stay replayable, and five evenly-spread landings read
-   * as a line-up of new hires, which is the picture.
+   * They used to drop out of the standing beast's chest. Now the beast is on the floor and
+   * the costume opens, so this is a **queue through a door**: everyone starts at the
+   * opening and walks to their own place in the line-up, `CANDIDATE_STAGGER` apart, and the
+   * first one out waits `COSTUME_OPEN` for the zip.
+   *
+   * Authored positions rather than a scatter: a roll would have to come out of the seeded
+   * generator to stay replayable, and five evenly-spread arrivals read as a line-up of new
+   * hires, which is the picture. They line up **towards the player**, i.e. on the side the
+   * suit is unzipped, because a hire who walks away from you is not a payoff.
    */
   private spawnCandidates(): void {
-    // Wider than the costume they were in (1.6×), because five 32px people spaced
-    // across a 200px body overlap into one crowd and the HIRED plaques collide. They
-    // came out of it; they did not have to stand inside its footprint.
-    const spread = D.BODY_W * 1.6;
-    const gaps = Math.max(1, D.CANDIDATES - 1);
-    // Kept on frame: it stands near the right-hand edge, so a line-up centred on the
-    // body would put the last two hires off the screen.
-    const half = spread / 2;
-    const centre = Math.max(half + 20, Math.min(RESOLUTION.WIDTH - half - 20, this.cx));
+    const door = this.cx + this.dir * 40;
+    // Towards the player and along the floor, 74px apart: five 32px people any closer
+    // overlap and their HIRED plaques collide.
+    const step = 74;
     for (let i = 0; i < D.CANDIDATES; i += 1) {
-      const f = i / gaps;
+      const target = door + this.dir * (60 + i * step);
       this.candidates.push({
-        x: centre - half + f * spread,
-        // Out of the chest of a thing that is standing on the floor, so it is a step
-        // down rather than a drop out of the sky.
-        fromY: this.cy,
-        toY: GROUND_TOP,
-        // Staggered, so they walk out one after another instead of as a block.
-        t: -i * 0.12,
+        fromX: door,
+        // Kept on frame whichever way it happens to be facing.
+        toX: Math.max(40, Math.min(RESOLUTION.WIDTH - 40, target)),
+        t: -(D.COSTUME_OPEN + i * D.CANDIDATE_STAGGER),
       });
     }
   }
 
   private advanceCandidates(dt: number): void {
     for (const c of this.candidates) {
-      c.t = Math.min(D.CANDIDATE_FALL_TIME, c.t + dt);
+      c.t = Math.min(D.CANDIDATE_WALK_TIME, c.t + dt);
     }
+  }
+
+  /** Seconds after the fall at which the last of the five has arrived. */
+  private get allOutAt(): number {
+    return (
+      D.COSTUME_OPEN + (D.CANDIDATES - 1) * D.CANDIDATE_STAGGER + D.CANDIDATE_WALK_TIME
+    );
   }
 
   reset(): void {
@@ -798,6 +842,7 @@ export class Dragon implements Hazard {
       progress: this.phaseProgress(),
       layers: this.layers,
       dissolve: this.dissolveState(),
+      costume: this.costumeState(),
     };
   }
 
@@ -852,16 +897,47 @@ export class Dragon implements Hazard {
 
   candidateStates(): CandidateState[] {
     return this.candidates.map((c) => {
-      const p = Math.max(0, Math.min(1, c.t / D.CANDIDATE_FALL_TIME));
-      // Eased so they accelerate downwards rather than sliding at one speed.
-      const fall = p * p;
+      const p = Math.max(0, Math.min(1, c.t / D.CANDIDATE_WALK_TIME));
       return {
-        x: c.x,
-        y: c.fromY + (c.toY - c.fromY) * fall,
+        x: c.fromX + (c.toX - c.fromX) * p,
+        // They walk, so they are on the floor for every frame of it.
+        y: GROUND_TOP,
         progress: p,
         landed: p >= 1,
+        dir: c.toX >= c.fromX ? 1 : -1,
       };
     });
+  }
+
+  /**
+   * The empty suit, or null: before the fall, and again once it has gone.
+   *
+   * The zip runs back over `COSTUME_OPEN`, the five walk out, it lies there for
+   * `COSTUME_HOLD` and then fades over `COSTUME_FADE` (owner call: "the costume after some
+   * time vanishes"). All of it is a function of one clock — the seconds since the beast
+   * went down — so nothing has to be remembered and a replay lands on the same frame.
+   */
+  costumeState(): CostumeState | null {
+    if (this.phase !== 'beaten') return null;
+    const openness = Math.max(0, Math.min(1, this.t / D.COSTUME_OPEN));
+    const fadeFrom = this.allOutAt + D.COSTUME_HOLD;
+    const fade = Math.max(0, Math.min(1, (this.t - fadeFrom) / D.COSTUME_FADE));
+    if (fade >= 1) return null;
+    return { openness, fade };
+  }
+
+  /**
+   * 0..1 — how far the screen has come good since the beast went down.
+   *
+   * The one dial the *environment* reads (owner call: "when the Godzilla dies make the
+   * environment beautiful and well lit up, and from the dangerous environment it turns all
+   * bright and happy"). It lives here, on sim time, for the same reason the Compliance
+   * maze's weather does: the backdrop has no business knowing a badge exists, and a payoff
+   * driven by the wall clock is a payoff that jumps on a reload.
+   */
+  get relief(): number {
+    if (this.phase !== 'beaten') return 0;
+    return Math.max(0, Math.min(1, this.t / D.RELIEF_TIME));
   }
 
   /** The badge is taken, so the cannon is in the player's hands. */
