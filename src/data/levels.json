@@ -266,12 +266,12 @@
       "solids": [
         { "gx": 0, "gy": 15, "w": 32, "h": 3, "role": "ground" },
         {
-          "gx": 15,
+          "gx": 10,
           "gy": 12,
           "w": 1,
           "h": 1,
           "role": "pedestal",
-          "note": "THE floating brick the drone drops the badge onto - there is exactly ONE now (owner call: 'remove the 3 brick structures where the ANSR powerup drops, remove the 2 and just keep 1'). One tile square, at row 12: its underside is y=520 against a standing head at y=556, so the corridor still walks clear underneath it, and its top at y=480 puts the badge's box 76px above that head - a jump of 76 against 140 available. Moved closer to spawn (gx 15, previously gx 16) so the badge is more accessible earlier in the screen."
+          "note": "THE floating brick the drone drops the badge onto - there is exactly ONE now (owner call: 'remove the 3 brick structures where the ANSR powerup drops, remove the 2 and just keep 1'). One tile square, at row 12: its underside is y=520 against a standing head at y=556, so the corridor still walks clear underneath it, and its top at y=480 puts the badge's box 76px above that head - a jump of 76 against 140 available. Moved closer to spawn (gx 10, spawn is at gx 1) for better accessibility early in the screen."
         }
       ],
       "dragons": [
@@ -290,9 +290,9 @@
         "gx": 4,
         "gy": 5,
         "delivery": "airdrop",
-        "drops": [15],
+        "drops": [10],
         "restGy": 12,
-        "note": "The one badge that is DELIVERED (owner call): no levitating rail on this screen. An ANSR supply drone crosses row 5 and drops the badge over ONE column - gx15 (moved closer to spawn for better accessibility, previously gx16) - and it lands on a FLOATING BRICK at row 12 rather than on the floor (owner call, second pass), so taking it is a jump as well as a journey. It lies up there for POWERUPS.DROP.LIFETIME seconds and then it is gone, and the next drone brings another one to the same brick. Talent500 then does two things at once: a teal halo makes the fire harmless, and the same badge puts a water cannon in the player's hands. Water beats the fire first - jets crossing the burning cone cut the burst short - and only between bursts does a jet reach the dragon and take a hit off the one thing it is wearing. Four hits and the glasses wash off, the beast TOPPLES to the floor, its costume unzips down one side and the five candidates who were inside it walk out one by one stamped HIRED, and the empty suit lies there and then vanishes (HAZARDS.DRAGON.COSTUME_*): the screen is won on a hire rather than on a kill, and the environment comes good with them (Dragon.relief). Skip every drop and the dragon cannot be answered at all: the stage is a dodge from the spawn to the exit."
+        "note": "The one badge that is DELIVERED (owner call): no levitating rail on this screen. An ANSR supply drone crosses row 5 and drops the badge over ONE column - gx10 (moved closer to spawn for better accessibility, spawn is at gx1, previously gx16) - and it lands on a FLOATING BRICK at row 12 rather than on the floor (owner call, second pass), so taking it is a jump as well as a journey. It lies up there for POWERUPS.DROP.LIFETIME seconds and then it is gone, and the next drone brings another one to the same brick. Talent500 then does two things at once: a teal halo makes the fire harmless, and the same badge puts a water cannon in the player's hands. Water beats the fire first - jets crossing the burning cone cut the burst short - and only between bursts does a jet reach the dragon and take a hit off the one thing it is wearing. Four hits and the glasses wash off, the beast TOPPLES to the floor, its costume unzips down one side and the five candidates who were inside it walk out one by one stamped HIRED, and the empty suit lies there and then vanishes (HAZARDS.DRAGON.COSTUME_*): the screen is won on a hire rather than on a kill, and the environment comes good with them (Dragon.relief). Skip every drop and the dragon cannot be answered at all: the stage is a dodge from the spawn to the exit."
       },
       "copy": { "titleCard": "Hire Under Fire", "onClear": "Talent secured." }
     },
