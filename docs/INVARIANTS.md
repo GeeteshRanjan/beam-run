@@ -78,7 +78,7 @@ screen) · - **A pickup's furniture can seal a screen even when the pickup is fi
 - **Cutting a service run to let a fitting through means the lit line along it has to be cut too.** The
   duct is broken by `CEILING.DUCT_GAP` at every spotlight, and `litSurfaces` went on painting one 184px
   band along the duct's top centred on the fitting — a pale line lying in a 96px hole. Fourth costume for
-  the light-as-an-object defect on this screen and Reception between them. Two bands, from the cut's edges
+  the light-as-an-object defect on this screen and Head Office between them. Two bands, from the cut's edges
   outwards.
 - **Pool width is a function of the fitting's PITCH, and it changes when the fixture does.** At 160px
   half-width four pools on a 300px pitch cover 60-380, 340-660, 640-960, 940-1260 — they overlap, which
@@ -423,25 +423,25 @@ into `docs/INVARIANTS-<screen>.md` and leave the cross-screen rules here.
   purpose: one hazard has a verb, and the other three should not carry a field they ignore. Pass
   edges (`shootPressed`), never held state, or a hazard auto-fires from a held button.
 - **Size FURNITURE against the drawn hero too, not against the wall.** The wall above the ground band
-  is 600px, so anything sized to fill it lands at ~3× human scale: Reception's first counter was 88px
+  is 600px, so anything sized to fill it lands at ~3× human scale: Head Office's first counter was 88px
   against a 60px hero (a desk half again the height of the person being served at it) and its sofa back
   was taller than a person could sit against. Anything a person *touches* is measured against the hero
   — counter at his eye line, seat at his knee, call button at hand height. Only **architecture** may be
   oversized, deliberately: the lift openings are 170px because a realistic 75px door in a 600px wall
   reads as a hatch.
-- **Interior light has to be a SURFACE, not a beam.** Reception's downlights first threw three stepped
+- **Interior light has to be a SURFACE, not a beam.** Head Office's downlights first threw three stepped
   low-alpha rectangles each (hard steps being more 8-bit than a gradient). Rasterised, a 20px column of
   pale grey hanging 90px under each fitting read as eight grey *objects* suspended in the room. The
   cones are gone; the room is lit by a cove line behind the desk and by daylight in the glazing. Same
   family as the dithered-halo trap: low alpha over a dark field reads as grime or as fog, never as
   light. Recess the fittings *into* the ceiling for the same reason — hung below it they were pendants.
-- **A backdrop prop may not stand in a column a solid stands in.** Reception's counter ran under the
+- **A backdrop prop may not stand in a column a solid stands in.** Head Office's counter ran under the
   tutorial steps at gx 9 and gx 16, and the step and the desk's front panel rasterised as one dark
   shape — a step you have to jump reading as furniture. Its lit *wall* still spans them, which is
   right: a light wall behind a step is what gives the step a silhouette. Watch the inverse too — the
   24px of free floor between the entrance frame and the first step had a planter authored in it, drawn
   entirely behind the step and invisible.
-- **A floor that is meant to look swept gets `speckle: 0`.** Reception's polished stone is the only
+- **A floor that is meant to look swept gets `speckle: 0`.** Head Office's polished stone is the only
   material in the game with none: every speckle dot rasterised as litter. What carries it is the course
   grid at low contrast plus the bright top edge.
 - **Size a hazard against the DRAWN hero (48×60), never his 28×44 hitbox.** The Workplace figure
@@ -576,7 +576,7 @@ into `docs/INVARIANTS-<screen>.md` and leave the cross-screen rules here.
   route on the screen** — and its top puts the pickup 76px over that head, a jump of 76 against 140.
 - **Rules phrased in terms of "every screen having a badge" must exclude the screen with none.** Same
   class of failure as the rail/drop split below, and the third time it has been paid for. Deleting
-  Reception's badge broke five things in one go and they were all one mistake: the validator's
+  Head Office's badge broke five things in one go and they were all one mistake: the validator's
   structural rule, two `s.badge!` sweeps (`badgeReach`, `setbackLog`), the golden run (which *waits*
   for a badge to arrive and so waited 8,000 frames), `screen4`'s "every other screen has a box" list,
   and two `Simulation.test.ts` badge tests that used screen 0's only because `toPlaying()` starts
@@ -638,7 +638,7 @@ into `docs/INVARIANTS-<screen>.md` and leave the cross-screen rules here.
   four grey bars in a room with no light in it — which also left the floor lit by nothing, so fixing
   the room had nothing to change. Two hold and two strike and drop out.
 - **A light needs a POOL and up-facing EDGES, and it needs unlit floor beside it.** Third time the
-  no-beam rule has been paid for (Reception's downlights, then this screen's gradient wedges). What
+  no-beam rule has been paid for (Head Office's downlights, then this screen's gradient wedges). What
   works: the fitting as one lit diffuser panel; a stepped pool on the floor with **seven** steps so it
   slopes (four wide bands read as painted patches); and the up-facing faces under it — the top of the
   duct, the dado rail, a band of wall under the ceiling. And the pools must not meet: at 192px half-
@@ -745,7 +745,7 @@ into `docs/INVARIANTS-<screen>.md` and leave the cross-screen rules here.
   the hitbox. Related: **flicker a projectile off its own POSITION, never a clock** — the same reason the
   Workplace trudge is distance-driven.
 - **A light pool must narrow AWAY from the wall, or it is a pyramid.** Third costume for the
-  light-as-an-object defect (Reception's downlight cones, then this screen's gradient wedges, now this).
+  light-as-an-object defect (Head Office's downlight cones, then this screen's gradient wedges, now this).
   `floorPool`'s seven bands *widened* on the way down — 54 → 160 half-width — and the stepped silhouette
   that produces is a flat-topped pile of rubble sitting on the floor. Light on a floor seen side-on is
   brightest where the floor meets the wall and dies towards the camera, so the profile runs 160 → 78,
@@ -1205,3 +1205,29 @@ ending and the death pose; full narrative in `docs/JOURNAL.md`)
   under 45% of the rectangle the flame spans.
 - **Smoke has to be PALE.** Grey at low alpha over a near-black sky is nothing at all; and over a bright
   one it is the specks problem. Few cells, whole-cell steps, high enough alpha to read.
+
+---
+**Copy — naming a screen**
+- **A screen's name is a data change in FOUR places, and one of them is analytics.** Renaming screen 0
+  Reception → Head Office touches `name` **and** `copy.titleCard` in `src/data/levels.json` *and* the
+  root `levels.json` mirror (nothing enforces that the two are byte-identical, so `diff` them). `name`
+  is what `screen_entered` reports as `screen_name`, what the game-over receipt prints as the screen
+  reached (`reachedScreenName`) and the HUD's stage; `copy.titleCard` is what the briefing card prints,
+  because `Simulation.screenLabel` is `copy?.titleCard ?? name`. Change one and the card disagrees with
+  the analytics. `data.test.ts` pins the names of the two screens that carry no badge, so a rename that
+  misses one end fails there.
+- **A rename is only safe if the new name is not longer than the longest name already shipping.** The
+  card's stage label is painted as **one unwrapped line** (`paintPixelSvg(art, [levelLabel])` — there is
+  no `maxChars` on it, unlike the brief), so a long name has nothing to fall back to. "Arrival — ANSR
+  Tech Park" (24 chars) is the ceiling that has been rasterised; anything under it needs no new picture.
+- **Check the name against the brief printed under it.** `COPY.titleCard.brief` may not echo a word from
+  the stage name above it (the raster caught COMPLIANCE over "compliance…" and WORKPLACE over "the
+  workplace…"), so a rename can *create* that defect without the brief changing. Head Office over
+  "Every plan looks clean from the lobby." is clear — "lobby" is not "office".
+- **Screen names are places or plain pains, and the first one belongs to the PLAYER.** "Reception" said
+  the player was arriving somewhere as a visitor; the screen is their own building, taking the GCC
+  decision (its three steps are business case, board approval, budget), and screen 5 is the arrival.
+  Rejected on copy, not art: **"Home Office"** is real GCC vocabulary for the parent HQ but now reads as
+  working from home, and to a UK reader it is the department that issues visas — the wrong association
+  for a game about entering a market. **"Boardroom"** contradicts the art (a lobby, a counter, a lift
+  bank; no table). Full reasoning: `docs/SCREENS.md` §4.13.

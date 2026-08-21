@@ -6,7 +6,7 @@ import { JOURNEY, RESOLUTION, LIVES } from '../data/tuning.config';
 import { DT, stepN, recoverFromLifeLost, driveToScreen, stepToPlaying } from '../test/helpers';
 import { TRANSITION } from '../data/tuning.config';
 
-/** Drive a fresh sim to PLAYING on Reception, through the briefing card. */
+/** Drive a fresh sim to PLAYING on Head Office, through the briefing card. */
 function toPlaying(): Simulation {
   const sim = new Simulation();
   sim.step(DT, makeInput({ anyPressed: true })); // START → begin run → TITLE_CARD
@@ -71,7 +71,7 @@ describe('Simulation lifecycle', () => {
 });
 
 describe('Simulation movement & collision', () => {
-  it('walls are solid — holding right stalls Beam at the first Reception step', () => {
+  it('walls are solid — holding right stalls Beam at the first Head Office step', () => {
     const sim = toPlaying();
     for (let i = 0; i < 150; i += 1) sim.step(DT, makeInput({ right: true }));
     const p = sim.player;
@@ -102,7 +102,7 @@ describe('Simulation progression & the journey clock', () => {
   });
 
   it('collects the floating badge where it actually is, not at its anchor', () => {
-    // Setup Delays, because Reception carries no badge any more (owner call): the
+    // Setup Delays, because Head Office carries no badge any more (owner call): the
     // first ANSR mark in the run is now the one that actually does something.
     const sim = driveToScreen(1);
     const badge = sim.screen.data.badge!;

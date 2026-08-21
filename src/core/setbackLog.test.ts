@@ -157,7 +157,7 @@ describe('badge float', () => {
      * for being correct — the same trap `badgeReach.test.ts` had to be pulled out of.
      * The drop screen's own clearances are proved there, against `dropRestBox`.
      */
-    // Reception is excluded too, for the simpler reason that it has no badge at
+    // Head Office is excluded too, for the simpler reason that it has no badge at
     // all any more (owner call), and Compliance because its mark **stands on a brick
     // wall** rather than floating (owner call): `badgeLowestBox` on a perch reads the
     // wall's own row as an anchor and puts the band 155px underground. Its clearances

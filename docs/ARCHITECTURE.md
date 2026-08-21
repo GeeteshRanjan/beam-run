@@ -156,7 +156,7 @@ the room `scenery.ts` paints, and reads that room's geometry from the constants 
 this module still knows nothing about hazards or badges. Cloud and sun are built from `WEATHER_CELL`
 (4px) plus a silhouette — a height per column from authored lobes, and a real pixel circle in three
 bands — and both are exported for `scenery.test.ts`, which is the only test this module has — **and the two interiors**: `drawLobbyInterior`
-for Reception, `docs/SCREENS.md` §4.13, and `drawOfficeInterior` for the Workplace, which paints that
+for Head Office, `docs/SCREENS.md` §4.13, and `drawOfficeInterior` for the Workplace, which paints that
 room **as the fix leaves it** and exports the geometry the damage layer draws against — now off the teal
 axis (`WALL` warm plaster, `FURN` warm furniture, a **cool** ceiling, cool daylight in the glazing), with
 two work pods instead of three and the services duct **cut** around each spotlight).

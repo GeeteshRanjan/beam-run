@@ -298,7 +298,7 @@ describe('the broken office', () => {
   });
 
   it('lights the room with surfaces, never with a beam hanging in the air', () => {
-    // Reception paid for this one and this screen paid for it again: a low-alpha
+    // Head Office paid for this one and this screen paid for it again: a low-alpha
     // wedge thrown from a fitting down to the floor rasterises as a grey OBJECT
     // suspended from the ceiling. Everything painted in the light value between the
     // ceiling and the floor has to be an edge or a face — so it is flat.

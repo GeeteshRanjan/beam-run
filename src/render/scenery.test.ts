@@ -375,7 +375,7 @@ describe("Hire Under Fire's payoff: the environment comes good", () => {
 });
 
 /**
- * Reception's three tutorial labels.
+ * Head Office's three tutorial labels.
  *
  * There is only one thing worth pinning here and it is arithmetic rather than art: a
  * label is centred on the **block** it names, which is not the same as being centred
@@ -388,7 +388,7 @@ describe("Hire Under Fire's payoff: the environment comes good", () => {
  * The screen's real geometry is the fixture on purpose: a tidy invented one would not
  * have contained the two-tile case the bug lives in.
  */
-describe('the Reception step labels', () => {
+describe('the Head Office step labels', () => {
   const steps = SCREENS.find((s) => s.id === 0)!.solids.filter((s) =>
     s.role?.startsWith('step-'),
   );

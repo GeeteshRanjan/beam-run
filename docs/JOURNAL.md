@@ -2952,3 +2952,90 @@ hand), because 1Wrk is what makes the stamps survivable.
 - **IIFE 71.26 KB gzip**, site payload **73.79 KB** — 79% of the 90 KB budget, unchanged (a sign and a
   function name).
 - Typecheck, lint, build, build:site and validator all green.
+
+---
+
+## Pass — screen 0 is the player's own head office, not somebody's reception
+
+**Owner note:** "change the name of first screen from reception to home office or something like that,
+basically it's their own office they are having the first screen decision at: think from an expert
+copywriter perspective, if home office makes sense or something else".
+
+### The name was pointing the wrong way, and that is the whole finding
+Screen 0 has been called **Reception** since the first session, and the word says *you have arrived
+somewhere that is not yours*. Everything on the screen says the opposite. It is an office lobby
+**interior** (owner call, an earlier pass) with entrance glazing, a counter, a lift bank and daylight
+outside; its three labelled steps are **business case · board approval · budget**; it clears with
+"Approved on paper." That is a company deciding, inside its own building, to build a GCC. And the
+*last* screen is an **Arrival — ANSR Tech Park**, so the run had two arrivals and no departure.
+
+### Why not "Home Office", which is what the owner suggested
+It is genuine vocabulary in this market — "home office" is the parent HQ as against the offshore
+centre, and ANSR's own buyers use it. It still fails as a **label on a screen**, for two reasons that
+have nothing to do with whether it is correct:
+
+1. **Post-2020 it reads as a spare bedroom.** The dominant sense for any general audience is now
+   working from home. The screen it would be printed over is a polished corporate lobby with a board
+   approval in it, so the name would be arguing with the picture in the reader's first half-second.
+2. **To a UK/EU reader the Home Office is the government department that issues visas and runs
+   immigration.** In a game whose middle screens are *compliance*, *filings* and *entering a foreign
+   market*, that is the most expensive possible false association: it makes screen 0 look like a
+   regulator, which is the *hazard* category, on the one screen that has no hazard.
+
+Also considered and rejected: **"Boardroom"** (sharper on the decision, but it contradicts the art —
+this is a lobby with a counter and a lift bank, not a table; renaming it would demand a new screen) ·
+**"HQ"** (generic, and three letters of chrome under a card that gives the name a whole line) ·
+**"Business Case"** (it is one of the three step labels *drawn on the screen*, so the cap would echo a
+plaque under it — the same defect the briefs were rewritten for).
+
+### The call: **Head Office**
+It is the term of art, it is unambiguous in every English market, it belongs to the **player**, and it
+fits the naming set, which is places and plain pains: Head Office · Setup Delays · Compliance ·
+Workplace · Hire Under Fire · ANSR Tech Park. It also gives the run the bookend it never had — *you
+leave your head office and you land in a tech park*.
+
+### What it cost, which was less than expected and in one surprising place
+The user-visible rename is **two strings** in `src/data/levels.json` — `name` **and**
+`copy.titleCard` — plus the byte-identical root `levels.json` mirror. `Simulation.screenLabel` is
+`copy?.titleCard ?? name`, so changing only one of the two makes the briefing card disagree with what
+`screen_entered` reports as `screen_name` and with what the game-over receipt prints as the screen
+reached (`reachedScreenName`). Everything else was **prose**: 40-odd comment and doc references, in
+which "Reception" is used as the screen's *identifier* — `scenery.ts` alone has ten, because the
+light-as-an-object trap and the architectural-scale trap were both first paid for on this screen and
+are cited by name from `workplace.ts` and `INVARIANTS.md`. Those were renamed too, on the reasoning
+that an invariant that cites a screen name nobody can find is an invariant nobody applies.
+
+**Two things were deliberately not renamed.** `drawReceptionDesk` in `scenery.ts`'s history comment
+(the function is gone; the name it had is a fact) and the lower-case **reception desk / reception
+counter** in `scenery.ts` and `finale.ts` — that is the *furniture*, which is still exactly what it
+was, and a head office has a reception desk in it. `docs/JOURNAL.md` was not touched at all: it is
+append-only, and rewriting the record so that past passes appear to have used a name they did not use
+is precisely the kind of tidying that destroys its value.
+
+**Copy checked, not assumed.** The brief printed under the cap is unchanged — "Every plan looks clean
+from the lobby." — and it had to be re-checked against the rule that a brief may not echo a word from
+the stage name above it (the raster caught COMPLIANCE over "compliance…" and WORKPLACE over "the
+workplace…" two passes ago). "lobby" is not "office", so the card is clean, and the line is still the
+better one: a plan is clean *until it leaves the building*, which is the whole of screen 0's argument.
+The stage label is painted as **one unwrapped line**, with no `maxChars` (unlike the brief), so a
+rename is only free while the new name is shorter than the longest one already shipping — "HEAD
+OFFICE" is 11 characters against "Arrival — ANSR Tech Park" at 24, which is why this needed no new
+raster. A *longer* name would have.
+
+**Not verified:** nothing was rasterised this pass, on the argument above (shorter single line, same
+glyphs, all of H E A D O F I C already shipping in Hire Under Fire / Office / Compliance). If a future
+rename is longer than 24 characters, that argument does not hold and the card must be re-shot.
+
+### Also updated
+The root spec docs `01_Game_Design_Document.md`, `04_Level_Design.md`, `README.md` and
+`analytics-events.json` all named the screen; they are renamed for consistency of the *identifier*,
+though note those three remain superseded elsewhere by HANDOFF §4 (they still describe Growth Points,
+a 5-second fire shield and the pre-rebuild screen order).
+
+### Numbers
+- **566 tests** (45 files), unchanged — `data.test.ts`'s pin on the two badge-less screen names was the
+  only assertion that had to move.
+- **IIFE 71.26 KB gzip** / ESM 70.78 KB — unchanged to the byte-ish; the payload difference is two
+  characters of string.
+- Typecheck, lint, test, build, build:site and validator all green. `npm run analyze` still reads
+  138.7 KB of 90 and fails for the known measurement reason (`docs/OPEN.md` §1) — not a regression.

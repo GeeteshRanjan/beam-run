@@ -55,7 +55,7 @@ describe('copy', () => {
     const badges = SCREENS.filter((s) => s.badge).map((s) => s.badge!.type);
     /*
      * **Every badge in the game is a capability, and there are exactly four.** The two
-     * screens with nothing to defend against carry none: Reception (owner call — a badge
+     * screens with nothing to defend against carry none: Head Office (owner call — a badge
      * whose effect is deliberately unassigned taught the player that taking one does
      * nothing, one screen before the one that saves them) and now the Tech Park (owner
      * call — a rail hanging in the middle of the payoff, on a screen already won). The
@@ -64,7 +64,7 @@ describe('copy', () => {
      */
     expect(badges).toHaveLength(SCREENS.length - 2);
     expect(SCREENS.filter((s) => !s.badge).map((s) => s.name)).toEqual([
-      'Reception',
+      'Head Office',
       'ANSR Tech Park',
     ]);
     // …and a screen may only omit the badge if it has nothing to defend against.

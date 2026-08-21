@@ -10,7 +10,7 @@
  *  2. NARRATIVE — the things that make this a playable explainer rather than a
  *     platformer with logos on it, now machine-enforced:
  *       · every screen with an OBSTACLE carries a badge (a screen with nothing to
- *         defend against may omit it, and Reception does);
+ *         defend against may omit it, and Head Office does);
  *       · the badge is anchored AHEAD of the obstacles it answers, so it can be
  *         taken before the problem is met — that is the whole instruction the
  *         game gives;
@@ -125,7 +125,7 @@ function validateStructure(s: ScreenData): Problem[] {
    * argument the game makes, and a hazard screen without one is a stage the player
    * is asked to survive with no answer offered.
    *
-   * A screen with NO obstacle may omit it, and Reception now does (owner call).
+   * A screen with NO obstacle may omit it, and Head Office now does (owner call).
    * The rule used to be "all six carry the mark", which is what put a badge with a
    * deliberately unassigned effect on the tutorial screen: the first ANSR mark a
    * player ever saw taught them that taking one does nothing, one screen before
@@ -370,7 +370,7 @@ function validateModel(): Problem[] {
    * Each capability must be earned exactly once across the run, and there is no longer
    * any exception to that. `SAFE_PASSAGE` used to be one: a badge with no capability
    * behind it, allowed to repeat, and banned from any screen with an obstacle on it.
-   * The owner has deleted both of its holders — Reception's, then the Tech Park's — so
+   * The owner has deleted both of its holders — Head Office's, then the Tech Park's — so
    * the type is gone and with it three rules that only existed to fence it off.
    *
    * What is left is stronger than what it replaced: **every badge in the game maps to a

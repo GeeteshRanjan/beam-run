@@ -186,7 +186,7 @@ export const COPY = {
     UNWRAP: 'Team unblocked',
     /*
      * There is no `SAFE_PASSAGE` line any more. It read "Badge taken" and belonged to
-     * the no-effect mark on Reception and the Tech Park; the owner has now deleted both
+     * the no-effect mark on Head Office and the Tech Park; the owner has now deleted both
      * of those badges, so every entry in here is a capability that changed a screen.
      */
   } as Record<string, string>,

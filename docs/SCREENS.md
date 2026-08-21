@@ -8,12 +8,12 @@ disagree, this wins — they predate every revision here. Rationale for every li
 `HANDOFF.md` §4.1–§4.8 still holds the model *proper* (stakes, lives, badges, the four verbs,
 the receipt). Read that first; read the screen you are touching from here.
 
-**Screen order:** Reception (0) · Setup Delays (1) · Compliance (2) · Workplace (3) ·
+**Screen order:** Head Office (0) · Setup Delays (1) · Compliance (2) · Workplace (3) ·
 Hire Under Fire (4) · Tech Park (5).
 
 | § | Screen | Hazard module | Capability |
 |---|--------|---------------|------------|
-| §4.13 | Reception (0) — lobby interior, **no badge** | — | — |
+| §4.13 | Head Office (0) — lobby interior, **no badge** | — | — |
 | §4.14 | Setup Delays (1) — two pairs of DENIED stamps | `Hazards/Stamps.ts` | `PLACE_TILE` (1Wrk) |
 | §4.9 | Compliance (2) — staircase maze, 5 monsters | `Hazards/ComplianceMaze.ts` | `CLEAR_PATH` (GCC-BOT) |
 | §4.10 | Workplace (3) — taped colleague, broken floor | `Hazards/Workplace.ts` | `UNWRAP` (500Leaders) |
@@ -31,7 +31,7 @@ balanced bitmap lines instead of stranding one word over the button. The current
 
 | Screen | Brief | The real thing it says |
 |---|---|---|
-| Reception (0) | Every plan looks clean from the lobby. | the business case before contact with reality |
+| Head Office (0) | Every plan looks clean from the lobby. | the business case before contact with reality |
 | Setup Delays (1) | Nothing here is approved the first time. | resubmission loops |
 | Compliance (2) | Nothing is filed in a straight line. | the filing chain, and that it doubles back |
 | Workplace (3) | The team is ready. The floor is not. | the enablement gap — hired, and nowhere to sit |
@@ -192,7 +192,7 @@ should wait at all).
    register went darkest (`#051B23`), which is the band his whole body stands against ·
    · **the lights** — `floorPool`'s profile now **narrows** away from the wall with a dithered fringe
    (widening, it rasterised as a stepped pyramid on the floor: light-as-an-object, for the third time on
-   this screen and Reception between them), and the payoff brings on **fittings the broken room does not
+   this screen and Head Office between them), and the payoff brings on **fittings the broken room does not
    have** — a cove behind the ceiling line, an uplit dado course, a task lamp per desk, double the
    daylight — because four fittings reaching full is a change in four places ·
    · **the props** separate on silhouette: the cone is 2.4:1 with two reflective collars and a black base
@@ -299,7 +299,28 @@ should wait at all).
    cliff at a 3.6s crossing, gx 16 holds the full 0.40s window. `FALL_TIME` came down 0.55 → 0.35 with it,
    because the fall spends exactly the lead the crossing buys and the mark was landing level with his
    shoulder instead of 30px in front of him.
-13. **Reception (0) is an office lobby INTERIOR** (owner call) — the second of two indoor screens, and
+13. **Screen 0 is called "Head Office"** (owner call — it was "Reception" for the whole build until
+   this pass), and it is **an office lobby INTERIOR**.
+
+   The old name had the screen backwards: *Reception* is where you arrive as
+   a visitor, and this screen is the opposite — it is the player's **own** building, the room the GCC
+   decision is taken in, and its three labelled steps are business case, board approval, budget. It
+   also has to bookend the run, because screen 5 is an **arrival** at the ANSR Tech Park: you leave
+   your head office and you land in a tech park. Two candidates were rejected on the copy, not the
+   art. **"Home Office"** — the owner's own suggestion, and it is genuine GCC vocabulary (parent HQ
+   vs. the offshore centre), but since 2020 the dominant read for any general audience is a desk in a
+   spare bedroom, and to a UK reader the Home Office is the government department that issues the
+   visas: the exact wrong association for a game about entering a foreign market. **"Boardroom"**
+   names the decision more sharply but contradicts the art, which is a lobby with a counter, a lift
+   bank and entrance glazing, not a table. *Head Office* is the term of art, is unambiguous, belongs
+   to the player, and fits the set — the other five names are places or plain pains (Setup Delays ·
+   Compliance · Workplace · Hire Under Fire · ANSR Tech Park). It changes `name` **and** `titleCard`
+   in `levels.json`, so it is what the briefing card prints, what the HUD says, what `screen_entered`
+   reports as `screen_name` and what the receipt names as the screen reached. The brief is untouched
+   ("Every plan looks clean from the lobby.") — a head office has a lobby, and the line still names
+   the real thing rather than echoing a word from the cap above it.
+
+   The art is unchanged by the rename (owner call, earlier pass): it is the second of two indoor screens, and
    the most finished-looking screen in the game, because that is the joke it makes ("on paper, this all
    looks fine"). Coffered soffit with recessed downlights, full-height entrance glazing on the left
    with **daylight** and the market behind it, a lit feature bay carrying the real ANSR mark, a
@@ -330,7 +351,7 @@ should wait at all).
    rebuilt at 80px in whole pixels.
 
    **Its badge starts in the MIDDLE of the rail, rises, and then falls** (owner call) — and that is
-   the whole of the pickup's difficulty, because this is the last rail badge in the game (Reception's
+   the whole of the pickup's difficulty, because this is the last rail badge in the game (Head Office's
    and the Tech Park's are deleted; the other three screens deliver theirs by perch, ceiling and
    air-drop). The band is untouched (±155px around gy 8, 6.4s), so the mark still tops out just under
    the HUD and bottoms out 41px over a standing head. What moved is the **phase**, and it moved the
@@ -363,5 +384,5 @@ callback — the rules and traps are in `docs/INVARIANTS.md`, the reasoning in `
 | Hire Under Fire (4) | `topple` | rising edge of `Dragon.isToppling`. A 1.05s descending groan and rumble, then a floor impact 0.58s in. Played **instead of** the fourth `strip`, not over it |
 | Hire Under Fire (4) | `hired` | rising edge of `isBeaten` |
 
-Compliance (2), Reception (0) and the Tech Park (5) carry no screen-specific cues: they run on the
+Compliance (2), Head Office (0) and the Tech Park (5) carry no screen-specific cues: they run on the
 global set (jump · land · badge · setback · screenClear · win).

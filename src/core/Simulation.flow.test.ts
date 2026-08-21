@@ -29,7 +29,7 @@ function driveToEnd(sim: Simulation): void {
 }
 
 describe('full state-machine flow', () => {
-  it('runs Reception → … → Tech Park and reaches WIN on screen 5', () => {
+  it('runs Head Office → … → Tech Park and reaches WIN on screen 5', () => {
     const sim = new Simulation();
     driveToEnd(sim);
     expect(sim.state).toBe('WIN');

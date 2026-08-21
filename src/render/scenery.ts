@@ -13,14 +13,14 @@
  *      pixels and kept behind gameplay but legible: signage uses solid dark
  *      plaques so it holds up against a busy backdrop at any brightness.
  *
- *      Two of the six are INTERIORS and open on no sky at all: Reception, which is
+ *      Two of the six are INTERIORS and open on no sky at all: Head Office, which is
  *      an office lobby (entrance glazing, desk, lift bank — the market is outside
  *      the glass), and the Workplace, which is the same building's floor with the
  *      ceiling out. The other four are the skyline of the market you are entering,
  *      plus that stage's own props: stalled paperwork, the compliance climb, the
  *      hiring crowd, and the Tech Park arrival.
  *
- * Every label here is deliberate. Reception names its three easy hops (business
+ * Every label here is deliberate. Head Office names its three easy hops (business
  * case, board approval, budget) so the tutorial is also the first story beat; the
  * hazard screens name the real-world thing you are fighting.
  */
@@ -28,7 +28,7 @@ import { RESOLUTION } from '../data/tuning.config';
 import { drawBricks, hash2, pxRect, type BrickOptions } from './PixelArt';
 import { drawText, drawLabelPlaque } from './PixelText';
 /*
- * `drawAnsrLogo`/`LOGO_ORANGE` used to be imported here for the mark on Reception's
+ * `drawAnsrLogo`/`LOGO_ORANGE` used to be imported here for the mark on Head Office's
  * feature wall. The owner removed it from that wall, and with it the last reason this
  * module knows the brand asset exists — which is worth a note, because it also takes
  * `render/ansrLogo.ts` out of the backdrop layer's dependency graph entirely. The
@@ -50,7 +50,7 @@ export interface TileMaterial extends BrickOptions {
  */
 export const TILE_MATERIALS: Record<number, TileMaterial> = {
   /*
-   * L0 Reception — a polished stone lobby floor: clean, inviting ("getting started
+   * L0 Head Office — a polished stone lobby floor: clean, inviting ("getting started
    * is easy") and *laid*, which is what the big slabs at zero speckle say.
    *
    * **Off the teal axis and inverted in value** (owner call: "the colour scheme of
@@ -627,7 +627,7 @@ function drawSkyline(
 }
 
 /**
- * A small potted plant (lobby greenery), and one of the two places the Reception
+ * A small potted plant (lobby greenery), and one of the two places the Head Office
  * repaint gets its colour from.
  *
  * It used to be a silhouette in two greens with `'#123'`/`'#1C6'` for the pot — CSS
@@ -685,7 +685,7 @@ const STEP_LABEL_H = 24;
 const STEP_LABEL_GAP = 16;
 
 /**
- * Where a Reception step's label hangs: the centre of the block it names, and the
+ * Where a Head Office step's label hangs: the centre of the block it names, and the
  * top of the plaque above it.
  *
  * Exported and pure purely so the alignment can be *stated* as a test rather than
@@ -706,7 +706,7 @@ export function stepLabelAnchor(
 }
 
 /**
- * A label pinned just above one of the Reception steps. The three easy hops are
+ * A label pinned just above one of the Head Office steps. The three easy hops are
  * the three things that genuinely *are* easy — the paperwork before any of the
  * real work starts — so naming them turns tutorial geometry into the first beat
  * of the story ("on paper, this all looks fine").
@@ -755,7 +755,7 @@ function drawPerson(ctx: CanvasRenderingContext2D, x: number, baseY: number, ton
 
 /*
  * `drawReceptionDesk` used to live here: a 120px block with a hanging sign over
- * it, drawn against a sky. Reception is an interior now and its desk is part of a
+ * it, drawn against a sky. Head Office is an interior now and its desk is part of a
  * room (`drawLobbyDesk`) — a counter, a feature wall behind it and the real brand
  * mark on that wall — so the old prop had nothing left to do.
  */
@@ -848,7 +848,7 @@ function drawClock(ctx: CanvasRenderingContext2D, cx: number, cy: number, t: num
  * rasterised as nothing at all — which mattered, because "the ceiling is out" is
  * the first thing this screen has to say. It is 96px of tile grid now, drawn as
  * four courses receding upwards, and the fittings sit in it rather than hanging
- * under it (a lamp hung below a soffit reads as a pendant — Reception paid for
+ * under it (a lamp hung below a soffit reads as a pendant — Head Office paid for
  * that one).
  */
 export const CEILING = {
@@ -1043,7 +1043,7 @@ function drawMonitor(
  *
  * Every height is measured against the DRAWN hero (48×60 with his feet on the
  * ground band), not against the 600px wall — the wall is the one thing on this
- * screen at architectural scale, and the first version of Reception's counter
+ * screen at architectural scale, and the first version of Head Office's counter
  * proved what happens to furniture sized to fill it. Divider at his chest, desk at
  * his hip, monitor a head above the desk.
  */
@@ -1418,7 +1418,7 @@ function drawWallClock(
 }
 
 /* ---------------------------------------------------------------------------
- * Reception — an office lobby, seen from inside (owner call).
+ * Head Office — an office lobby, seen from inside (owner call).
  *
  * This screen used to open on a sky and a city skyline with a desk standing in
  * front of it, which is a street with a desk on it. It is now the *inside* of a
@@ -2013,7 +2013,7 @@ export function drawSceneBackground(
   switch (id) {
     case 0: {
       /*
-       * Reception is INDOORS (owner call) — an office lobby, not a desk standing in
+       * Head Office is INDOORS (owner call) — an office lobby, not a desk standing in
        * the street. So there is no sky here: the market is outside the entrance
        * glazing on the left, which is where the player has just walked in from.
        * See `drawLobbyInterior` for what the room is made of and why it has to stay

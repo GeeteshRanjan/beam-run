@@ -40,7 +40,7 @@ played by hand.
    **no slack below it** — see `docs/INVARIANTS.md`).
 5. **The per-screen powerup effects are DONE** — all four capabilities are owner-specified and built
    (§4.5 and `docs/SCREENS.md` §4.9–§4.11). The Tech Park's `SAFE_PASSAGE` badge collects and does nothing, by
-   design; Reception's was deleted outright, and **the same question now applies to the one
+   design; Head Office's was deleted outright, and **the same question now applies to the one
    that is left** — a mark on the finale plaza that does nothing is the last no-op pickup in the run. The one thing left to confirm: **screen 4's fight is 5–9 seconds long inside a
    ~90 second game**, still the longest single interaction in the run, and it is the owner's call
    whether the payoff earns it or whether `HITS_TO_STRIP` should come down to 3.
@@ -97,11 +97,11 @@ played by hand.
    were renumbered). **(a) `LIVES.LOST_HOLD` is 0.9s** and it is the whole of what a lost life now
    shows: long enough to read the impact pose, or a stutter before the title card? Nobody has played
    it. If it reads as a stutter the fix is the number, not the screen coming back. **(b) With
-   Reception's badge gone, the first ANSR mark in the run is on Setup Delays** — the screen that is
+   Head Office's badge gone, the first ANSR mark in the run is on Setup Delays** — the screen that is
    deliberately punishing without it (§9 above). Nothing now teaches "jump for the mark" before it counts,
    which is exactly why the badge was removed (the old lesson was "taking one changes nothing"), but it
    does mean screen 1 is the first *and* the sharpest lesson. Watch for attempts ending there; the
-   cheapest answer would be a badge on Reception with a real effect rather than a no-op one.
+   cheapest answer would be a badge on Head Office with a real effect rather than a no-op one.
 17. **`DELAY_LOG_ANCHOR` is an approximation of a DOM position, and it has only been checked at 1280.**
    The `+2 MONTHS` label flies to a fixed point in the internal 1280×720 space (`x = W − 160, y = 120`)
    because the delay log itself is CSS-laid DOM in the HUD's right stack. That is deliberate — the label

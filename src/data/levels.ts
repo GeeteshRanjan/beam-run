@@ -31,7 +31,7 @@ export type HazardKind = 'none' | 'stamps' | 'dragon' | 'maze' | 'workplace';
  * carried by the two screens with no obstacle to answer, so that the ANSR mark would
  * appear on every screen with its effect deliberately unassigned. Both holders have
  * been deleted by the owner, one pass apart and for the same reason each time:
- * Reception's taught a first-time player that taking an ANSR badge changes nothing —
+ * Head Office's taught a first-time player that taking an ANSR badge changes nothing —
  * one screen before the badge that saves their life — and the Tech Park's hung a rail
  * in the middle of the payoff, on a screen the player has already won. So every badge
  * in the game is a capability that changes the screen it is on, and the type went with

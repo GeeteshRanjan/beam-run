@@ -21,7 +21,7 @@ function playToWin(opts: { engage?: boolean } = {}): Simulation {
   let guard = 0;
   while (sim.state !== 'WIN' && guard++ < 8000) {
     if (sim.state === 'PLAYING') {
-      // Reception carries no badge at all now (owner call), so "take the badge"
+      // Head Office carries no badge at all now (owner call), so "take the badge"
       // has to ask the screen whether there is one before it waits for it —
       // otherwise the run stalls on the tutorial screen waiting for a delivery
       // that is never coming.
@@ -70,7 +70,7 @@ describe('Golden playthrough', () => {
     const r = sim.receipt;
     /*
      * **Four badges are taken and all four are capabilities**, in journey order, which is
-     * the order they are collected in. Reception and the Tech Park both carry none now
+     * the order they are collected in. Head Office and the Tech Park both carry none now
      * (owner calls, one pass apart), and with them went the `SAFE_PASSAGE` mark that used
      * to make this list five long with one entry that meant nothing. So the receipt and
      * the run are the same list, which they never quite were before.

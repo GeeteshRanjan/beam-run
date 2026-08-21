@@ -2,7 +2,7 @@
   "meta": {
     "grid": { "cols": 32, "rows": 18, "tile": 40 },
     "notes": "All coordinates are in TILE units unless a field name ends in _px. Rows count from top (0) down. Ground band is rows 15-17. 'gx' = grid x, 'gy' = grid y, 'w'/'h' in tiles. Player hitbox is 28x44px; spawn places feet on the given tile top. The typed shape of this file is src/data/levels.ts.",
-    "structure": "Every screen with an obstacle on it carries an ANSR badge, placed early on the walking path so it can be taken BEFORE the obstacles it answers. Reception is the exception and carries none (owner call): a badge whose effect is deliberately unassigned taught the player that taking one does nothing, one screen before the one that saves them. The badge is not a static tile: it levitates along a straight vertical line through a band around its anchor (POWERUPS.FLOAT_AMPLITUDE / FLOAT_PERIOD), riding up to just below the ceiling and back down to a height a jump can reach - never low enough to be walked into, which is what makes taking it a decision rather than a formality. Taking it is what makes the rest of the screen safe; missing it is what the delay log is for. One screen delivers its badge instead of hanging it up: on Hire Under Fire a drone drops it onto a floating brick and it expires (badge.delivery = airdrop, badge.restGy), so there the instruction is 'get there in time AND jump for it'.",
+    "structure": "Every screen with an obstacle on it carries an ANSR badge, placed early on the walking path so it can be taken BEFORE the obstacles it answers. Head Office is the exception and carries none (owner call): a badge whose effect is deliberately unassigned taught the player that taking one does nothing, one screen before the one that saves them. The badge is not a static tile: it levitates along a straight vertical line through a band around its anchor (POWERUPS.FLOAT_AMPLITUDE / FLOAT_PERIOD), riding up to just below the ceiling and back down to a height a jump can reach - never low enough to be walked into, which is what makes taking it a decision rather than a formality. Taking it is what makes the rest of the screen safe; missing it is what the delay log is for. One screen delivers its badge instead of hanging it up: on Hire Under Fire a drone drops it onto a floating brick and it expires (badge.delivery = airdrop, badge.restGy), so there the instruction is 'get there in time AND jump for it'.",
     "clock": "monthsBase is booked on clearing a screen. The six bases sum to JOURNEY.ANSR_BENCHMARK_MONTHS, so a clean assisted run lands exactly on ANSR's published benchmark. Every obstacle costs one life and adds JOURNEY.SETBACK_MONTHS to the clock, capped at JOURNEY.MAX_MONTHS.",
     "conventions": {
       "solid": "static collidable platform/wall (non-lethal). Walking into a wall stops you.",
@@ -24,7 +24,7 @@
   "screens": [
     {
       "id": 0,
-      "name": "Reception",
+      "name": "Head Office",
       "type": "intro",
       "hazard": "none",
       "monthsBase": 1,
@@ -36,9 +36,9 @@
         { "gx": 16, "gy": 13, "w": 1, "h": 2, "role": "step-board-approval" },
         { "gx": 23, "gy": 12, "w": 2, "h": 3, "role": "step-budget" }
       ],
-      "note": "Reception has NO BADGE (owner call). It carried a SAFE_PASSAGE mark as a tutorial - collect it and nothing happens - and that is exactly why it went: the first ANSR badge a player ever sees taught them that taking one changes nothing, one screen before the badge that saves their life. The first mark in the run is now 1Wrk on Setup Delays, where taking it is the difference between walking through the DENIED stamps and being flattened by them. The three labelled steps are the tutorial: they teach the jump, and they are the only thing on this screen that has to be learnt.",
+      "note": "Head Office has NO BADGE (owner call). It carried a SAFE_PASSAGE mark as a tutorial - collect it and nothing happens - and that is exactly why it went: the first ANSR badge a player ever sees taught them that taking one changes nothing, one screen before the badge that saves their life. The first mark in the run is now 1Wrk on Setup Delays, where taking it is the difference between walking through the DENIED stamps and being flattened by them. The three labelled steps are the tutorial: they teach the jump, and they are the only thing on this screen that has to be learnt.",
       "copy": {
-        "titleCard": "Reception",
+        "titleCard": "Head Office",
         "hint": "Move: \u2190 \u2192  \u00b7  Jump: Space / \u2191",
         "onClear": "Approved on paper."
       }
@@ -309,7 +309,7 @@
         { "gx": 0, "gy": 15, "w": 32, "h": 3, "role": "ground" },
         { "gx": 22, "gy": 4, "w": 8, "h": 11, "role": "tower-facade-noncollide" }
       ],
-      "note": "The Tech Park has NO BADGE (owner call: 'remove the ANSR powerup badge and rail from the ANSR Tech Park screen'), and it is the SECOND screen to lose one for the same reason Reception did. It carried a SAFE_PASSAGE mark - a levitating rail with an effect deliberately left unassigned - on the reasoning that the ANSR mark belongs on every screen. But this is the arrival: the run is already won, the receipt is the next thing the player sees, and a pickup that does nothing on the one screen with nothing to defend against is a rail hanging in the middle of the payoff. With Reception's gone too, every badge left in the game is a capability that changes the screen it is on, and 'a badge is help you chose to take' has no exceptions. SAFE_PASSAGE is deleted outright - the type, its COPY line and the validator's allowance for it - because a badge type no screen carries is the next session's confusion.",
+      "note": "The Tech Park has NO BADGE (owner call: 'remove the ANSR powerup badge and rail from the ANSR Tech Park screen'), and it is the SECOND screen to lose one for the same reason Head Office did. It carried a SAFE_PASSAGE mark - a levitating rail with an effect deliberately left unassigned - on the reasoning that the ANSR mark belongs on every screen. But this is the arrival: the run is already won, the receipt is the next thing the player sees, and a pickup that does nothing on the one screen with nothing to defend against is a rail hanging in the middle of the payoff. With Head Office's gone too, every badge left in the game is a capability that changes the screen it is on, and 'a badge is help you chose to take' has no exceptions. SAFE_PASSAGE is deleted outright - the type, its COPY line and the validator's allowance for it - because a badge type no screen carries is the next session's confusion.",
       "copy": {
         "titleCard": "Arrival \u2014 ANSR Tech Park",
         "win": "Market Entry Complete.",

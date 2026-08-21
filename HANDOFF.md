@@ -10,7 +10,7 @@
 |---|---|---|
 | **`HANDOFF.md`** (this) | status · environment · locked defaults · the model proper (§4.1–§4.8) · recent passes | **always, first** |
 | **`docs/INVARIANTS.md`** | every rule and trap this build paid for, each one a defect that shipped once | **before editing anything** |
-| **`docs/SCREENS.md`** | the per-screen model, §4.9–§4.14 (Reception · Setup Delays · Compliance · Workplace · Hire Under Fire) | touching one screen's gameplay, art or hazard |
+| **`docs/SCREENS.md`** | the per-screen model, §4.9–§4.14 (Head Office · Setup Delays · Compliance · Workplace · Hire Under Fire) | touching one screen's gameplay, art or hazard |
 | **`docs/ARCHITECTURE.md`** | the module map, §5 — engine · world · render · ui · scripts, with a "where to look by task" table | writing code anywhere in `src/` |
 | **`docs/OPEN.md`** | §7 open owner decisions, §8 what stays in web type | picking the next job, or the answer is "the owner decides" |
 | **`docs/JOURNAL.md`** | full narrative of every pass, append-only, never pruned | you need the *background* on one past decision |
@@ -37,7 +37,9 @@ finale rebuild, a custom 404 page and the badge work.
   together. **This is an open owner decision, not a regression — see `docs/OPEN.md` §1.**
   Everything else is green.
 - **Validator:** green on all 6 screens (structural + physics-aware + meaning layers)
-- **Screen order (owner calls):** Reception (an office lobby interior, and the one screen with
+- **Screen order (owner calls):** **Head Office** (renamed from "Reception" this pass — it is the
+  player's *own* building, where the GCC decision is taken; `docs/SCREENS.md` §4.13 for why not "Home
+  Office") — an office lobby interior, and the one screen with
   **no badge**) · **Setup Delays (1)** · **Compliance (2)** · **Workplace (3)** ·
   **Hire Under Fire (4)** · Tech Park (5). Compliance was rebuilt from scratch as a staircase maze and
   then refined: its badge **stands on a brick wall** (no rail), the long brown platform is a **rising
@@ -51,7 +53,7 @@ finale rebuild, a custom 404 page and the badge work.
   mid-rail now (owner call), so it can no longer be taken on the way past; confirm that trade, since
   1Wrk is what makes screen 1 survivable. Then §1 (the budget measurement). **All four
   capability effects are owner-specified and built**; the Tech Park's `SAFE_PASSAGE` badge is the
-  only one still deliberately unassigned (Reception's was deleted with its badge).
+  only one still deliberately unassigned (Head Office's was deleted with its badge).
 
 ---
 
@@ -155,7 +157,7 @@ is `docs/OPEN.md` §10.
    the cause line, the lives readout and the two-column split are all **deleted** — the same
    breakdown is on the closing receipt, where it is read rather than skipped.
 4. **Every screen WITH AN OBSTACLE carries an ANSR badge, ahead of the obstacles it answers, and it is
-   always a jump.** **Reception carries none** (owner call): its badge was a `SAFE_PASSAGE` mark with
+   always a jump.** **Head Office carries none** (owner call): its badge was a `SAFE_PASSAGE` mark with
    no effect, which taught the player that taking an ANSR badge changes nothing one screen before the
    one that saves them. Its three labelled steps are the tutorial. On **one** screen the badge
    levitates: a straight vertical line, ±`POWERUPS.FLOAT_AMPLITUDE` around `gy 8`,
@@ -172,7 +174,7 @@ is `docs/OPEN.md` §10.
    `docs/SCREENS.md` §4.9), and on the Workplace it **falls out of a ceiling spotlight** onto a floating
    cabinet and expires (owner call — `delivery: "ceiling"`, `world/badgeCeiling.ts`; the only pickup in
    the game that is *visible before it is takeable*): **four** delivery models, one rule.
-   (**Rail: Setup Delays only** — Reception's badge and the Tech Park's were both deleted.)
+   (**Rail: Setup Delays only** — Head Office's badge and the Tech Park's were both deleted.)
    Missable on purpose: that is what the
    retry title card's line is for. `POWERUPS` derives both ends of the band;
    the validator fails the build if the band dips into a standing player, if a drop or a perch has
@@ -247,6 +249,20 @@ unassisted) · the budget gate's measurement · the placeholder `navigatorUrl`.
 Three only, one short paragraph each. The findings live in the journal; anything permanent is
 already in `docs/INVARIANTS.md`.
 
+- **Screen 0 is the player's own head office, not somebody's reception.** The name had the screen
+  pointing the wrong way: "Reception" says *you have arrived somewhere that is not yours*, while the
+  screen is an office lobby interior whose three steps are business case, board approval and budget and
+  which clears on "Approved on paper" — a company deciding, inside its own building, to build a GCC. The
+  run also had two arrivals and no departure, screen 5 being "Arrival — ANSR Tech Park". **Head Office**
+  is the term of art, belongs to the player and fits the set. The owner's "Home Office" was rejected on
+  the copy, not the idea: real GCC vocabulary for the parent HQ, but post-2020 it reads as a spare
+  bedroom and to a UK/EU reader the Home Office is the department that issues **visas** — a regulator,
+  on the one screen with no hazard. User-visible cost is **two strings** (`name` **and**
+  `copy.titleCard`, in both `levels.json` mirrors, because `screenLabel` is `titleCard ?? name` and only
+  `name` reaches analytics and the receipt); the rest was ~40 comments and docs where "Reception" is the
+  screen's *identifier*. Not renamed: the lower-case reception **desk** (furniture) and the journal
+  (append-only). **566 tests, unchanged.** Rules in `docs/INVARIANTS.md` ("Copy — naming a screen"),
+  reasoning in `docs/SCREENS.md` §4.13, full entry in `docs/JOURNAL.md`.
 - **The last rail badge starts mid-rail, and that one character turns a pass-jump into a wait.**
   Owner: Setup Delays' powerup should "start from the middle of the rail and then go up and then down".
   `badgeFloatOffset` went `+A·cos` → `−A·sin` (not `+sin` — that also starts mid-rail but *sinks* first,
@@ -281,17 +297,3 @@ already in `docs/INVARIANTS.md`.
   `while (state !== 'PLAYING') step(neutral)` loop now sits on the card and asserts against a run that never
   started, so `helpers.ts` gained `driveInput`/`stepToPlaying` and six were converted. **565 tests.** Owner call
   outstanding: whether a *retry* should wait too (`docs/OPEN.md` §10).
-- **The game learns to make a noise that is not a beep: filtered noise, eleven cues, and the four screens that had nothing to say.**
-  Four owner notes with one defect under all of them — **this engine had no noise source**, so every cue was
-  oscillators, and a thud, a jet of water, an electrical arc and cloth through air *have no pitch*. `AudioEngine`
-  gained `noise()` (looped white-noise buffer through a frequency-ramped biquad — opening upward is something
-  leaving, closing downward something settling), with that half of `AudioContextLike` **optional** so no cue may
-  *be* its noise. On top of it: **two stamp thuds that are the same object**, the muffled one being the floor
-  thud with its transient and top end removed (the mechanism *failing*, not a different sound) and both weighted
-  by distance, because four columns land every 1.4s and one volume is a drum machine — which is what
-  `playSfx(cue, level)` is for; a **badge cue rebuilt as a reward** instead of two beating blips; **five cues for
-  the Workplace**, which had none, the groan on the *wind-up* not the release and the chime on the same 0.5 the
-  renderer prints OK at; and a **`topple`**, the dragon's fall having had no cue at all. Cues were **measured**:
-  `node-web-audio-api` offline, peak/RMS/Goertzel per cue, which found the noise layers 2–3× too quiet and cost
-  two dead runs to an offline context that reports `suspended` forever and a `resume()` that never settles.
-  **560 tests.** Detail: `docs/SCREENS.md` (what each screen sounds like) and `docs/INVARIANTS.md`.

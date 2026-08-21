@@ -82,7 +82,7 @@ function waitAndJump(sim: Simulation, cx: number): boolean {
  * `screen4.test.ts`, both of which know where the badge really is.
  */
 /*
- * And Reception carries NO badge at all now (owner call), so "every screen" has to
+ * And Head Office carries NO badge at all now (owner call), so "every screen" has to
  * mean "every screen that has one" — the same lesson as the rail/drop split, one
  * step further: a rule phrased in terms of a badge must exclude the screen without
  * one, or it fails for being correct.

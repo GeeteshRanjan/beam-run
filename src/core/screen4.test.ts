@@ -297,7 +297,7 @@ describe('Screen 4 — Hire Under Fire (cross the lane → Talent500 → hire th
 
     it('is the only screen whose badge is FLOWN in', () => {
       /*
-       * **Two screens are not in this list, and both were emptied by the owner**: Reception
+       * **Two screens are not in this list, and both were emptied by the owner**: Head Office
        * (0) and now the Tech Park (5). Neither reports a delivery or a box, and asserting a
        * pickup exists on either would fail for being correct. Fourth time a rule phrased
        * around "every screen's badge" has had to name its exceptions — so the list of

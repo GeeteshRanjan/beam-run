@@ -1355,7 +1355,7 @@ function tapeRun(ctx: CanvasRenderingContext2D, x0: number, x1: number): void {
  *    is a barrel — but the light it makes is a lit lens face, the pool on the floor
  *    (`floorPool`) and the up-facing edges under it (`litSurfaces`). The moment a
  *    low-alpha cone is drawn from the lens to the floor this becomes the grey wedge
- *    hanging in mid-air that Reception and this screen have each shipped once.
+ *    hanging in mid-air that Head Office and this screen have each shipped once.
  *
  * `lit` runs 0..1 and is driven by `restore`, which is the "glow up when things restore"
  * half: at 0 the barrel is a dark can with a dead lens, at 1 the lens is white-hot, the
@@ -1431,7 +1431,7 @@ function spotLight(ctx: CanvasRenderingContext2D, cx: number, lit: number): void
  * dado rail, and a band of wall right under the ceiling. Every one of them is an
  * edge or a face that is genuinely turned upwards, which is why none of them can
  * be mistaken for the grey wedge hanging in mid-air that this screen (and
- * Reception before it) shipped once.
+ * Head Office before it) shipped once.
  */
 function litSurfaces(ctx: CanvasRenderingContext2D, cx: number, lit: number): void {
   if (lit <= 0.05) return;
@@ -1462,7 +1462,7 @@ function litSurfaces(ctx: CanvasRenderingContext2D, cx: number, lit: number): vo
  *
  * **This is where the light lives, and it is deliberately not a cone.** The first
  * version of this screen threw a tall gradient wedge from every fitting down to the
- * floor, which is exactly what Reception's downlights did before they were deleted:
+ * floor, which is exactly what Head Office's downlights did before they were deleted:
  * rasterised, a pale wedge hanging in a dark room reads as a grey *object*
  * suspended from the ceiling, never as light. A pool is a surface — stepped bands
  * lying on the floor, widest nearest the camera, plus the walkable edge catching
