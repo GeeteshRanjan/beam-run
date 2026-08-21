@@ -2,7 +2,7 @@
  * Shared headless test helpers. Imported only by `*.test.ts`, never by engine
  * code, so it stays out of the shipped bundle.
  */
-import { Simulation } from '../core/Simulation';
+import { Simulation, type SimulationOptions } from '../core/Simulation';
 import { makeInput } from '../core/Input';
 import { LOOP, RESOLUTION } from '../data/tuning.config';
 
@@ -40,8 +40,8 @@ export function stepToPlaying(sim: Simulation, maxSteps = 200): void {
  * Drive a fresh sim until it is PLAYING on `target`, teleporting to each exit.
  * Exits sit clear of every hazard, so this never accrues setbacks.
  */
-export function driveToScreen(target: number): Simulation {
-  const sim = new Simulation();
+export function driveToScreen(target: number, opts: SimulationOptions = {}): Simulation {
+  const sim = new Simulation(opts);
   sim.step(DT, makeInput({ anyPressed: true }));
   let guard = 0;
   while (!(sim.screenId === target && sim.state === 'PLAYING')) {

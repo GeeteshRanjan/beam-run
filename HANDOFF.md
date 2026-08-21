@@ -30,30 +30,32 @@ since then has been post-launch passes: a meaning-model rebuild (§4), layout an
 mobile adaptivity, an 8-bit conversion of every remaining web-native surface, the
 finale rebuild, a custom 404 page and the badge work.
 
-- **Tests:** 566 passing (45 files)
-- **Bundle:** ESM 70.8 KB / IIFE 71.3 KB gzip — **the real download is 71.3 KB, 79% of the
-  90 KB budget.** The deployed site payload is **73.8 KB**. The `analyze` gate reads **~138 KB of 90 and
-  fails**, because it sums *every* `.js` in `dist/` and so adds the two alternative output formats
-  together. **This is an open owner decision, not a regression — see `docs/OPEN.md` §1.**
+- **Tests:** 616 passing (48 files)
+- **Bundle:** ESM 79.47 KB / IIFE 79.99 KB gzip — **the real download is 79.99 KB, 89% of the
+  90 KB budget, ~10 KB of headroom.** The deployed site payload is **82.9 KB**. Both figures jumped
+  ~8.5 KB four passes ago (the secret brick-breaker stage) and ~1.9 KB over the three since (its cannons,
+  then the spinning mark and the rebuilt out-of-lives panel),
+  and that is the whole of the reason headroom is the thing to watch before the next art pass. The `analyze` gate reads
+  **151 KB of 90 and fails**, because it sums *every* `.js` in `dist/` and so adds the two alternative
+  output formats together. **This is an open owner decision, not a regression — see `docs/OPEN.md` §1.**
   Everything else is green.
 - **Validator:** green on all 6 screens (structural + physics-aware + meaning layers)
-- **Screen order (owner calls):** **Head Office** (renamed from "Reception" this pass — it is the
-  player's *own* building, where the GCC decision is taken; `docs/SCREENS.md` §4.13 for why not "Home
-  Office") — an office lobby interior, and the one screen with
-  **no badge**) · **Setup Delays (1)** · **Compliance (2)** · **Workplace (3)** ·
-  **Hire Under Fire (4)** · Tech Park (5). Compliance was rebuilt from scratch as a staircase maze and
-  then refined: its badge **stands on a brick wall** (no rail), the long brown platform is a **rising
-  hoist**, and its badge clears the **weather** instead of putting a halo on the hero;
-  **Local Expertise is gone** — the Workplace screen replaced it outright and took the slot after
-  Compliance; Hire Under Fire is a **boss fight against a Godzilla in glasses**, rebuilt smaller out of a finer
-  cell, with a narrower jet, **one** badge brick, a slower drone and an ending its costume opens; the Workplace
-  figure **throws his bandages** and that screen's badge **falls out of a ceiling spotlight** onto a floating
-  cabinet on the safe side of its partition wall. Detail for all of these: `docs/SCREENS.md`.
-- **Next:** `docs/OPEN.md` **§18 — an owner decision this pass created**: Setup Delays' badge starts
-  mid-rail now (owner call), so it can no longer be taken on the way past; confirm that trade, since
-  1Wrk is what makes screen 1 survivable. Then §1 (the budget measurement). **All four
-  capability effects are owner-specified and built**; the Tech Park's `SAFE_PASSAGE` badge is the
-  only one still deliberately unassigned (Head Office's was deleted with its badge).
+- **Screen order (owner calls):** **Head Office (0)** — an office lobby interior, the player's own
+  building, and the one screen with **no badge** · **Setup Delays (1)** · **Compliance (2)** ·
+  **Workplace (3)** · **Hire Under Fire (4)** · **Tech Park (5)**, whose pavement now carries a
+  **secret tunnel** down to **The Engine Room** — a brick breaker (opened with the **down arrow**, and its
+  mark is **thrown onto the tray by a cannon hanging off the far side wall**) that is deliberately *not* a screen
+  (no months, no lives, no badge; `docs/SCREENS.md` §4.15). Local Expertise is gone (the
+  Workplace replaced it outright). **Every per-screen detail is in `docs/SCREENS.md`** — the four badge
+  deliveries, the maze's hoist and weather, the Godzilla, the taped figure: read the one screen you are
+  touching from there, and do not summarise it back into here.
+- **Next:** `docs/OPEN.md`, **in its own order** — §22–25 (the secret stage has still never been held: ball
+  speed, tray width, the hatch on a phone, whether a bored player should clear the wall at all, analytics,
+  and the act button's third key), then §20–21 (the pickup toast and the key-cap legend), §19 (`br_months`
+  in the funnel), §18 (Setup Delays' badge is no longer takeable on the way past) and §1 (the budget
+  measurement). That file owns the detail; do not restate it here. **All four capability effects are
+  owner-specified and built**; the Tech Park's `SAFE_PASSAGE` badge is the only one still deliberately
+  unassigned.
 
 ---
 
@@ -136,26 +138,40 @@ is `docs/OPEN.md` §10.
    the six sum to `ANSR_BENCHMARK_MONTHS` (11), so a clean run lands exactly on the benchmark. An
    obstacle books `SETBACK_MONTHS` (2), writes a **delay log** line and costs one of `LIVES.TOTAL`
    (3). Capped at `MAX_MONTHS` (23), always under the going-alone baseline (24).
+   **The two averages — 24 and 11 — are MODEL ONLY: no player sees either, and nor do they see the
+   run's absolute total, which meant nothing without them** (owner call). What is shown is the
+   avoidable part, **months lost to delays**, which the player watched happen and whose best value is
+   zero. Rules and the reasoning: `docs/INVARIANTS.md` ("Copy — figures a prospect can argue with");
+   the funnel still scores `br_months`, which is `docs/OPEN.md` §19.
 2. **A lost life restarts the SAME stage and SHOWS NO SCREEN** (owner call). `LIFE_LOST` still books
    the delay, but with lives left the host paints **no overlay**: the state is the beat the impact is
    drawn on (`LIVES.LOST_HOLD` 0.9s — the hero flat under the stamp, or wrapped in the tape), the HUD
    stays up so the heart going out is visible, and then the stage restarts from its own title card —
    which is now a **briefing that waits for a press** (see above; `docs/OPEN.md` §10),
    never the next screen and never screen 0. The card carries **one orange line, "TAKE THE ANSR
-   BADGE"** (`Simulation.retrying` → `COPY.lifeLost.retryHint`), which is all that survives of the
-   deleted coaching overlay; the delay itself is still announced through the HUD's live region.
+   POWERUP"** (`Simulation.retrying && screenHasPowerup` → `COPY.lifeLost.retryHint`), which is all that
+   survives of the deleted coaching overlay — and it is **not printed on the two screens that carry no
+   mark** (Head Office, Tech Park), where it would be advice the room cannot obey — and it is on the
+   retry's card and **nowhere else**, which took a stylesheet fix this pass: for several passes it leaked
+   onto the briefing card of every screen after the first death (`docs/INVARIANTS.md`). **Powerup is the
+   player's word for it; "badge" is internal only** (owner call — `docs/INVARIANTS.md`, `docs/OPEN.md` §27); the delay itself is still announced through the HUD's live region.
    **The cost is shown where it was paid** (owner call): the obstacle's name and `+2 MONTHS` are
    written over the body, held long enough to read, and then flown up into the delay log
    (`core/delayFlight.ts`, pure; 0.8s, inside `LOST_HOLD`; holds and fades instead of travelling under
    `prefers-reduced-motion`). It applies on every screen.
    **The last life is the exception** and the only end-of-attempt screen there is: `gameover` (§4.3).
-3. **No dead ends, and nothing blames the player.** Out of lives lands on a conversion surface, the
-   same as reaching the Tech Park. Every setback line names the *system*, by obstacle name.
-   That screen is **four things on one centre line** (owner call: less text, symmetrical, low
-   cognitive load): the headline, one figure ("3 DELAYS COST 6 MONTHS"), the argument it is evidence
-   for, and two single-line routes (Start again · GCC Opportunity Navigator). The itemised ledger,
-   the cause line, the lives readout and the two-column split are all **deleted** — the same
-   breakdown is on the closing receipt, where it is read rather than skipped.
+3. **No dead ends, and nothing blames the player.** Every setback line names the *system*, by
+   obstacle name. Out of lives is **three things and one route** (owner call: less text, symmetrical,
+   low cognitive load): the headline, **one figure — months lost to delays, drawn as a figure** — the
+   argument it is evidence for, and **"Start again"**, which hands the player back to the stage that
+   stopped them. The figure, its delay count and the argument are **one panel** in the win screen's own
+   fill and rail (owner call this pass: the screen was not designed and its proportions were wrong —
+   four ragged centred lines all at the same weight, so nothing on it was loud and nothing had mass).
+   Both end screens now report the run in the same words and the same shape; the composition rules are
+   in `docs/INVARIANTS.md`. The ledger, the cause line, the lives readout and the two-column split went earlier;
+   **the Navigator cap went this pass** — there is now none on the start screen, this screen or the win
+   receipt (owner call). Still not a dead end: the route is on the pause menu, on the mid-run summary
+   and on all four capability rows, where it carries a topic instead of being a generic exit.
 4. **Every screen WITH AN OBSTACLE carries an ANSR badge, ahead of the obstacles it answers, and it is
    always a jump.** **Head Office carries none** (owner call): its badge was a `SAFE_PASSAGE` mark with
    no effect, which taught the player that taking an ANSR badge changes nothing one screen before the
@@ -202,9 +218,13 @@ is `docs/OPEN.md` §10.
    No badge places geometry any more.
 6. **No score collectibles.** The Growth Points are gone (owner call): a second score competed with
    the only figure the game argues about, and picking one up said nothing about ANSR.
-7. **The receipt is the conversion surface.** Months, two *attributed* reference lines, the delay
-   summary, and four capability rows that are Navigator links carrying a declared `br_topic`.
-   Leaving mid-run shows the same receipt. Intent is declared, never inferred.
+7. **The receipt is the conversion surface, and on the win screen it is now the ONLY one.** Two
+   columns: what the run cost (the "months lost to delays" figure, with the itemised delays under it
+   headed "What cost you") and what ANSR did (four capability rows that are Navigator links carrying a
+   declared `br_topic`, each stating an outcome — "Setup stood up" — not a months-saved figure). The
+   generic Navigator cap is **deleted** (§4.3), so `receiptHint` carries the instruction and "Play
+   again" is the only button. Leaving mid-run shows the same receipt and keeps its Navigator cap.
+   Intent is declared, never inferred.
 8. **One-tap auto-run is the default on touch.** The audience is executives on phones.
 
 ---
@@ -222,9 +242,12 @@ the document that is meant to grow.**
 
 ## 7. Open for the owner — moved to `docs/OPEN.md`
 
-Eighteen items in priority order, plus §8 (what stays in web type). Top three: **§18 Setup Delays'
-badge is no longer takeable on the way past** (new this pass, and it pairs with §9 screen 1
-unassisted) · the budget gate's measurement · the placeholder `navigatorUrl`.
+Twenty-eight items in priority order, plus §8 (what stays in web type). Newest: **§28** (the powerup's
+spin rate and the size of its tone lift — both built, neither ever seen in motion), **§26** (the Head Office
+name is on the frame twice) and **§27** (every player-facing string says *powerup*, every identifier still
+says *badge*). Top three: **§18 Setup Delays' badge is no longer
+takeable on the way past** (pairs with §9 screen 1 unassisted) · the budget gate's measurement · the
+placeholder `navigatorUrl`.
 
 ---
 
@@ -249,51 +272,46 @@ unassisted) · the budget gate's measurement · the placeholder `navigatorUrl`.
 Three only, one short paragraph each. The findings live in the journal; anything permanent is
 already in `docs/INVARIANTS.md`.
 
-- **Screen 0 is the player's own head office, not somebody's reception.** The name had the screen
-  pointing the wrong way: "Reception" says *you have arrived somewhere that is not yours*, while the
-  screen is an office lobby interior whose three steps are business case, board approval and budget and
-  which clears on "Approved on paper" — a company deciding, inside its own building, to build a GCC. The
-  run also had two arrivals and no departure, screen 5 being "Arrival — ANSR Tech Park". **Head Office**
-  is the term of art, belongs to the player and fits the set. The owner's "Home Office" was rejected on
-  the copy, not the idea: real GCC vocabulary for the parent HQ, but post-2020 it reads as a spare
-  bedroom and to a UK/EU reader the Home Office is the department that issues **visas** — a regulator,
-  on the one screen with no hazard. User-visible cost is **two strings** (`name` **and**
-  `copy.titleCard`, in both `levels.json` mirrors, because `screenLabel` is `titleCard ?? name` and only
-  `name` reaches analytics and the receipt); the rest was ~40 comments and docs where "Reception" is the
-  screen's *identifier*. Not renamed: the lower-case reception **desk** (furniture) and the journal
-  (append-only). **566 tests, unchanged.** Rules in `docs/INVARIANTS.md` ("Copy — naming a screen"),
-  reasoning in `docs/SCREENS.md` §4.13, full entry in `docs/JOURNAL.md`.
-- **The last rail badge starts mid-rail, and that one character turns a pass-jump into a wait.**
-  Owner: Setup Delays' powerup should "start from the middle of the rail and then go up and then down".
-  `badgeFloatOffset` went `+A·cos` → `−A·sin` (not `+sin` — that also starts mid-rail but *sinks* first,
-  the shape ruled out twice); the band is untouched, and this is the only rail badge left in the game,
-  so no per-screen switch was needed. The cost is arithmetic, not feel, and the suite found it on the
-  first run: a forward-only auto-runner is under gx 4 at **t=0.40s**, when the mark hangs **255px over
-  his head against a 140px jump**, and the band's bottom does not return until **4.80s** — he is at the
-  exit. **0 of 60 tap frames** take it now, where there was a contiguous 0.35s window; standing under
-  the column and tapping collects it at **3.65s**. No third option exists (a mid-rail start that is low
-  again by 0.40s needs ~390 px/s, and the owner asked for *slower*), so screen 1's rail is now the same
-  *kind* of pickup as the Compliance perch and the two tests say exactly that. Rasterised at
-  0/P⁄4/P⁄2/3P⁄4: 340 → 185 → 340 → 495. **566 tests.** The trade is `docs/OPEN.md` §18 and it
-  compounds §9. Full entry: `docs/JOURNAL.md`.
-- **The card between two screens becomes a briefing, and the run stops for it.**
-  Half of the owner's note already existed: `TITLE_CARD` has sat between every pair of screens since the first
-  session, but it printed a *stage name*, held 1.2s and advanced itself — so the run walked into five screens it
-  had never explained, and the one coaching line it sometimes carried ("TAKE THE ANSR BADGE", all that survives of
-  the deleted life-lost overlay) had a second and a half on the frame after a death. It **waits** now: one line
-  per screen, a Continue cap, `role="dialog"` with focus like every other overlay, and no timeout —
-  `requestAdvance()` is the single exit, keeping only the 0.4s grace, because the press that opens the card must
-  not also skip it. **The briefs were then rewritten** (owner: "give the basic real life idea without saying
-  so"): the first set described mechanics — "a staircase of queries", "he throws his tape" — i.e. told the player
-  what they were about to see for themselves. They name the real programme risk now, in the language of the room
-  ("nothing here is approved the first time" · "the team is ready, the floor is not" · "doors open, and a year
-  still in hand"), under three tested rules: no product name, no instruction, no word echoed from the stage name
-  above. Length is measured, not felt: at ~60 characters all six wrapped to a third line holding their own last
-  word over a centred button, hence a 26-char measure and ≤50 chars of copy. **Everything else was caught by the
-  raster and could not have been caught in the code** — CONTINUE printed on the cap and again under it, then
-  COMPLIANCE over "compliance does not…" and WORKPLACE over "the workplace is not". The card's keyboard prompt is
-  **gone**, in two versions: the second read as a quieter second button drawn on the first, and a focused cap
-  already answers Space. The real cost landed in the **drivers**: every
-  `while (state !== 'PLAYING') step(neutral)` loop now sits on the card and asserts against a run that never
-  started, so `helpers.ts` gained `driveInput`/`stepToPlaying` and six were converted. **565 tests.** Owner call
-  outstanding: whether a *retry* should wait too (`docs/OPEN.md` §10).
+- **The Godzilla is rebuilt from reference, and its ending is rebuilt with it.** Owner, one note in five
+  parts plus two reference rasters; all presentation, so `world/` and `data/` are untouched. Two procedural
+  attempts made it *worse* (plates anchored to "leftmost cell in this row" float beside the body, because on
+  every tail row that cell is a tail column), so the approach changed rather than the numbers: authored in a
+  **throwaway generator** against a PNG and pasted in as a literal — 48×38 at scale 5, brow shelf, plates
+  continuing as **triangles** down the tail, belly cut back to an abdomen (it read as a sash). The topple is
+  a real **pivot**, whose first cut was a *speckled, half-transparent* beast until every cell was grown by
+  `ceil(scale × (|cos|+|sin|))`. The costume opens as a shaped **side hatch with two peeled lips**; the five
+  hires are **five distinct sprites** with alternating arms and hands; the flame gained a wandering mid body
+  and a **broken** core. **616 tests**, IIFE **79.99 KB**, site **82.90 KB**. Ten rules in
+  `docs/INVARIANTS.md`, §4.11 in `docs/SCREENS.md`, full entry in `docs/JOURNAL.md`.
+- **The hint stops following the player, out of lives gets a shape, the secret stage gets a name, and the
+  mark turns.** Owner, four notes. The retry line sat on **every** briefing card after the first death and
+  the model was innocent: `[hidden]` is a UA rule and loses to `.beam-run__advice { display: flex }`, so
+  `el.hidden = true` changed nothing (one scoped `!important` rule as the **last line of the stylesheet** —
+  jsdom cascades by source order, so higher up it was right per spec and unprovable — plus clearing the
+  text). **Out of
+  lives** was four ragged centred lines with its one fact set as a *sentence*; it is the win screen's
+  vocabulary now — caption, one panel, big orange numeral, "From 3 delays." as small print, argument
+  divided off — at a **440** column, because at 560 the rail left 110px of empty box either side of its
+  widest line. `gameOver.cost()` and `PX_TYPE.advice` deleted. **The Growth Floor is THE ENGINE ROOM**
+  ("growth" is the word every deck uses; "floor" was office vocabulary on a room that is visibly plant),
+  line **LIVE IS DAY ONE, NOT THE FINISH**, symbols renamed with it. **The mark spins** — 0.3 rev/s as a
+  pickup, 1.2 in the secret room, ceiling ~1.9 because the sunburst repeats every 11.25° — in a lifted
+  brand orange, and **the first cut rasterised dimmer than what it replaced**, because a rotated
+  one-pixel ray spreads over two columns at partial coverage. Paid for with a second fill of the same
+  path. **616 tests**, IIFE **79.35 KB**, site **81.61 KB**. Nine rules in `docs/INVARIANTS.md`, §4.15
+  extended in `docs/SCREENS.md`, full entry in `docs/JOURNAL.md`.
+- **The wall says where you are, the powerup is called a powerup, and the broken room can be heard.** Owner,
+  five notes, four of them copy and no geometry touched. Head Office's directory board reads **HEAD OFFICE**
+  instead of "MARKET ENTRY: ON PAPER" (a sign names the place; the verdict was already made twice on that
+  screen — and the HUD now says it too, which is accepted and flagged as **§26**). The Workplace brief was
+  **true one screen too early** — "the team is ready" promises people the run recruits on *stage 4* — and is
+  now "The lease is signed. Nothing works yet." (39 chars, wraps 20/18, tested). Every player-facing string
+  says **powerup**; nothing in `src/` was renamed, which is the deliberate split in **§27**. The retry card's
+  line is gated on the new `Simulation.screenHasPowerup`, because **two screens carry no mark** and there
+  "take the ANSR powerup" is advice the room cannot obey. Two asks were already built and both were wrong
+  anyway: **the `spark` cue was wired, tested, documented and inaudible** — a 120 Hz square plus three 35ms
+  **Q-4** bursts at 3–4.8 kHz, i.e. the two bands a laptop speaker does not reproduce. Rebuilt as a snap
+  with a tail. There is **no raster equivalent for sound**. **613 tests**, IIFE **79.09 KB**, site
+  **81.40 KB**. Six rules in `docs/INVARIANTS.md`, §26–27 in `docs/OPEN.md`, full entry in
+  `docs/JOURNAL.md`.
+

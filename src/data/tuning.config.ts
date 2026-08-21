@@ -1077,6 +1077,370 @@ export const HAZARDS = {
   },
 } as const;
 
+/**
+ * THE ENGINE ROOM — the secret stage under the ANSR Tech Park (owner call).
+ *
+ * A service tunnel is cut into the Tech Park's pavement; drop into it and the run
+ * pauses for a brick breaker played in the plant room below. It is what the other six
+ * screens never say: the GCC is **live**, and everything on the wall in here is work
+ * that only starts once it is. Break the wall down and the tunnel draws you back up
+ * onto the plaza you left, at the column you left it from.
+ *
+ * Two model rules it obeys, and they are the reason it can exist at all:
+ *  - **no stakes.** It books no months and cannot cost a life. The run has exactly two
+ *    stakes and they measure the same thing (HANDOFF §4.1); a bonus that could take a
+ *    life would put the argument's own currency behind a door most players never open,
+ *    and one that *paid* months would make the benchmark a matter of finding a secret.
+ *  - **no dead end.** The tunnel is the way out as well as the way in, the suction
+ *    never expires, and pause (with its Navigator route) is up throughout.
+ *
+ * Geometry is absolute px, not tiles: this is not a `levels.json` screen and its room
+ * is not on the tile grid — the only thing level data owns is the *mouth* in the Tech
+ * Park's pavement (`screens[5].tunnel`).
+ */
+export const BONUS = {
+  /** The room: a plant room, 1280×720, walls and a floor thick enough to read as built. */
+  ROOM: {
+    /** Side wall thickness (px). Play area is therefore x 40..1240. */
+    WALL: 40,
+    /** Ceiling slab thickness. The ball bounces off its underside, tunnel included. */
+    CEILING: 40,
+    /**
+     * Top of the floor. The player stands on it (box 596..640) and a ball that
+     * reaches it is lost.
+     */
+    FLOOR_Y: 640,
+    /**
+     * The tunnel's own width and centre. **80px, i.e. the width of the mouth in the
+     * Tech Park** — the owner's "sucking in straight line, the width of the tunnel" is
+     * one number used by both ends, so the shaft you fall down is the shaft you leave by.
+     * Centred, because the entry is a fall "from the top-centre onto the bottom centre".
+     */
+    TUNNEL_W: 80,
+    TUNNEL_CX: 640,
+  },
+
+  /**
+   * The opening beat, in seconds since the drop. Owner's sequence, and the order is the
+   * whole of it: land · the tray arrives · the wall appears · the mark is served.
+   */
+  BEAT: {
+    /**
+     * The tray + skateboard are released from the tunnel. It falls ~0.65s and takes
+     * `EQUIP_SLIDE` to reach him, so he is holding it at ~2.4s — **1.2s before the wall
+     * exists**, which is the owner's "1-2 secs before". Raising this spends that gap,
+     * and it is measured, not eyeballed: at 2.0 he was armed 0.7s ahead and the two
+     * events read as one beat (`BrickBreaker.test.ts` fails under 0.9s).
+     */
+    TRAY_AT: 1.5,
+    /** s the tray takes to slide from where it lands into the player's hands. */
+    EQUIP_SLIDE: 0.25,
+    /**
+     * The wall appears. 3.6s, inside the owner's "3-4 seconds", and it has to be
+     * **after** the tray has landed and been equipped: the tray is released at 2.0 and
+     * falls ~0.65s, so the player is holding it ~1s before the first brick exists,
+     * which is the owner's "1-2 secs before".
+     */
+    BRICKS_AT: 3.6,
+    /** s per row as the wall materialises, top row first. Presentation only. */
+    ROW_REVEAL: 0.18,
+    /**
+     * The first ANSR mark is fired. The reveal finishes at BRICKS_AT + 4 × ROW_REVEAL
+     * = 4.32, and this is **3.3s later** (owner call: "the first time the ball should
+     * come a bit late so the actual person has some time to see the screen and
+     * understand").
+     *
+     * It is the only beat in this room measured against a *reader* rather than against
+     * another beat: a player who has just fallen through a hole in a pavement is
+     * looking at a room they have never seen, holding a tray they did not ask for, in
+     * front of a wall of fifteen phrases. 4.8s was enough to see the wall go up and not
+     * enough to read a word of it. Every later serve comes on `BALL.RESPAWN_GAP` — the
+     * screen only has to be learned once.
+     */
+    SERVE_AT: 7.6,
+  },
+
+  /**
+   * The two cannons — **bracketed to the side walls, hanging over the room**, and the
+   * mark is thrown out of one of them (owner: "place the cannon on the side wall hanging
+   * so the user catches it, and mostly it should fall on the tray but sometimes away but
+   * still around the tray").
+   *
+   * Two owner passes made this what it is. The first killed the serve that dropped out of
+   * the ceiling: the shaft is at x 640 and the wall spans 87..1193 at 132..322, so that
+   * mark started **inside the wall's own footprint** and cleared two or three blocks
+   * before the player had touched it. The second moved the machine off the floor and onto
+   * the wall, and turned the serve from a direction into a **throw with a destination**:
+   * it is aimed at the tray, from the far side of the room, so the mark is something the
+   * player *catches* rather than something they chase.
+   *
+   * `MOUNT_Y` is the one number with no freedom in it. The mark has to travel from the
+   * muzzle to the tray without meeting a block, and the only band in the room where that
+   * is true is between the bottom course (322) and the bounce line (540) — so the machine
+   * hangs in it, and the shot crosses under the wall.
+   */
+  CANNON: {
+    /** The yoke — the turret box the barrel pivots in. */
+    W: 30,
+    H: 30,
+    /** Distance from the inside face of the side wall out to the pivot. */
+    REACH: 34,
+    /** The pivot's height. See the note above: it is fixed by the wall and the tray. */
+    MOUNT_Y: 356,
+    /**
+     * Pivot to muzzle mouth, i.e. where the mark appears. 56, so the machine has some
+     * presence in a 1280-wide room: at 46 it read as a pipe fitting in the corner, which
+     * is not a thing a player watches for two seconds before every throw.
+     */
+    BARREL: 56,
+    /**
+     * Where it aims, as an offset from the middle of the tray, and this is the whole of
+     * "mostly on the tray but sometimes away, still around it".
+     *
+     * The tray is 132 wide and the mark is 40, so anything inside ±86 is a catch without
+     * moving. `ON_TRAY` of the shots are laid inside `NEAR` (a catch), the rest inside
+     * `WIDE` — far enough that the player has to take a step, never far enough that the
+     * throw reads as being aimed somewhere else.
+     */
+    ON_TRAY: 0.68,
+    NEAR: 44,
+    WIDE: 118,
+    /**
+     * s the barrel travels to its firing line, the gauge fills and the mark shows in the
+     * muzzle. A shot with no wind-up is the defect the Workplace's tape rolls paid for;
+     * here it does a second job, because **the barrel is the aim** — a player who reads
+     * it knows where the throw is going before it leaves.
+     */
+    AIM: 0.9,
+    /** s of recoil and muzzle flash after firing. Presentation only. */
+    RECOIL: 0.3,
+    /** Degrees from vertical the barrel parks at before it has ever aimed. */
+    REST_DEG: 35,
+    /**
+     * Consecutive marks lost **with no block coming down** before the machine stops
+     * throwing to the tray and throws at the wall instead.
+     *
+     * This is the belt to `BALL.STALL_NUDGE_AFTER`'s braces, and it exists because the
+     * only way out of this room is an empty wall (`docs/INVARIANTS.md`). A throw aimed at
+     * the tray is a gift, and a gift can be ignored: a player parked against a side wall
+     * returns the mark up their own end for ever and **cannot reach the far columns at
+     * all** — measured, 1 to 3 blocks still standing after ten minutes. The machine
+     * noticing and getting on with it keeps the room finishable without touching the
+     * model, and it reads as the plant doing its job rather than as a rescue.
+     *
+     * 5, and it cannot fire during real play: 27 policies clear the wall with **zero**
+     * misses now that the throw arrives on the tray, so five in a row with nothing broken
+     * is not a rally.
+     */
+    RESCUE_AFTER: 5,
+  },
+
+  /**
+   * The tray on its skateboard — the paddle, and it is **carried above the head** rather
+   * than pushed along the floor.
+   *
+   * That is a legibility decision before it is a picture: a paddle at foot level puts the
+   * hero's own body in the ball's lane, so every rally is played through him. Held up, the
+   * bounce line is 26px clear of the drawn head (580) and the person underneath stays
+   * readable — which matters, because he is the only thing in the room that is not a block.
+   */
+  PADDLE: {
+    W: 132,
+    H: 14,
+    /** Top of the tray. The ball bounces off this line. */
+    TOP: 540,
+    /**
+     * The skateboard, as a number: the tray comes with wheels, so the player is quicker
+     * in here than anywhere else in the game — **260 → 520 px/s** (owner call: "make the
+     * character faster, it's too slow to catch up with the ANSR ball we have").
+     *
+     * 2.0, and the number it is measured against is **the mark's own horizontal pace**:
+     * at the 620 cap off a 55-degree edge hit that is 508 px/s, so the board now matches
+     * the fastest sideways the mark can ever travel. At 1.25 (325) it could not, and the
+     * rally was a chase the player was structurally losing — which is the opposite of
+     * what this room is for. It scales acceleration too (`Player.update` applies the
+     * multiplier to `GROUND_ACCEL`), so the answer off a standing start moved with it.
+     */
+    SKATE_SPEED_MULT: 2.0,
+    /**
+     * **Shallowest** deflection, in degrees from vertical — i.e. the mark is never
+     * returned straight up.
+     *
+     * This is not feel, it is a soft lock. A paddle centred under the mark returns it
+     * vertically, and a vertical mark in an emptied column bounces between the tray and
+     * the ceiling for ever without meeting a block: a sweep of 27 policies had **six of
+     * them still going at 300 seconds** with up to 16 blocks left, and the only way out
+     * of this room is an empty wall.
+     *
+     * **20 degrees, not 12, and the difference is the whole stage's length.** Any
+     * non-zero minimum kills the orbit, but 12 leaves only 210px of drift per round trip
+     * — about one block — so a player who simply parks under the mark clears the wall
+     * left to right and then spends half a minute in the empty half they have just
+     * cleared, waiting for a 12-degree drift to carry the mark back to the survivors.
+     * Measured over 27 policies: at 12 the tracking runs took **89s with ten watchdog
+     * nudges**; at 20 (364px of drift, two blocks) they take **39s with one**. The
+     * watchdog in `BALL.STALL_NUDGE_AFTER` is still there for every other periodic path,
+     * but it should almost never be needed.
+     */
+    MIN_BOUNCE_DEG: 20,
+    /**
+     * Steepest deflection off the tray's edge, in degrees from vertical. 55, not 62:
+     * every degree here is time the mark spends travelling sideways instead of into the
+     * wall, and it is half of what sets the length of the stage (see `BALL.SPEED`).
+     * Much under 50 and the player stops being able to aim at a column.
+     */
+    MAX_BOUNCE_DEG: 55,
+  },
+
+  /**
+   * The ANSR mark as the ball. Constant speed with reflection — a breakout ball, not a
+   * falling body: gravity on top of it would make every miss the room's fault rather
+   * than the player's, and the serve is a shot out of a cannon (see `CANNON`).
+   */
+  BALL: {
+    /** Diameter = the mark's own drawn size (`BADGE_MARK_D`), so art is hitbox. */
+    D: 40,
+    /**
+     * 470 px/s, and it is a **measured** number: a tracking probe took 84s to clear the
+     * wall at 400 with a 62-degree paddle, which is longer than the entire six-screen
+     * run. The rally's length is speed and paddle angle together — a steep return
+     * spends its time crossing a 1200px room rather than taking blocks out — so both
+     * moved at once (see `MAX_BOUNCE_DEG`), and the sweep is in `BrickBreaker.test.ts`.
+     */
+    SPEED: 470,
+    /** px/s added per brick, so the wall speeds up as it thins. */
+    SPEED_GAIN: 6,
+    MAX_SPEED: 620,
+    /**
+     * Floor of |vy| as a fraction of the speed. Without it a shallow paddle hit sends
+     * the mark along the ceiling for ever and the rally stalls.
+     */
+    MIN_VY_FRACTION: 0.34,
+    /** s the lost mark lies on the floor before it fades out. Owner: "vanishes in some time". */
+    LOST_FADE: 0.8,
+    /** s of empty room before the tunnel drops the next one. */
+    RESPAWN_GAP: 0.5,
+    /**
+     * s without a block coming down before the mark is steered.
+     *
+     * The belt to `PADDLE.MIN_BOUNCE_DEG`'s braces: that number kills the vertical
+     * orbit, and this kills every other periodic path (a ratio of the room's width and
+     * height that happens to close). It cannot fire during honest play — a rally that
+     * has not touched the wall in five seconds is not a rally — and it is the guarantee
+     * the room needs, because the exit is an empty wall and there is no other way out.
+     */
+    STALL_NUDGE_AFTER: 5,
+    /** Degrees the nudge turns it by. Enough to leave the path, small enough to read. */
+    NUDGE_DEG: 18,
+    /** Seeds the serve angles. Never `Math.random` — `step()` has to be replayable. */
+    SEED: 20250821,
+  },
+
+  /**
+   * The wall. 24 blocks, 6 across and 4 down, **colour-coded by row**, 15 of them
+   * carrying a label.
+   *
+   * 176×34 is a measured size rather than a taste: a label is set at scale 2 (below
+   * that, bitmap type is texture) at a 14-character measure, which is 166px — the
+   * longest word in the owner's list is TRANSFORMATION, at exactly 14 — and two of
+   * those lines plus the leading is 30px. So the brick is as small as the words in it
+   * allow, which is what "optimum size, not too thick" comes to once the text has to
+   * be readable.
+   */
+  BRICKS: {
+    /**
+     * 176 wide, and it is pinned at both ends.
+     *
+     * The floor is the label: 14 characters at scale 2 is 166px, and below scale 2
+     * bitmap type is texture, so nothing narrower can carry the owner's words.
+     *
+     * The ceiling is the **lane at each end of the wall**. Six columns of 176 with 10px
+     * gaps leave 47px of clear floor-to-ceiling lane inside each side wall, and that
+     * lane is what lets the mark reach the tray *at all*: at 186×14 the wall spanned the
+     * full room, so a mark served out of the ceiling was trapped above it, chewing
+     * blocks on its own with the player watching. The stage played itself. The lane earns its keep
+     * twice over now: it is also the only floor space in the room with no wall
+     * overhead, which is where the two **cannons** stand (see `CANNON`).
+     *
+     * A lane that wide was a soft lock in the *first* cut of this room, because a mark
+     * returned straight up can rattle in a 47px lane for ever without meeting a block —
+     * which is why `PADDLE.MIN_BOUNCE_DEG` exists. With a 20-degree floor on the bounce
+     * the mark crosses 47px in 130px of climb, so it cannot stay in the lane, and the
+     * lane goes back to being what it is in every brick breaker ever written: the way
+     * down.
+     */
+    W: 176,
+    /**
+     * 40, and the four extra pixels are the labels': at 34 a two-line label was
+     * centred with 2px of margin, so its bottom row sat **on the block's own shade
+     * course** and read as type running off the edge. 176×40 is still 4.4:1, i.e. a
+     * brick.
+     */
+    H: 40,
+    /** See `W`: the gap is the other half of where the side lanes end up. */
+    GAP_X: 10,
+    GAP_Y: 10,
+    /** Top of the first row. 4 rows end at y 322, well clear of the tray at 540. */
+    TOP: 132,
+    /** Label measure in characters (see the size note above). */
+    LABEL_CHARS: 14,
+    /**
+     * Six cells per row, and a row is one theme — which is what "colour coded" means
+     * here. Read bottom-up, because that is the order the ball takes them in: you open
+     * the footprint, staff it, build the capability, and then run it better.
+     *
+     * `null` is a blank block: not every one carries words (owner call), and the blanks
+     * are staggered per row so the wall does not read as a table.
+     */
+    ROWS: [
+      {
+        tone: 'RUN',
+        labels: ['GOVERNANCE', null, 'COMPLIANCE', 'BENCHMARKING', null, 'COST OPTIMIZATION'],
+      },
+      {
+        tone: 'CAPABILITY',
+        labels: [
+          null,
+          'ADDING CAPABILITIES',
+          'AI ADOPTION',
+          null,
+          'DIGITAL TRANSFORMATION',
+          'CAPABILITY ROADMAP',
+        ],
+      },
+      {
+        tone: 'PEOPLE',
+        labels: [
+          'SCALING TEAMS',
+          'LEADERSHIP HIRING',
+          null,
+          'TALENT RETENTION',
+          'OPERATIONS SUPPORT',
+          null,
+        ],
+      },
+      {
+        tone: 'FOOTPRINT',
+        labels: [null, 'ADD CENTRES', 'ADD LOCATIONS', null, 'WORKSPACE EXPANSION', null],
+      },
+    ],
+  },
+
+  /**
+   * The way back up. The tunnel starts drawing the moment the wall is down, in a
+   * straight line the width of the mouth (owner call), and the player has to walk into
+   * it — nothing carries him there, so leaving is a decision the same way arriving was.
+   */
+  EXIT: {
+    /** s between the last brick and the draught starting, so the clear is seen. */
+    SUCK_DELAY: 0.7,
+    /** px/s the column lifts him. Slow enough to read as being drawn up a shaft. */
+    SUCK_SPEED: 300,
+    /** px/s he is centred in the shaft while rising, so he never scrapes the edge. */
+    CENTRE_SPEED: 220,
+  },
+} as const;
+
 /** Camera is FIXED per screen (no scroll). Kept for shake only. */
 export const CAMERA = {
   SHAKE_ON_SETBACK: 0.18,   // s

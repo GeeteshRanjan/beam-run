@@ -56,8 +56,26 @@ need all of it. The rules that constrain these modules are in `docs/INVARIANTS.m
   `+2 MONTHS` label that flies from the body into the delay log. Holds 30% of the flight before it
   travels, arcs rather than sliding, and holds-and-fades without moving under `prefers-reduced-motion`.
 - `AssistController.ts`, `DebugOverlay.ts`, `finaleScene.ts` (pure finale geometry, snapshot-tested).
+- **The secret stage lives in `Simulation` as a field, not as a state.** `_bonus: BrickBreaker | null`
+  plus `enterTunnel()` / `leaveTunnel()` / `canEnterTunnel` / `tunnelSpan` / `inBonus`, and two events
+  (`onTunnelEnter` / `onTunnelExit`) that are **not** state changes — the run stays `PLAYING` on screen
+  5 throughout. While it is non-null `updatePlaying` hands it the entire step and **returns before every
+  one of that screen's own endings**, which is load-bearing: the Tech Park's `winTrigger` is inside the
+  bonus room's play area (`docs/INVARIANTS.md`). `loadScreen` clears it.
 
 **World (`src/world/`, headless)**
+- **`BrickBreaker.ts`** — the whole of THE ENGINE ROOM, the secret stage under the Tech Park: the room's
+  solids, the opening sequence, the tray on its skateboard, the **two wall-hung cannons** that throw the
+  mark (`takeAim` picks the far one and lays it on a line to the tray; `aimAtWall` is the valve that keeps
+  the room clearable; `cannonStates` is their whole view — a unit vector, a charge and a recoil, so the
+  renderer owns no clock and no geometry of its own), the mark itself (a breakout ball — constant speed,
+  pure reflection), the 24-block wall and the draught that takes the player home. It is
+  **not** a `Hazard`, because a hazard is a thing that can cost a life and this can cost nothing; it is
+  handed the `Player` because two of the things that happen to him belong to the room (the skateboard's
+  pace, and being lifted up a shaft). `keepOffVertical` / `keepAngleHonest` are the only places the mark's
+  direction may be clamped — read both comments before touching either, they are a soft lock and they are
+  deliberately *not* the same rule (a throw obeys the first and not the second). Counters (`serves`/`paddleHits`/
+  `wallHits`/`breaks`/`losses`/`nudges`) are how the host sounds it, the same arrangement the hazards use.
 - `Physics.ts` — `AABB`, `aabbOverlap`, `isOnGround`, `moveAndCollide` (≤8px substeps, axis-separated).
 - `Player.ts` — walk/air accel + friction, gravity clamp, coyote + buffer, jump-cut, i-frames.
   `update(dt, input, solids, speedMult, jumpMult)` — accel is scaled by `speedMult` too, so a
@@ -150,6 +168,16 @@ fittings with their floor pools and lit edges, and the restored payoff. It draws
 the room `scenery.ts` paints, and reads that room's geometry from the constants that module exports —
 `CEILING`, `WORK_PODS`, `POD_SCREEN`, `CABINETS`, `WINDOW`. Pure, rasterises alone; guarded by
 `workplace.test.ts`),
+**`brickBreaker.ts`** (the secret stage, and the only screen in the game with a palette of its own —
+indigo, so the four block hues separate from each other and from the ANSR mark. Two entry points because
+the host draws the hero between them: `drawEngineRoom` (shell, services, racks, the shaft as a lit
+column, **the two wall-hung cannons** — plate, strut, yoke, magazine and a *stepped* barrel of one width
+with a collar and a mouth, never `ctx.rotate` — the wall of blocks with their labels in ink, the titles, the
+floor stencil) and
+`drawEngineRoomProps` (the skateboard, the arms, the tray, the mark and its trail, the miss). Plus
+**`drawTunnelHatch`**, the other half of the feature: the mouth in the Tech Park's pavement, quiet until
+somebody stands on it, and then a key cap and a prompt. Pure, rasterises alone, guarded by
+`brickBreaker.test.ts`),
 `scenery.ts` (per-level materials, skies, signage — **and screen 2's weather**: `drawSkyBand` +
 `mixHex` interpolate every sky stop, `drawCloudBank` contracts an overcast lid into lit cumulus,
 `drawRain` and `drawSunBreak` come and go, all driven by one `weather` number the host passes in, so
@@ -183,7 +211,11 @@ right = **lives · delay log**. There is **no TIME TO MARKET plaque** — owner 
 on the receipt. `pixelArtWidthPx` is the numeric twin of the CSS sizing formula, taking cells so it
 answers for hand-built art too), `Overlays.ts` (start / titlecard (+ the retry line) / pause /
 **gameover** / win / summary — `columns()` splits the two *receipt* screens at ≥900px; `gameover` is
-deliberately one centred column), `LivesPips.ts` (the lives readout, **hearts**: solid = held, the same
+deliberately one centred column. On `win` the left column is the run's cost — the **months lost to
+delays** figure that `startMonthsCountUp`/`advanceMonths` drive, the verdict line, and the itemised
+delays, which is why `buildReceipt` takes an optional `delaysHost`: the breakdown belongs to the figure
+it adds up to, while the mid-run summary keeps it inside the receipt. `buildBars` and the two `__ref`
+lines are **deleted** with the two published averages — `docs/INVARIANTS.md`), `LivesPips.ts` (the lives readout, **hearts**: solid = held, the same
 silhouette hollowed out = spent, so shape carries it and the plaque cannot change width),
 `PixelType.ts` (bitmap type in the DOM as inline SVG:
 `setPixelText`, `setPixelButtonLabel`, `wrapPixelLabel`, `PX_TYPE` specs), `BrandMark.ts` +
@@ -203,7 +235,8 @@ whole cue, which is how screen 1's four stamps stay a mechanism instead of a dru
 **Scripts** — `validate-levels.ts` (three layers: structural · physics-aware BFS over the reachable
 state space using the real Player, with badge reachability proved against `badgeLowestBox` ·
 meaning-layer, i.e. every screen *with an obstacle* has a badge, it precedes every obstacle,
-obstacles exist beyond it, capabilities unique, months sum to the benchmark) · `check-budget.mjs` + `budget.mjs` ·
+obstacles exist beyond it, capabilities unique, months sum to the benchmark — the rule that checked the
+four capabilities' `monthsSaved` against the baseline gap went with that field) · `check-budget.mjs` + `budget.mjs` ·
 `css-minify.mjs` ·
 `build-ansr-mark.mjs` (regenerates the logo path from the SVG) · `build-404.ts` ·
 `not-found-plugin.ts` (serves the real 404 page in dev/preview) ·

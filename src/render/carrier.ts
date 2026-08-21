@@ -20,7 +20,7 @@
  */
 import { RESOLUTION, POWERUPS } from '../data/tuning.config';
 import { pxRect, drawPixels, maxWidth, hash2, type Palette } from './PixelArt';
-import { drawAnsrBadgeMark, BADGE_MARK_D } from './badge';
+import { drawAnsrBadgeMark, markSpin, MARK_SPIN_TURNS, BADGE_MARK_D } from './badge';
 import { drawLabelPlaque } from './PixelText';
 import type { DropView } from '../world/badgeDrop';
 
@@ -182,6 +182,9 @@ export function drawBadgeDelivery(
     view.badge.y,
     BADGE_MARK_D,
     Math.floor(phase * 8) % 2 === 0 ? 0 : 1,
+    // The fourth delivery turns with the other three — the phase is already held under
+    // reduced motion, so this is too.
+    markSpin(phase * MARK_SPIN_TURNS),
   );
 
   if (view.phase === 'live') drawExpiryClock(ctx, view, phase, reduced);

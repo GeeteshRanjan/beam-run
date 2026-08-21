@@ -23,6 +23,33 @@ describe('custom 404 page', () => {
     expect(page).toContain('.beam-run__btn');
   });
 
+  it('ships a rule for every class it uses, including the ones the game stopped using', () => {
+    /*
+     * The page borrows the game's class names, so a rule deleted with its last *game*
+     * caller silently unstyles a surface no other test looks at — this is a build-time
+     * page, and it happened: `.beam-run__stake` / `--stake-figure` were the title
+     * screen's three-line hook, the owner deleted the hook, and the 404's "404" was
+     * left as unstyled bitmap art.
+     *
+     * So the check is mechanical: every `beam-run__` class this page puts in its markup
+     * must appear as a selector in the stylesheet it inlines.
+     */
+    const page = html();
+    const used = new Set<string>();
+    for (const attr of page.match(/class="([^"]+)"/g) ?? []) {
+      for (const cls of attr.slice(7, -1).split(/\s+/)) {
+        if (cls.startsWith('beam-run__')) used.add(cls);
+      }
+    }
+    expect(used.size).toBeGreaterThan(8);
+    const css = page.slice(page.indexOf('<style>'), page.indexOf('</style>'));
+    for (const cls of used) {
+      // `beam-run__sr` and the rest are all real selectors; a missing one is a class
+      // whose rules went with a screen that no longer exists.
+      expect(css, cls).toContain(`.${cls}`);
+    }
+  });
+
   it('always offers a route back into the game', () => {
     const body = createNotFoundBody(document);
     const links = body.querySelectorAll('a');

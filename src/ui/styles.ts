@@ -73,6 +73,7 @@ export const CSS = `
 }
 
 .beam-run { display: block; }
+
 /*
  * Stage sizing: the play frame is 16:9 and must fit the *available height* as
  * well as the width, otherwise on a short/wide viewport the width-driven
@@ -174,6 +175,8 @@ export const CSS = `
   display: none; pointer-events: none;
 }
 .beam-run__hud--visible { display: block; }
+/* The secret stage: no plaques, but the live region stays in the tree (see Hud.setBare). */
+.beam-run__hud--bare .beam-run__hud-stack { display: none; }
 /*
  * The two corner stacks. Plaques used to be positioned individually against the
  * four corners; the delay log has no fixed height, so anything sharing a corner
@@ -348,7 +351,7 @@ export const CSS = `
  * unit — a top-pinned marquee read as a detached logo — but the lockup is the
  * title of the thing, so it sits at display size with a clear gap before the
  * copy underneath. The other big beat lives inside the copy (below the stake,
- * before the challenge line).
+ * before the tagline).
  */
 .beam-run__overlay--start { gap: clamp(16px, 3.6%, 38px); }
 .beam-run__overlay--scene::before {
@@ -390,12 +393,16 @@ export const CSS = `
 }
 @container (min-width: 900px) {
   .beam-run__stack--receipt { width: min(100%, 1060px); }
-  /* Equal-width columns, tops aligned: with the buttons moved out from under the
-     right column the two halves are within ~25px of each other, and aligning
-     their opening captions on one line reads more even than centring each
-     column's mass would. */
-  .beam-run__cols { flex-direction: row; align-items: flex-start; gap: clamp(20px, 3%, 44px); }
+  /* Equal-width columns, tops aligned and now STRETCHED to one height: the two
+     captions sit on one line and the two blocks under them share both edges, which
+     is what makes the screen symmetrical on a clean run — where the cost side is
+     three lines against the receipt's four rows. Centring each column's mass
+     instead leaves the captions on different lines, which reads as a mistake. */
+  .beam-run__cols { flex-direction: row; align-items: stretch; gap: clamp(20px, 3%, 44px); }
   .beam-run__col { flex: 1 1 0; min-width: 0; }
+  /* The panel takes the slack, with its contents centred in it, so a short run gets
+     a full-height box rather than a box floating above the fold of its column. */
+  .beam-run__col--main .beam-run__cost { flex: 1 1 auto; justify-content: center; }
   .beam-run__col--aside .beam-run__receipt { max-width: none; }
   /* The receipt starts its own column, so it no longer needs the group step that
      separated it from the meters when everything was one stack. */
@@ -403,20 +410,19 @@ export const CSS = `
 }
 .beam-run__stack--receipt .beam-run__months-label,
 .beam-run__stack--receipt .beam-run__clock-line { margin-top: clamp(8px, 2%, 20px); }
-.beam-run__stack--receipt .beam-run__bars,
 .beam-run__stack--receipt .beam-run__receipt,
 .beam-run__stack--receipt .beam-run__actions { margin-top: clamp(10px, 2.6%, 26px); }
-/* The unit sits with its figure, and the references sit with their meters. */
+/* The unit sits with its figure; the verdict line sits just under it. */
 .beam-run__stack--receipt .beam-run__months { margin-top: 0; }
-.beam-run__stack--receipt .beam-run__refs { margin-top: 2px; }
-/* The title screen carries only three things, so it can breathe. */
+.beam-run__stack--receipt .beam-run__matched { margin-top: clamp(6px, 1.6%, 16px); }
+/*
+ * The title screen carries three things now — the offer, the buttons, one cap — so it
+ * can breathe. (It held five: a three-line hook, a dare and Start.)
+ */
 .beam-run__stack--start { gap: clamp(14px, 3%, 30px); }
-/* Extra air between "…to go live." and "THINK YOU CAN BEAT THAT?" — the beat
-   between the problem and the challenge is the one pause that matters here.
-   Stacked on the gap above, that's up to ~56px, which is the largest step on the
-   screen without becoming a hole. */
-.beam-run__stack--start .beam-run__title { margin-top: clamp(10px, 2.4%, 26px); }
-/* The buttons belong to the challenge, so they sit a little closer to it. */
+/* The legend and the cap are one group: how you play, then play. The step above the
+   legend is the screen's one real pause, under the headline and its value rule. */
+.beam-run__stack--start .beam-run__keys { margin-top: clamp(8px, 2%, 22px); }
 .beam-run__stack--start .beam-run__actions { margin-top: clamp(4px, 1%, 12px); }
 
 /* Bitmap type ---------------------------------------------------------------
@@ -516,22 +522,71 @@ export const CSS = `
 /* Hints are bitmap lines on the end screens (the only place they are used now). */
 .beam-run__hint { margin: 0; display: flex; justify-content: center; }
 
-/* Start screen stake — the 24-month hook, set entirely in the bitmap font:
-   lead-in line, the figure at display size, then the tail. */
+/*
+ * The stacked figure block. It was the title screen's three-line hook; that hook is
+ * deleted (owner call), and the **404 page** is the only thing left using these two
+ * rules — its "404" is set the same way, as a hidden sentence plus bitmap art.
+ *
+ * So they stay, and they belong to that page now. Deleting them with the hook broke a
+ * surface nothing in the game imports: NotFoundPage builds its own DOM out of the shared
+ * class names, and the 404 is a build-time page, so no test in the game's own suite
+ * would have gone red. (No backticks in here — they end the template literal.)
+ */
 .beam-run__stake {
   margin: 0; width: 100%;
   display: flex; flex-direction: column; align-items: center;
   gap: clamp(8px, 1.6%, 18px);
 }
 .beam-run__stake-figure { display: flex; justify-content: center; width: 100%; }
-/* A restrained bloom: at 12px/0.5 the glow bled into the lines above and below
-   and softened glyphs whose whole point is that they are hard-edged. */
+/* A restrained bloom: at 12px/0.5 the glow bled into the lines around it and softened
+   glyphs whose whole point is that they are hard-edged. */
 .beam-run__stake-figure .beam-run__pixels {
   filter: drop-shadow(0 0 7px rgba(255, 84, 0, 0.34));
 }
 
+/*
+ * The title screen's control legend: the actual buttons, as 8-bit key caps.
+ *
+ * The caps get the same treatment as the NES action buttons below and the HUD plaques
+ * above — solid fill, square, a 2px light/dark inner bevel and a hard dark rail — so
+ * a cap on the title screen and a cap in the game are the same object. On touch they
+ * are round, because the pads drawn over the game are.
+ *
+ * It replaced a written sentence, twice: a legend was cut from this screen for reading
+ * as a manual, and the sentence that came back rendered wider than the headline on a
+ * phone. A cap is the size of its glyph, not of its explanation.
+ */
+.beam-run__keys {
+  display: flex; flex-wrap: wrap; justify-content: center; align-items: center;
+  gap: clamp(10px, 1.8%, 22px);
+}
+.beam-run__key-group { display: flex; align-items: center; gap: clamp(4px, 0.7%, 8px); }
+.beam-run__key {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: clamp(22px, ${U(2.8)}, 36px); min-height: clamp(22px, ${U(2.8)}, 36px);
+  padding: clamp(3px, 0.5%, 6px) clamp(5px, 0.8%, 9px);
+  background: #00161D;
+  box-shadow:
+    inset 2px 2px 0 rgba(150, 205, 218, 0.22),
+    inset -2px -2px 0 rgba(0, 0, 0, 0.45),
+    0 0 0 2px ${RAIL};
+}
+/* The on-screen pads are round, so their legend is too. */
+.beam-run__key--pad { border-radius: 50%; }
+/* The act pad is smaller than jump, on the game and here: the two are both discs, so
+   size is what separates them (and drawing the act button as an arrow instead put the
+   same glyph in the row twice, once meaning move and once meaning fire). */
+.beam-run__key--small {
+  min-width: clamp(17px, ${U(2.1)}, 27px); min-height: clamp(17px, ${U(2.1)}, 27px);
+  padding: clamp(2px, 0.4%, 5px);
+}
+.beam-run__key--small .beam-run__pixels { width: clamp(8px, ${U(0.9)}, 13px); }
+/* Caps shrink-wrap their glyph, so the shared percentage cap has nothing to measure;
+   the width is already bounded in frame units by PX_TYPE.key. */
+.beam-run__key .beam-run__pixels { max-width: none; }
 
-/* Closing figure: months to market. */
+
+/* Closing figure: months lost to delays. */
 .beam-run__months-label { display: flex; justify-content: center; }
 .beam-run__months { display: flex; align-items: flex-end; gap: clamp(8px, 1.2%, 14px); }
 /* Bitmap digits with an orange glow: an arcade readout, not a web number. */
@@ -543,49 +598,14 @@ export const CSS = `
 }
 .beam-run__months-unit { display: flex; padding-bottom: 4px; }
 
-/* Closing comparison bars ----------------------------------------------------
- * "14 months" means nothing to someone who isn't carrying the benchmarks in
- * their head. Seeing the run land between ANSR's 11 and the going-alone 24 is
- * the argument, at a glance. Segmented fills so the bars read as 8-bit meters,
- * and every bar carries its own number — never colour alone.
- */
-.beam-run__bars {
-  width: 100%; max-width: 560px; display: flex; flex-direction: column;
-  gap: 7px; margin: 2px 0 4px;
-}
-/* Bitmap labels are wider than the web type they replaced, so the label column
-   grew; the value column is a *fixed* width on purpose — each bar is its own
-   grid, so a content-sized column would give the rows different track widths and
-   the three meters would no longer be comparable. */
-.beam-run__bar {
-  display: grid;
-  grid-template-columns: minmax(84px, 34%) minmax(0, 1fr) clamp(24px, ${U(2.6)}, 38px);
-  align-items: center; gap: 10px;
-}
-.beam-run__bar-label { display: flex; justify-content: flex-end; }
-.beam-run__bar-track {
-  display: block; position: relative; height: clamp(12px, ${U(1.5)}, 18px);
-  background: rgba(0, 20, 27, 0.85);
-  box-shadow: inset 0 0 0 2px rgba(150, 205, 218, 0.18);
-}
-.beam-run__bar-fill {
-  display: block; height: 100%; width: 0;
-  background-image: repeating-linear-gradient(
-    90deg,
-    rgba(0, 18, 24, 0.28) 0 2px,
-    rgba(0, 0, 0, 0) 2px 9px
-  );
-}
-/* The player's own run gets the value accent; the references stay neutral. */
-.beam-run__bar-fill--you { background-color: ${BRAND.ORANGE}; }
-.beam-run__bar-fill--ansr { background-color: #5CE2F4; }
-.beam-run__bar-fill--alone { background-color: #5D7A83; }
-.beam-run__bar-value { display: flex; justify-content: flex-end; }
-
-/* Every end-screen line below is bitmap artwork (see Overlays' PX_TYPE), so
-   these rules only place it: no font, size or colour left to set. */
-.beam-run__refs { display: flex; flex-wrap: wrap; gap: 6px 18px; justify-content: center; }
-.beam-run__ref { display: flex; justify-content: center; }
+/* The three closing comparison meters (__bars, __bar-*) and the two attributed
+ * reference lines (__refs, __ref) were deleted with the statistics they drew: the
+ * 11-month ANSR benchmark and the 24-month going-alone average (owner call). The
+ * closing figure is the delay cost now, which is measured against zero.
+ *
+ * Every end-screen line below is bitmap artwork (see Overlays' PX_TYPE), so these
+ * rules only place it: no font, size or colour left to set. __matched keeps its
+ * name and now holds the verdict line under the figure. */
 .beam-run__matched { margin: 0; display: flex; justify-content: center; }
 .beam-run__clock-line { display: flex; align-items: center; gap: 10px; }
 .beam-run__clock-label,
@@ -634,6 +654,31 @@ export const CSS = `
 .beam-run__receipt-delays {
   margin-top: 2px; display: flex; flex-direction: column; align-items: center; gap: 4px;
 }
+/*
+ * The closing screen's cost block: the figure, the verdict and the itemised delays as
+ * ONE panel, in the receipt row's own fill and rail.
+ *
+ * Five centred lines of ragged type opposite four solid full-width rows is a screen
+ * that leans right however the gaps are tuned — the two columns were the same width
+ * and only one of them had mass in it. As a panel the left column has an edge to
+ * match the right, and the two blocks sit under captions on the same line.
+ */
+.beam-run__cost {
+  width: 100%; display: flex; flex-direction: column; align-items: center;
+  gap: clamp(4px, 1%, 10px);
+  padding: clamp(10px, 2%, 20px) clamp(12px, 2.4%, 24px);
+  background: rgba(0, 22, 29, 0.72);
+  border: 2px solid rgba(150, 205, 218, 0.22);
+}
+/* The breakdown is the figure's small print, so it is divided off inside the panel
+   rather than floating under it. */
+.beam-run__cost .beam-run__receipt-delays {
+  width: 100%; margin-top: clamp(6px, 1.6%, 16px); padding-top: clamp(6px, 1.6%, 16px);
+  border-top: 2px solid rgba(150, 205, 218, 0.18);
+}
+/* A clean run writes nothing here (the verdict has already said it), and an empty
+   box would still draw its divider. */
+.beam-run__cost .beam-run__receipt-delays:empty { display: none; }
 
 /*
  * A single centred line of instruction: the out-of-lives argument, and the retry
@@ -649,14 +694,32 @@ export const CSS = `
   width: 100%; margin: 0;
 }
 /*
- * The out-of-lives screen: four elements, one axis. Every child is centred and
- * the steps between them grow with importance (headline → figure → instruction →
- * routes), which is what makes a four-element screen read as composed rather than
- * as a short list.
+ * The out-of-lives screen: headline, caption, ONE PANEL, one route.
+ *
+ * It used to be four centred lines on one axis with the gaps doing all the work, and
+ * gaps cannot fix a screen where nothing has mass (the same finding the win screen's
+ * left column produced). The figure, the delay count and the argument are the same fact
+ * at three levels of detail, so they are one block in the receipt row's own fill and
+ * rail - which is also what puts an edge on this screen, so the composition is a shape
+ * rather than a stack of ragged centred lines floating in an empty frame.
+ *
+ * The column is 440 rather than the 640 it was, and that is measured off the raster: the
+ * widest thing inside the panel is the instruction at its 26-character measure, ~335px
+ * on a 1280 frame, so a 560 rail left 110px of empty box either side of everything it
+ * contains - a border drawn round nothing, which reads as a panel that has lost its
+ * contents rather than as one holding them. A rail should hug what it encloses.
  */
-.beam-run__stack--gameover { width: min(100%, 640px); gap: clamp(10px, 2.2%, 22px); }
-.beam-run__stack--gameover .beam-run__clock-strong { justify-content: center; }
-.beam-run__stack--gameover .beam-run__actions { margin-top: clamp(6px, 1.6%, 16px); }
+.beam-run__stack--gameover { width: min(100%, 440px); gap: clamp(8px, 1.8%, 18px); }
+.beam-run__stack--gameover .beam-run__months-label { margin-top: clamp(6px, 1.4%, 14px); }
+.beam-run__stack--gameover .beam-run__months { margin-top: 0; }
+.beam-run__stack--gameover .beam-run__matched { margin-top: clamp(2px, 0.6%, 6px); }
+/* The argument is the panel's own footnote: divided off under the figure and its
+   small print, the way the closing receipt divides off its breakdown. */
+.beam-run__stack--gameover .beam-run__cost .beam-run__advice {
+  margin-top: clamp(8px, 1.8%, 18px); padding-top: clamp(8px, 1.8%, 18px);
+  border-top: 2px solid rgba(150, 205, 218, 0.18);
+}
+.beam-run__stack--gameover .beam-run__actions { margin-top: clamp(8px, 2%, 20px); }
 /* The retry hint sits with the stage name, not under it as a second heading. */
 .beam-run__overlay--titlecard .beam-run__advice { margin-top: clamp(8px, 1.8%, 18px); }
 /*
@@ -876,6 +939,28 @@ export const CSS = `
   .beam-run__receipt-row { transition: none; }
   .beam-run__btn { transition: none; }
 }
+
+/*
+ * THE HIDDEN ATTRIBUTE HAS TO WIN, AND IN THIS STYLESHEET IT DID NOT. LAST RULE IN THE
+ * FILE, DELIBERATELY.
+ *
+ * The hidden attribute is only a UA rule (display: none), so any author rule that sets
+ * display on the same element beats it. Two of ours do - beam-run__brief and
+ * beam-run__advice are both display: flex - and both are shown and hidden by assigning
+ * to el.hidden. The symptom was the briefing card's retry line: painted on the card of
+ * the stage that took the life, then hidden again on every later card, which did
+ * nothing, so "take the ANSR powerup" sat on the introduction to every remaining screen
+ * (owner note). Before the first death it was absent for the wrong reason - the element
+ * had no content yet, not because it was hidden.
+ *
+ * Two things make it win, and it needs both. The important flag and the extra class in
+ * the selector are what a browser reads. The POSITION is for everything else that
+ * renders this sheet: jsdom's getComputedStyle cascades by source order alone, so with
+ * the rule up at the top of the file the fix was correct per spec and invisible in
+ * every test we could write. Anything added below this line that hides by attribute is
+ * on its own.
+ */
+.beam-run [hidden] { display: none !important; }
 `;
 
 /** Inject the stylesheet into a root (idempotent). Returns the <style> node. */

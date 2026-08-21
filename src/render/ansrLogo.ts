@@ -42,6 +42,24 @@ export function drawAnsrLogo(
   diameter: number,
   rotation = 0,
   color = LOGO_ORANGE,
+  /**
+   * Fill the path twice.
+   *
+   * **A ROTATED MARK LOSES WEIGHT, AND AT PICKUP SIZE THAT MAKES IT DIMMER RATHER THAN
+   * BRIGHTER.** The sunburst is ~32 rays, so at the badge's 40px each ray is about one
+   * pixel across: unrotated, the axis-aligned ones land on whole pixels and the mark is
+   * crisp, and at any other angle every ray is spread across two columns at partial
+   * coverage. Rasterised side by side, the turning mark in the *lighter* tone read
+   * weaker than the still one in the darker — the tone lift and the rotation were
+   * cancelling each other out.
+   *
+   * Two source-over fills of the same path take a half-covered pixel from 0.5 to 0.75,
+   * which is most of the weight back for one extra fill and no change to the shape. It
+   * is not a stroke: an outline round a 32-ray star closes the gaps between the rays.
+   * Only the spinning pickups ask for it — the plaza, the facade and the finale draw
+   * the mark large, where a ray is many pixels wide and there is nothing to recover.
+   */
+  bold = false,
 ): void {
   const path = ansrMarkPath();
   if (!path) return;
@@ -53,5 +71,6 @@ export function drawAnsrLogo(
   ctx.translate(-ANSR_MARK_W / 2, -ANSR_MARK_H / 2);
   ctx.fillStyle = color;
   ctx.fill(path);
+  if (bold) ctx.fill(path);
   ctx.restore();
 }

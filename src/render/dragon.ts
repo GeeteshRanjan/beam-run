@@ -160,46 +160,47 @@ const WATER_LIT = '#A8ECFA';
  * "this animal is not a Godzilla".
  */
 const BEAST: readonly string[] = [
-  '............................KKKKKKKK..........',
-  '...........................KSSSHHHHHKK........',
-  '..........................KSSSsssHHHHHHH......',
-  '..........................KSSSsssSSAApHHK.....',
-  '..........................KSSSssssspAHHKK.....',
-  '..........................KSSSssmhmhmhmhm.....',
-  '...........................KSSSsssshHHhK......',
-  '............................KSSssssKKK........',
-  '..........................KKHsssHHK...........',
-  '..................Kf....KKHHsssssHHK..........',
-  '.................Kff..KKHHSsssHHHHHHHK........',
-  '.................Kff.KHHSSSsssSSSsHBBBK.......',
-  '................KcccKHSSSSsssssssssbSSSK......',
-  '....................KSSSSSsssssssssBBBBHKK....',
-  '.................KfKHSSSSsssssssssHBBBBKKsKK..',
-  '................KffKSSSSSssSSSsssSsbbbK..Kssc.',
-  '...............KfffKSSSSSsssssssssHBBBK...KKc.',
-  '..............Kffff.KSSSSssssssssHBBBK........',
-  '.............Kcfccc.KSSSSsssssssHHbbK.........',
-  '...............cKK..KSSSSSSsssSSsHBBK.........',
-  '...............cKc..KSSSSsssssssHBBK..........',
-  '...............Kcc..KSSSSsssssssHHbbK.........',
-  '............c.Kccc.KHSSSSssssssssHBBBK........',
-  '............cKccccKHSSSSsssSSSsssssBBBK.......',
-  '............KcccccHSSSSSsssssssssHHbbbK.......',
-  '...........KHHssssKSSSSSsssssssssHBBBK........',
-  '.........c.KHsssSKcKSSSSSssssssssHBBBK........',
-  '.........cKHSSSSKcc.KSSSSSSKKsSSsHHHK.........',
-  '.........KHsssSKccc.KSSSSsK..KssHHHHK.........',
-  '........KHssSSSKKK..KSSSSsK..KssHHHHK.........',
-  '........KssSSSK......KSSSSK..KsssHHHK.........',
-  '......cKsSSSKK.......KSSSSK...KsssssK.........',
-  '...c..KHssSK.........KSSSsK...KsHHHK..........',
-  '...KKKHssSK...........KSSSK...KsHHHK..........',
-  '...KsssSSK............KSSSK...KsHHHK..........',
-  '...KssSKK.............KSSSK...KSSHHHK.........',
-  '...KKKK..............HHHKHH...HHHHHHHK........',
-  '..................ccKKKKKKK...KKKKKKKKccc.....',
+  '................................................',
+  '................................................',
+  '...................................KKKKKKKKKK...',
+  '.................................KKHHHHHHHHHHKK.',
+  '................................KHHSSsSssAASHHHK',
+  '................................KSSSSssssApsHHHK',
+  '................................KSSSSsssssssHHHK',
+  '................................KSSSSsmhmhmhmhmh',
+  '.................................KSSSssshshHhKh.',
+  '................................KHSSsssssHHK....',
+  '..............................KKHSsssssHHHK.....',
+  '..........................KfKKHHssssssHHHK......',
+  '......................KfffKKHHSsssssssHHHHK.....',
+  '...................KffffKKHHSSsSSSssssHHHHK.....',
+  '.................KcKcccKHHSSSsssssssssHHHHHKK...',
+  '..................KfKfKHSSSSsssssssssHHHHHKssK..',
+  '................KfKfKKHSSSSsssssssssHBBBHK.KssK.',
+  '...............KfKfffKSSSSSssssSSSssHBBBHK.Kssc.',
+  '............KcccKKfffKSSSSsssssssssHbbbHK.KKKc..',
+  '...............KfKcccKSSSSsssssssssHBBBHK.......',
+  '.............KKfffKKHSSSSSsssssssssHBBBHK.......',
+  '............KfKfffKHSSSSSSSssssSSSsHbbbHK.......',
+  '...........KfffKccKHSSSSSSsssssssssHBBBHK.......',
+  '..........KKfffKKHHsSSSSSSSsssssssssHBBBHK......',
+  '.........KfKcccKHHsssSSSSSSsssssssssHbbbHK......',
+  '........KfffKKKHHssssKSSSSSssssSSSssBBBHK.......',
+  '.......KKcccKHHHssssK.KSSSSSsssssssBBBHK........',
+  '.....KfffKKKHHHssssSK..KSSSSKKsssssHHHK.........',
+  '....KKcccKHHHssssSSSSKKssHHK..KSSSsssK..........',
+  '..KfffKKKHsssssSSSSSKssssHHK..KSSSsssK..........',
+  '..KcccKHHssssSSSSKKK.KsssHHK..KSSSsssK..........',
+  '....KKHsssssSSSKK....KsssHHK..KSSSsssK..........',
+  '...KHHssssSSSKK......KsssHHK..KSSSsssK..........',
+  'KKKHssssSSKKK.......KssssHHK..KSSSssssK.........',
+  'KHsssSSSKK..........KssssHHK..KSSSssssK.........',
+  'KssSSKKK............KssssHHK..KSSSssssK.........',
+  'KSKKK.............KKSssssHHK..KSSSssssHKKK......',
+  'KK................cKKcKKcKKc..cKKcKKcKKcKK......',
 ];
 
+const DORSAL = '#F08A90';
 const BEAST_PALETTE: Palette = {
   K: OUTLINE,
   s: SCALE,
@@ -207,7 +208,7 @@ const BEAST_PALETTE: Palette = {
   H: SCALE_LIT,
   B: BELLY,
   b: BELLY_SHADE,
-  f: BONE,
+  f: DORSAL,
   A: EYE,
   p: '#140806',
   m: MAW,
@@ -240,7 +241,7 @@ export const BEAST_H = BEAST.length * BEAST_SCALE;
  * what a water jet has to hit. The bottom row lands on the ground band, which is what
  * "two feet on the ground" is, measured.
  */
-const BEAST_OFFSET_X = -15;
+const BEAST_OFFSET_X = -20;
 const BEAST_OFFSET_Y = 0;
 
 /**
@@ -254,9 +255,9 @@ const BEAST_OFFSET_Y = 0;
  * to be registered to it. The owner removed the glasses, and the eye is now just part of
  * the grid like every other feature.
  */
-const JAW_ROW = 5;
-const JAW_HINGE_COL = 30;
-const JAW_TIP_COL = 40;
+const JAW_ROW = 7;
+const JAW_HINGE_COL = 38;
+const JAW_TIP_COL = 47;
 /** Cells the muzzle end of the jaw drops when the mouth is fully open. */
 const JAW_MAX_CELLS = 5;
 
@@ -297,9 +298,6 @@ const COSTUME: readonly string[] = [
 ];
 
 const COSTUME_SCALE = 5;
-/** Where the zip runs, in grid columns: the opening the five come out of. */
-const COSTUME_OPEN_FROM = 21;
-const COSTUME_OPEN_TO = 31;
 
 const COSTUME_PALETTE: Palette = {
   K: OUTLINE,
@@ -361,25 +359,51 @@ function drawFallenCostume(
   }
 
   const cols = maxWidth(COSTUME);
-  // Exclusive: at `openness` 0 not one cell of the inside shows, or the suit arrives already
-  // open and the opening stops being an event.
-  const openTo =
-    COSTUME_OPEN_FROM - 1 + (COSTUME_OPEN_TO - COSTUME_OPEN_FROM + 1) * openness;
   for (let r = 0; r < COSTUME.length; r += 1) {
     const row = COSTUME[r]!;
     for (let c = 0; c < row.length; c += 1) {
       let ch = row[c]!;
       if (ch === '.' || ch === ' ') continue;
-      const isOpening = ch === 'i' || ch === 'z' || ch === 'Z';
-      if (isOpening && c > openTo) {
-        // Not unzipped this far yet: the suit is still itself here.
-        ch = r < 4 ? 's' : 'S';
-      }
+      // The authored opening cells now describe where the fabric folds, not a hole
+      // that appears as a rectangular void. Paint the base suit intact; the shaped
+      // side hatch below is the only interior the player sees.
+      if (ch === 'i' || ch === 'z' || ch === 'Z') ch = r < 4 ? 's' : 'S';
       const color = COSTUME_PALETTE[ch];
       if (!color) continue;
       const dx = flip ? cols - 1 - c : c;
       pxRect(ctx, color, x0 + dx * COSTUME_SCALE, y0 + r * COSTUME_SCALE, COSTUME_SCALE, COSTUME_SCALE, 1);
     }
+  }
+
+  // A side hatch peels open around the point the candidates actually emerge from.
+  // Its tapered silhouette and two displaced lips read as flexible costume fabric,
+  // not a black rectangle cut through a wall.
+  if (openness > 0.02) {
+    const authoredDoor = 34;
+    const doorCol = flip ? cols - 1 - authoredDoor : authoredDoor;
+    const doorX = x0 + doorCol * COSTUME_SCALE;
+    const doorY = y0 + 7 * COSTUME_SCALE;
+    const openCells = Math.max(1, Math.round(openness * 5));
+    const rowHalf = [1, 3, 4, 5, 5, 4, 3, 1];
+    rowHalf.forEach((fullHalf, r) => {
+      const half = Math.max(1, Math.round(fullHalf * openness));
+      for (let c = -half; c <= half; c += 1) {
+        pxRect(ctx, '#180509', doorX + c * COSTUME_SCALE, doorY + (r - 4) * COSTUME_SCALE, COSTUME_SCALE, COSTUME_SCALE, 1);
+      }
+      const edgeY = doorY + (r - 4) * COSTUME_SCALE;
+      const peel = Math.round(openCells * (1 - Math.abs(r - 3.5) / 8));
+      pxRect(ctx, SCALE_LIT, doorX - (half + 1) * COSTUME_SCALE - peel, edgeY, 6, COSTUME_SCALE, 1);
+      pxRect(ctx, SCALE_DARK, doorX + (half + 1) * COSTUME_SCALE + peel, edgeY, 6, COSTUME_SCALE, 1);
+      if (r % 2 === 0) {
+        pxRect(ctx, BONE_DARK, doorX - (half + 1) * COSTUME_SCALE - peel + 3, edgeY + 1, 3, 3, 1);
+        pxRect(ctx, BONE, doorX + (half + 1) * COSTUME_SCALE + peel, edgeY + 1, 3, 3, 1);
+      }
+    });
+    // The pull travels down the seam while the hatch spreads around it.
+    const sliderY = doorY - 4 * COSTUME_SCALE + Math.round(openness * 7) * COSTUME_SCALE;
+    pxRect(ctx, OUTLINE, doorX - 5, sliderY - 3, 13, 11, 1);
+    pxRect(ctx, BONE, doorX - 3, sliderY - 5, 9, 8, 1);
+    pxRect(ctx, MAW, doorX, sliderY - 3, 3, 3, 1);
   }
 
   /*
@@ -421,30 +445,51 @@ function drawTopplingBeast(
 ): void {
   const rows = BEAST.length;
   const cols = BEAST_COLS;
-  const dir = flip ? 1 : -1;
-  const lean = p * p * 150;
-  const sink = p * 26;
-  const squash = 1 - p * 0.42;
+  const eased = p * p * (3 - 2 * p);
+  const angle = eased * 1.32;
+  const fallDir = flip ? 1 : -1;
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  const pivotX = x0 + cols * BEAST_SCALE * 0.48;
+  const pivotY = GROUND_TOP - BEAST_SCALE;
+  const impact = Math.max(0, (p - 0.78) / 0.22);
+  const compression = 1 - impact * 0.16;
+  /*
+   * Rotating a CELL GRID spreads its cells apart: at 45° the centres are 1.41× further
+   * apart than the cell is wide, so drawing them at their authored size leaves the
+   * animal riddled with holes — which rasterised as a speckled, half-transparent beast,
+   * i.e. this build's oldest art trap (loose cells over a lit material read as dirt).
+   * Growing every cell by the rotation's own spread closes the seams exactly.
+   */
+  const cell = Math.ceil(BEAST_SCALE * (Math.abs(cos) + Math.abs(sin)));
+
   for (let r = 0; r < rows; r += 1) {
     const row = BEAST[r]!;
-    const height = (rows - 1 - r) / (rows - 1);
-    const shear = dir * lean * height;
-    const y = y0 + sink + r * BEAST_SCALE * squash;
     for (let c = 0; c < row.length; c += 1) {
       const ch = row[c]!;
       if (ch === '.' || ch === ' ') continue;
       const color = BEAST_PALETTE[ch];
       if (!color) continue;
-      const dx = flip ? cols - 1 - c : c;
-      pxRect(
-        ctx,
-        color,
-        x0 + dx * BEAST_SCALE + shear,
-        y,
-        BEAST_SCALE,
-        Math.max(2, BEAST_SCALE * squash + 1),
-        1,
-      );
+      const dc = flip ? cols - 1 - c : c;
+      const sx = x0 + (dc + 0.5) * BEAST_SCALE;
+      const sy = y0 + (r + 0.5) * BEAST_SCALE;
+      const dx = sx - pivotX;
+      const dy = sy - pivotY;
+      const x = pivotX + dx * cos - fallDir * dy * sin - BEAST_SCALE / 2;
+      const rotatedY = pivotY + (fallDir * dx * sin + dy * cos) * compression;
+      const y = Math.min(GROUND_TOP - 2, rotatedY - BEAST_SCALE / 2);
+      pxRect(ctx, color, x, y, cell, cell, 1);
+    }
+  }
+
+  // The final fifth of the fall has a readable impact: a short ground shadow and
+  // two outward dust kicks. They are tied to sim progress, and therefore remain an
+  // informative state change under reduced motion rather than decorative flicker.
+  if (impact > 0) {
+    pxRect(ctx, `rgba(26,10,14,${0.45 * impact})`, pivotX - 112, GROUND_TOP - 5, 224, 5, 1);
+    for (const side of [-1, 1]) {
+      pxRect(ctx, `rgba(231,211,166,${0.55 * impact})`, pivotX + side * (70 + impact * 34), GROUND_TOP - 12 - impact * 18, 10, 10, 2);
+      pxRect(ctx, `rgba(188,174,140,${0.45 * impact})`, pivotX + side * (92 + impact * 24), GROUND_TOP - 7 - impact * 10, 7, 7, 2);
     }
   }
 }
@@ -879,19 +924,38 @@ export function drawCone(
       const n2 = reduced ? 0.5 : hash2(k, 29 + frame);
       // Both edges bite INWARDS, never outwards: a lip outside the hitbox is fire that
       // cannot hurt anybody, which is the hazard-sprite rule broken the wrong way.
-      const top = ay - half + Math.round((2 + n * 14) / cell) * cell;
-      const bottom = Math.min(GROUND_TOP, ay + half) - Math.round((1 + n2 * 10) / cell) * cell;
+      const top = ay - half + Math.round((2 + n * 16) / cell) * cell;
+      const bottom = Math.min(GROUND_TOP, ay + half) - Math.round((1 + n2 * 12) / cell) * cell;
       const h = Math.max(cell, bottom - top);
       const w = Math.min(cell, to - x);
       const near = f < 0.25;
-      pxRect(ctx, FIRE_DEEP, x, top, w, h, cell);
-      // The body of the flame, inset from its own shell.
-      const inner = Math.max(cell, h * 0.6);
-      pxRect(ctx, FIRE_MID, x, top + (h - inner) / 2, w, inner, cell);
-      // The core: thin, on the axis, and hottest near the jaw. A core as wide as the
-      // flame rasterised as a rocket exhaust.
-      const core = Math.max(cell, h * (near ? 0.32 : 0.2));
-      pxRect(ctx, near ? FIRE_HOT : FIRE_CORE, x, top + (h - core) / 2, w, core, cell);
+      const split = f > 0.32 && k % 11 === frame * 2 + 3 && h >= cell * 6;
+
+      if (split) {
+        // A narrow lick of air between two lobes. One transparent cell every eleven
+        // columns breaks the hose silhouette without inventing flame outside the
+        // simulation's boxes or creating a gap a player could reasonably read as safe.
+        const gapY = top + Math.round(h * (0.42 + (n - 0.5) * 0.18) / cell) * cell;
+        pxRect(ctx, FIRE_DEEP, x, top, w, Math.max(cell, gapY - top), cell);
+        pxRect(ctx, FIRE_DEEP, x, gapY + cell, w, Math.max(cell, bottom - gapY - cell), cell);
+      } else {
+        pxRect(ctx, FIRE_DEEP, x, top, w, h, cell);
+      }
+
+      // The mid flame wanders around the axis instead of forming a second straight
+      // stripe. Its changing vertical offset makes the fire roll while the fixed
+      // reduced-motion frame remains completely stable.
+      const inner = Math.max(cell, h * (0.46 + n2 * 0.16));
+      const innerY = Math.max(top, Math.min(bottom - inner, ay - inner / 2 + (n - 0.5) * h * 0.2));
+      pxRect(ctx, FIRE_MID, x, innerY, w, inner, cell);
+
+      // A broken hot core: brightest near the jaw, pinched and intermittent at the
+      // broad floor fire. This keeps cream from becoming a ruler through the orange.
+      if (near || (k + frame) % 5 !== 0) {
+        const core = Math.max(cell, h * (near ? 0.3 : 0.14 + n * 0.07));
+        const coreY = Math.max(top, Math.min(bottom - core, ay - core / 2 + (n2 - 0.5) * h * 0.16));
+        pxRect(ctx, near ? FIRE_HOT : FIRE_CORE, x, coreY, w, core, cell);
+      }
     }
   }
   // The root, at the jaw: two cells at full value where the jet leaves the mouth, so the
@@ -1440,38 +1504,44 @@ export function drawSteam(ctx: CanvasRenderingContext2D, puffs: SteamState[]): v
  * take their place in a line-up, and cheer — and the word over them is the only
  * green-lit thing on a screen that has been orange the entire time.
  */
-const CANDIDATE: readonly string[] = [
-  '..KKKK..',
-  '.KhhhhK.',
-  '.KffffK.',
-  '.KfeefK.',
-  '.KffffK.',
-  'KKTTTTKK',
-  'KaTTTTaK',
-  'KaTTTTaK',
-  '.KTTTTK.',
-  '.KllllK.',
-  '.KllKlK.',
-  '.KllKlK.',
-  '.KooKoK.',
-  '.KKKKKK.',
+const CANDIDATES_ART: readonly (readonly string[])[] = [
+  [
+    '...KKKK...', '..KhhhhK..', '.KhffffhK.', '.KhfeefhK.', '..KffffK..',
+    '.KKTTTTKK.', 'KaaTTTTaaK', '.KaTTTTaK.', '..KTTTTK..', '..KllllK..',
+    '..KllKlK..', '..Kl..lK..', '..Ko..oK..', '.Koo..ooK.', '.KKK..KKK.',
+  ],
+  [
+    '..KKKKKK..', '.KhhhhhhK.', 'KhhffffhhK', 'KhffefffhK', '.KffffffK.',
+    '.KTTTTTTK.', 'KaTTTTTTaK', 'KaTTTTTTaK', '.KTTTTTTK.', '..KllllK..',
+    '..KllKlK..', '..Kl..lK..', '..Ko..oK..', '.Koo..ooK.', '.KKK..KKK.',
+  ],
+  [
+    '...KKKK...', '..KhffhK..', '..KffffK..', '..KfeefK..', '..KffffK..',
+    '.KTTTTTTK.', 'KaTTTTTTaK', 'KaTTTTTTaK', '.KTTTTTTK.', '..KllllK..',
+    '..KllKlK..', '..Kl..lK..', '..Ko..oK..', '.Koo..ooK.', '.KKK..KKK.',
+  ],
+  [
+    '..KKKKKK..', '.KhhhhhhK.', '.KhffffhK.', '.KhfeefhK.', '.KhffffhK.',
+    'KhhTTTThhK', 'KhaTTTTahK', '.KaTTTTaK.', '..KTTTTK..', '..KllllK..',
+    '..KllKlK..', '..Kl..lK..', '..Ko..oK..', '.Koo..ooK.', '.KKK..KKK.',
+  ],
+  [
+    '...KKKK...', '..KffffK..', '..KfeefK..', '..KffffK..', '..KfhhfK..',
+    '.KKTTTTKK.', 'KaaTTTTaaK', '.KaTTTTaK.', '..KTTTTK..', '..KllllK..',
+    '..KllKlK..', '..Kl..lK..', '..Ko..oK..', '.Koo..ooK.', '.KKK..KKK.',
+  ],
 ];
 
-/**
- * Scale 4 → a 32×56 person, against the hero's drawn 48×60.
- *
- * At scale 3 they were 24×42 and rasterised as children standing next to him, which
- * is the same mistake the Workplace figure made at 34×52 — the ending only works if
- * what comes out of the costume reads as five colleagues.
- */
+/** Scale 4 → a 40×60 adult, aligned with the hero's drawn 48×60 silhouette. */
 const CANDIDATE_SCALE = 4;
 
-/** Four shirt colours, so five people are five people and not one clone × 5. */
+/** Distinct skin, hair, clothing and trouser values; silhouette differences live above. */
 const CANDIDATE_PALETTES: readonly Palette[] = [
-  { K: '#10222A', h: '#2A1C14', f: '#D9A57A', e: '#22323A', T: '#E9F1F5', a: '#E9F1F5', l: '#26454F', o: '#161616' },
-  { K: '#10222A', h: '#160F0A', f: '#A9714A', e: '#22323A', T: '#9FE6C4', a: '#9FE6C4', l: '#1E3A44', o: '#161616' },
-  { K: '#10222A', h: '#3A2A16', f: '#E9BE94', e: '#22323A', T: '#A8ECFA', a: '#A8ECFA', l: '#26454F', o: '#161616' },
-  { K: '#10222A', h: '#1E1410', f: '#C08A5E', e: '#22323A', T: '#CFE6EC', a: '#CFE6EC', l: '#173039', o: '#161616' },
+  { K: '#10222A', h: '#2A1C14', f: '#D9A57A', e: '#22323A', T: '#E9F1F5', a: '#D9A57A', l: '#26454F', o: '#161616' },
+  { K: '#10222A', h: '#160F0A', f: '#A9714A', e: '#22323A', T: '#9FE6C4', a: '#A9714A', l: '#1E3A44', o: '#161616' },
+  { K: '#10222A', h: '#3A2A16', f: '#E9BE94', e: '#22323A', T: '#A8ECFA', a: '#E9BE94', l: '#26454F', o: '#161616' },
+  { K: '#10222A', h: '#1E1410', f: '#C08A5E', e: '#22323A', T: '#CFE6EC', a: '#C08A5E', l: '#173039', o: '#161616' },
+  { K: '#10222A', h: '#4B2E20', f: '#B97952', e: '#22323A', T: '#F0D9A7', a: '#B97952', l: '#203B48', o: '#161616' },
 ];
 
 export function drawHiredCandidates(
@@ -1480,11 +1550,14 @@ export function drawHiredCandidates(
   t: number,
   reduced: boolean,
 ): void {
-  const w = maxWidth(CANDIDATE) * CANDIDATE_SCALE;
-  const h = CANDIDATE.length * CANDIDATE_SCALE;
+  const artW = Math.max(...CANDIDATES_ART.map((art) => maxWidth(art)));
+  const artH = Math.max(...CANDIDATES_ART.map((art) => art.length));
+  const w = artW * CANDIDATE_SCALE;
+  const h = artH * CANDIDATE_SCALE;
 
   candidates.forEach((c, i) => {
     if (c.progress <= 0) return;
+    const art = CANDIDATES_ART[i % CANDIDATES_ART.length]!;
     const palette = CANDIDATE_PALETTES[i % CANDIDATE_PALETTES.length]!;
     // Landed: a two-frame celebration hop. On the way out: a stepped lean, quantised
     // because an 8-bit sprite does not rotate smoothly.
@@ -1501,7 +1574,7 @@ export function drawHiredCandidates(
        */
       const step = Math.floor(c.progress * 9) % 2 === 0;
       const bob = reduced ? 0 : step ? 0 : 3;
-      drawPixels(ctx, CANDIDATE, palette, x, y + bob, {
+      drawPixels(ctx, art, palette, x, y + bob, {
         scale: CANDIDATE_SCALE,
         flip: c.dir < 0,
       });
@@ -1511,11 +1584,16 @@ export function drawHiredCandidates(
         pxRect(ctx, palette.l!, x + (c.dir < 0 ? -6 : w - 2), y + h - 14 + bob, 9, 7, 2);
       }
     } else {
-      drawPixels(ctx, CANDIDATE, palette, x, y, { scale: CANDIDATE_SCALE });
-      // Arms up. Two cells each side at the shoulder — the cheapest possible cheer,
-      // and the only pose that reads at this size.
-      pxRect(ctx, palette.T!, x - 6, y + 12 - hop, 8, 16, 2);
-      pxRect(ctx, palette.T!, x + w - 2, y + 12 - hop, 8, 16, 2);
+      drawPixels(ctx, art, palette, x, y, { scale: CANDIDATE_SCALE });
+      // Distinct celebration silhouettes: alternating high/side arms keep the five
+      // from resolving into one repeated row even when their clothes share a value.
+      const leftHigh = i % 2 === 0;
+      const leftY = y + (leftHigh ? 5 : 14);
+      const rightY = y + (leftHigh ? 14 : 5);
+      pxRect(ctx, palette.T!, x - 7, leftY, 9, leftHigh ? 18 : 13, 2);
+      pxRect(ctx, palette.T!, x + w - 2, rightY, 9, leftHigh ? 13 : 18, 2);
+      pxRect(ctx, palette.a!, x - 6, leftY - 4, 6, 6, 2);
+      pxRect(ctx, palette.a!, x + w, rightY - 4, 6, 6, 2);
       pxRect(ctx, 'rgba(0,14,20,0.4)', x + 2, GROUND_TOP - 3, w - 4, 4, 1);
     }
 

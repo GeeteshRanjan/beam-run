@@ -3039,3 +3039,1080 @@ a 5-second fire shield and the pre-rebuild screen order).
   characters of string.
 - Typecheck, lint, test, build, build:site and validator all green. `npm run analyze` still reads
   138.7 KB of 90 and fails for the known measurement reason (`docs/OPEN.md` §1) — not a regression.
+
+---
+
+## The two statistics leave the game, and the three screens either end of the run are rebuilt without them
+
+**Owner:** "Remove the Skip to Navigator button from the First screen which comes before the game
+starts and the death screen and the last screen after the game ends and also now that we dont have
+those 24 months and 11 months things anymore think of what to have in these screens and implement
+them" — and, on the copy: think like an expert copywriter, convey more in less words.
+
+### What was actually there, because the second half of the note describes a state the code was not in
+`JOURNEY.BASELINE_MONTHS` (24) and `ANSR_BENCHMARK_MONTHS` (11) were still live *and still printed*:
+the title screen's whole hook was "The average India GCC takes **24 months** to go live." set as
+three bitmap lines with the figure at display size, and the win screen answered it with a hero figure
+(the run's own total), **three comparison bars** (your run · ANSR clients 11 · going alone 24), **two
+attributed reference lines** and a "You matched the ANSR benchmark." line — plus a per-row "saves 4
+months" on each capability, four figures whose sum is exactly 24 − 11. So the request was read as: the
+two averages are out, and with them everything on those screens that only meant something next to
+them. **The model keeps them** — `monthsBase`, `MAX_MONTHS`, the validator's month rules and
+`br_months` are untouched — because they are arithmetic and a lead score there, not a claim. That
+split is now `docs/OPEN.md` §19(a), because a funnel figure derived from a benchmark the game no
+longer prints is a judgement call, not a fact.
+
+Why it is the right call and not just compliance: an unsourced industry average is an argument the
+reader can win, and both of ours were printed on precisely the two surfaces a prospect screenshots.
+The run's absolute total went with them — "you went live in 14 months" asks "is 14 good?" of somebody
+who now has nothing to compare it to.
+
+### The three Navigator caps
+Removed from the **start screen** (`COPY.start.skip`, a ghost cap beside Start), the **out-of-lives
+screen** (`COPY.gameOver.cta`, "GCC Opportunity Navigator") and the **win receipt**
+(`COPY.win.cta`/`ctaGap`, the primary). Kept: the pause menu's, the mid-run summary's, and **the four
+capability rows**, which are the same offer with a declared `br_topic` — which is exactly why the win
+screen's generic cap was the weakest thing on it. Three consequences that are not in the diff of the
+buttons: `Game.onOutOfLives` no longer fires `ctaShown('summary')` (an impression for a CTA that is not
+there), the win screen's focus target moved from the deleted cap to "Play again", and
+`COPY.win.receiptHint` — "Pick one to talk about." — is now the *only* thing telling a player the rows
+are live. `onSkip` survives on the `OverlayCallbacks` interface because pause and the pre-mount
+fallback still use it.
+
+### What the screens say now
+**Start.** Same three-line editorial shape, no number in it:
+"ANY BOARD CAN APPROVE A GCC. / **BUILDING IT** / IS THE HARD PART." — an assertion no buyer disputes
+and no footnote can be demanded of, and it sets up screen 0 exactly, whose three steps are business
+case, board approval and budget and which clears on "Approved on paper." Then the dare, cut from
+"Think you can beat that?" to **"THINK YOU CAN?"**: *that* referred to the deleted statistic, so the
+pronoun had nothing to point at; hung off "building it" it needs four fewer words. One cap: Start.
+
+**Out of lives.** Unchanged except for the missing button — "OUT OF RUNWAY", "3 DELAYS COST 6 MONTHS",
+"Take the ANSR badge and these months never happen.", "Start again". Neither figure on it is a
+benchmark claim, so there was nothing to replace; three things and one route, and the route goes back
+to the stage that stopped them with the badge line on the card that follows.
+
+**Win.** The rebuilt one. The hero figure is now **months lost to delays** — caption "MONTHS LOST TO
+DELAYS", the count-up landing on `delayMonths` instead of `months` — because that figure needs no
+benchmark, the player watched every `+2` of it fly off their own body into the log, and **zero is the
+reward**. Under it one line in the slot the benchmark line held: "A clean run. Nothing to make up."
+or "Every one had an ANSR answer." Then, in the *same* column, the itemised delays under the heading
+**"What cost you"**, the pair to the receipt's "What got you here" opposite. Each engaged capability
+row states the outcome from `COPY.powers` ("Setup stood up", "Filings cleared", "Team unblocked",
+"Roles filled") in place of "saves N months". Deleted: `buildBars` and its six CSS rules, the two
+`__ref` lines, `matched`, `savesMonths`, `CapabilityCopy.monthsSaved` and the validator rule that
+checked those four figures summed to the baseline gap.
+
+### Rasterised, and it earned it twice over — four defects, none of them visible in the code
+Harness `/tmp/brrender/screens.mts` (the real `FONT`, the real copy, the real `PX_TYPE` numbers and
+the `clamp()` gaps out of `styles.ts`), shot at 1280×720 and 390×844.
+1. **"6 STAGES. 3 LIVES." was the first replacement headline** — the arcade contract, in the title
+   spec. In the picture, under three centred lines of hook, it reads as a fourth and fifth line of
+   prose: a spec sheet on the frame that has to earn a press. Replaced by the dare; both facts are on
+   the HUD five seconds later.
+2. **The closing figure was printed twice.** "6 MONTHS" in the run's column and "2 delays added 6
+   months" under the capability rows, both in the value orange. That is why the breakdown moved to the
+   left column and its summary line became a *heading* ("What cost you") — and it fixed a second
+   problem in the same move: with the bars, refs and matched line gone the left column was a caption,
+   a number and one line, i.e. a hole beside a five-row receipt.
+3. **"Every one of them had an ANSR answer." (37 chars) wrapped**, printing ANSWER alone directly under
+   the loudest element on the screen. Cut to "Every one had an ANSR answer." (29). "No delays. Every
+   stage cleared first time." (42) had the same fault and is now "No delays. Cleared first time."
+   `ui.test.ts` runs every closing line through `wrapPixelLabel(line, 34)` and demands one line, so
+   this is measured from here on.
+4. **The clean run said one thing twice**: the verdict under the figure ("Nothing to make up.") and
+   the receipt's credit line ("Cleared first time.") in the same column. The win screen now prints
+   nothing in the breakdown slot when the ledger is empty; the mid-run summary still prints the credit
+   line there, because it has no verdict slot of its own.
+
+The mid-run summary was brought onto the same measure (its clock line reads `delayMonths`, not the
+run total) so a partial exit and a finish can never report two different numbers. `a11y.won` and
+`a11y.outOfLives` were rewritten for the same reason — both used to read out the absolute total,
+which is now a figure no sighted player can see.
+
+### Numbers
+- **568 tests** (45 files) — net +2: the start-screen stake test became a hook test, the bars test
+  became "charts nothing and quotes nobody" (it also asserts the CSS is gone, so the bundle is not
+  carrying dead rules), the two CTA-variant tests became one "the only cap is not the Navigator", and
+  three are new: the one-line measure guard, the no-statistic *search* over every player-facing string,
+  and the breakdown's placement in the run's own column.
+- **IIFE 70.36 KB gzip / ESM 69.87 KB**, down from 71.26 — deleted code, not compression: the bars,
+  their CSS, two ref lines and five copy keys. Site payload **70.9 KB**. `npm run analyze` reads
+  136.9 KB of 90 and fails for the known measurement reason (`docs/OPEN.md` §1) — 1.8 KB better than
+  last pass, still not a regression.
+- typecheck · lint · test · build · build:site · validate:levels all green.
+
+**Not verified:** the browser's own layout. There is no layout engine here, so the two-column
+composition and the new left-column group step were computed from the emitted CSS and checked against
+the raster; `npm run dev` is the way to eyeball the real thing. Nobody has played to a win to see the
+0 land on a clean run.
+
+---
+
+- **The title screen gets the offer and a control line, the closing screen becomes two blocks, and
+  the Workplace pickup loses its label (owner, three asks in one pass).** Verbatim: (1) the first
+  screen should carry "Play the GCC Journey before you plan it", drop the "6 stages 3 lives" part
+  *and* "Think you can?", and "add the controls guide but do not make this too big — see the
+  dimensions and proportions of things"; (2) "make the last screen after the game ends better and more
+  well designed and symmetrical, it does not look good right now"; (3) "in the workplace screen remove
+  the text from the powerup that says 500 leaders, for now do not keep any text".
+  **First finding, before any code: "6 STAGES. 3 LIVES." was not on the screen.** It was drafted in the
+  previous pass, rejected in that same pass's raster (it read as a fourth and fifth line of prose) and
+  never shipped — `grep` of `dist-site/` confirmed it. So ask (1) was two changes, not three: delete the
+  dare, add the tagline and the legend. Worth writing down because the owner was describing a screen
+  they had seen in a *draft raster*, not the build; when a request names something that is not there,
+  grep the deployed bundle before removing anything.
+  **Start screen.** `COPY.start.challenge` is deleted and `COPY.start.tagline` ("Play the GCC journey
+  before you plan it.") stands in its slot, at `caption` scale in muted ink rather than as a `title` —
+  the hook above it is the headline, and setting the offer at display size gave the screen two
+  headlines. It is wrapped at a **20-character measure** (20/19, "PLAY THE GCC JOURNEY / BEFORE YOU
+  PLAN IT.") rather than the body's 34, where 39 characters leave one word alone over a centred button.
+  The control legend is back after being cut once for reading as a manual, so the constraint is size,
+  not existence: one line, `body` scale, `DIM_INK` (the smallest, dimmest type on the screen), and
+  **above** the cap rather than under it, because a line of chrome under a button reads as a caption on
+  the button — the trap the briefing card paid for twice. It is device-specific through a new
+  `OverlayOptions.touch` (`Game` passes its own `isTouch`): keys on a desktop, tap on a phone, never
+  both, since a phone player has no arrow keys and one-tap play is the default there.
+  **The phone raster caught the legend out-measuring the hook.** "Tap to jump. You run on your own."
+  is 33 characters, and at `body`'s *floor* (1.7px per authored pixel, which is what a 390px frame
+  lands on) that is **337px against the hook lead's 312** — the footnote as the widest line on the
+  screen, which is exactly the defect the briefing card's keyboard prompt shipped (353 against 326).
+  Capping its `maxShare` instead would put the glyphs under 9px, so the copy gave: **"Tap to jump."**,
+  which is the whole control when auto-run is on. `data.test.ts` now measures both variants against the
+  hook at *both* ends of their sizing (unit × cells and minPx × cells), which is the arithmetic the
+  invariant asks for and which no character count would have caught — the keys line is 29 characters
+  against the hook's 28 and is still comfortably narrower, because the specs differ.
+  **Closing screen.** The diagnosis is one sentence: the left column was five centred, ragged bitmap
+  lines (caption, figure, unit, verdict, heading, up to three delay rows) opposite four solid,
+  full-width receipt rows, in two columns of *equal width* — so only one side had any mass in it and the
+  screen leaned right whatever the gaps did. Three structural changes, no new copy:
+  1. **The figure, the verdict and the breakdown are one panel** (`.beam-run__cost`), in the receipt
+     row's own fill and rail. They are the same fact at three levels of detail, and as a block the left
+     column finally has an edge to match the right.
+  2. **The receipt hint moved under the rows.** Between the heading and the list it pushed the
+     right-hand block a line and a half below the left-hand one, so the two masses could never align;
+     as a footnote it also sits where it is acted on, directly under the four routes, and it fills the
+     right column's bottom the way the breakdown fills the left's.
+  3. **The columns stretch to one height** (`align-items: stretch`, the panel `flex: 1` with its
+     contents centred). This is what fixes the case that matters most: a **clean run** has three lines
+     against four rows, and top-aligned that was a short box floating in a tall column. Now both blocks
+     share all four edges and the figure is centred in its box. Both captions still sit on one line,
+     which is why the heading stayed outside the panel.
+  **Workplace pickup.** The plaque was drawn by `Game.drawBadge` 52px over the mark, which is dead sky
+  on the other three deliveries and is not here: rasterised with and without it (`/tmp/brrender/wp-tag.mts`),
+  the label sat **across the spotlight's canopy and its own two cables** in the `held` phase and over
+  the four countdown pips in `live`, on the one screen whose ceiling is full of ducts, apertures and a
+  hanging tile — and it competed with the whiteboard's own signage 200px away. Deleted. The pickup is
+  signposted by the lit fitting it comes out of, the cables, the contact shadow and the pips, which is
+  more than any other delivery carries. The capability is still named on the pickup toast and on the HUD
+  chip (`docs/OPEN.md` §20 asks whether the toast should go too).
+  **Rasterised** at 1280×720 and 390×844 (`/tmp/brrender/screens2.mts`, rewritten from the previous
+  pass's harness so the receipt rows are laid out the way the DOM's grid actually lays them out —
+  mark | product … detail on row 1, stage spanning row 2 — which the old harness drew as three centred
+  columns). Both win variants (clean and delayed) and both start variants (keys and tap).
+  **Numbers:** **570 tests** (45 files), +2 — the touch-variant control line, and the closing screen's
+  two-blocks composition (it asserts the children of both columns *in order*, which is the only way to
+  catch the hint drifting back between the heading and the rows). IIFE **70.50 KB** gzip / ESM 69.99;
+  site payload **71.0 KB** (+0.1 — the cost panel's CSS and two copy keys against one deleted one).
+  typecheck · lint · test · build · build:site · validate:levels green.
+  **Not verified:** the browser's own layout, as ever — the stretch behaviour and the panel's flex
+  slack were computed from the emitted CSS and checked against the raster, not measured in an engine.
+  Nobody has played to a win on a phone to see the stacked single-column version of the new panel.
+
+---
+
+- **Same pass, second round on the title screen: the hook is deleted, and the control guide becomes
+  the buttons themselves.** Owner, on seeing the round above: "from the first screen remove the line
+  ANY BOARD CAN APPROVE A GCC. BUILDING IT IS THE HARD PART. For the guide show the buttons instead of
+  text — and you have not shown for fire."
+  **The hook is gone, and the tagline is promoted to headline.** `buildStake()`, `COPY.start.hook*`
+  (four keys), `PX_TYPE.stakeFigure`, `.beam-run__stake` and `.beam-run__stake-figure` are all deleted;
+  `PX_TYPE.stakeText` survives under its real job's name, **`advice`** (the out-of-lives instruction and
+  the retry hint read it through the `ADVICE` alias). "Play the GCC journey before you plan it." is now
+  a `.beam-run__title` at `PIXEL_TITLE` scale, which also hands it the **orange value rule** every other
+  headline in the game carries — at `caption` it was a subtitle to a headline that no longer existed.
+  Its two lines come from `wrapPixelLabel(tagline, 20)` rather than a hand-split array, so a copy change
+  cannot quietly produce a widow. Five things have now been deleted from this one slot, in order: the
+  24-month average · the dare that pointed at it · the arcade contract (drafted, rejected in its own
+  raster, never shipped) · the three-line hook · and, from the round above, the written control line.
+  **The legend is caps now.** Three groups — move (two arrow caps), jump, fire — each cap an 8-bit key
+  in the same treatment as the NES action buttons and the HUD plaques, with a 4-letter label beside it.
+  Two new specs (`PX_TYPE.key` 0.18, `keyLabel` 0.15) and one rule that is the whole reason this works:
+  **a cap is the size of its glyph, not the size of its explanation**, which is what killed the written
+  version — 33 characters at the body floor rendered *wider than the headline* on a 390px frame.
+  Device-specific through the same `OverlayOptions.touch`: keys on a desktop (`<` `>` · SPACE · F), and
+  on touch the pads it will actually draw over the game — two arrows, a big disc, a smaller disc.
+  **The act button was missing and is now named in three places.** It has always existed (`KeyF`/`KeyJ`,
+  and a touch button that appears once a badge arms a tool) and no surface in the game had ever said so.
+  It is in the legend, in both control sentences (`controlsKeys` / `controlsTap`, which are the legend's
+  *accessible* copy — the row carries one hidden sentence, not a label per cap) and in
+  `COPY.a11y.canvasLabel`. `data.test.ts` asserts both sentences name it, because "you have not shown
+  for fire" is the kind of omission that comes back.
+  **Two findings worth keeping.** (1) The 5×7 font **had no `<`** — it has had `>` for CTAs since the
+  first pass — so a legend with a right arrow and a hole in it was the first raster. One glyph added
+  (the mirror of `>`), and `normalizeForPixels` now folds `\u2190` as well as `\u2192`, so arrow *copy*
+  renders too instead of losing a character. (2) The touch act pad was first drawn as `>` — **the same
+  glyph as the right-hand move arrow** — so the row read "> MOVE … > FIRE" and asked the player to tell
+  two identical glyphs apart. The real buttons separate on **size and shape**, both being discs, so the
+  legend does: `.beam-run__key--small`. `pixelMark` was generalised to `pixelGrid(rows, fill)` for the
+  jump disc, since the font has no `\u2B24` either and a font character would come from the host's
+  typeface — the same reason the receipt's tick is drawn.
+  **Rasterised** at 1280×720 and 390×844, keys and pads (`/tmp/brrender/screens2.mts`, extended to draw
+  the caps with their bevel and the title's value rule).
+  **Numbers:** **571 tests** (45 files), +1 net — the hook test became "leads the title screen with the
+  offer", plus a new one for the caps (three groups, four caps, one hidden sentence, every glyph drawn)
+  and the touch variant now asserts round pads instead of a tap sentence. IIFE **70.79 KB** gzip / ESM
+  70.30; site payload **71.3 KB** (+0.3 on the round above: the caps' CSS and one font glyph against four
+  deleted copy keys and two deleted rules). typecheck · lint · test · build · build:site ·
+  validate:levels green.
+  **Not verified:** the browser's own layout, and nobody has held a phone. The caps' minimum sizes are
+  frame-unit clamps checked arithmetically at 390 (22px caps, a 245px row that does not wrap) and in the
+  raster, not measured in an engine.
+  **Caught on the way out, and it is the one thing here that would have shipped broken:** deleting
+  `.beam-run__stake` / `.beam-run__stake-figure` with the hook **unstyled the 404 page**, which builds
+  its "404" out of those same class names — a build-time surface, so all 571 tests stayed green. The two
+  rules are restored and now belong to that page in the comment. `notFound.test.ts` gained a mechanical
+  guard (+1, **572 tests**): every `beam-run__` class in the page's markup must appear as a selector in
+  the stylesheet it inlines, so the next shared rule deleted with its last in-game caller fails loudly.
+  Final numbers: IIFE **70.82 KB** gzip / ESM 70.33, site payload **71.3 KB**.
+
+---
+
+## Pass — a secret tunnel in the Tech Park, and a brick breaker under it: THE GROWTH FLOOR
+
+**The ask** (owner, one brief): put a secret tunnel in the ANSR Tech Park screen with a marker that
+subtly indicates there is a way in; behind it is another level, a **brick breaker**. The player falls
+in from the top centre onto the bottom centre of the floor; after 3-4 seconds a wall of floating,
+fixed, colour-coded blocks appears, some carrying text; 1-2 seconds before it, a rectangular tray and
+a skateboard fall and the character auto-equips them; an **ANSR logo is the ball**, with proper
+physics — it bounces off the tray, vanishes when the player misses it, lies on the ground for a
+moment and is replaced, and the game continues from where it was; the blocks are an optimum size,
+neither large nor thick; when the wall is down the same tunnel starts **sucking in a straight line the
+width of the tunnel**, and the player has to walk into it to be taken back up to the Tech Park. Make
+the screen refined and polished, keep the 8-bit direction but not the other screens' palette, and
+**name the stage**. The meaning: this is where we show what ANSR does *after* a GCC is set up.
+
+### The one decision everything else follows from: it is not a screen
+
+`levels.json` has six screens, the six `monthsBase` values sum to the benchmark, the validator
+requires a badge ahead of every obstacle, every screen is introduced by a briefing card, and every
+screen's name reaches analytics and the receipt. A seventh screen would have touched all of that —
+for a room most players will never open. So the bonus is **a stage inside one visit to the Tech
+Park**: `Simulation` holds a `BrickBreaker | null`, and while it is non-null it owns the step. The run
+stays `PLAYING` on screen 5 the whole time.
+
+That also settles the stakes, and the stakes are the model. HANDOFF §4.1: the run has two stakes and
+they measure the same thing. A secret that could take a life would hide the argument's own currency
+behind a door most players never find; one that *paid* months would make the benchmark a matter of
+finding a secret. So **the stage books nothing and cannot cost anything**, and `bonusStage.test.ts`
+says so in four ways (months, lives, log, capabilities).
+
+Three consequences worth writing down, because each of them was a defect first:
+
+- **The Tech Park's `winTrigger` is at x 1040 and the bonus room is 1280 wide.** Falling through to
+  the tail of `updatePlaying` meant walking right in the plant room *finished the game*. The bonus
+  branch returns before every exit, win-trigger, fall and hazard check, and there is a test whose only
+  job is to walk right in there for twelve seconds and still be `PLAYING`.
+- **It is entered on the act button, never by walking over the mouth.** This is the payoff screen, and
+  every one-tap auto-run player crosses that column: a hole they fall into would take the arrival away
+  from people who did not choose it. `canEnterTunnel` (standing, on the mouth) is also the whole of the
+  reveal — it lights the hatch, prints the prompt, and on touch it is what makes the act pad appear.
+- **`loadScreen` clears it**, so a reset or a lost life cannot leave the plant room under screen 0.
+
+### The stage: "The Growth Floor"
+
+A place, like every other name in the game (Head Office · Compliance · Workplace · Tech Park), and the
+place is one floor under the arrival: the centre the player has just spent six screens building,
+running. Under it, one line — **"LIVE IS WHERE THE WORK STARTS"** — which is the argument the six
+screens have no room for, and which shares no word over three characters with the name above it (the
+rule the six briefs follow). Both are painted on the frame rather than on a briefing card: the six
+screens stop the run to introduce themselves, and this one is *found* — a card would announce the
+discovery back to the player who just made it.
+
+The wall is the content: **24 blocks, 6 × 4, colour-coded by row**, read bottom-up in the order the
+ball takes them — footprint (cyan) · people (mint) · capability (violet) · run it better (magenta).
+Fifteen of them carry the owner's words; the blanks are staggered so the wall is not a table.
+
+### Numbers that are numbers, not taste
+
+- **Block size is decided by the type at one end and by the room at the other.** A label is set at
+  scale 2 (below that, bitmap type is texture) at a 14-character measure = 166px, and the longest word
+  in the owner's list is TRANSFORMATION, at exactly 14 — so **176 wide** is as small as the words
+  allow. **40 tall**, not 34: at 34 a two-line label centred with 2px of margin put its bottom row on
+  the block's own shade course. And a **16px line pitch, not 14** — a scale-2 glyph *is* 14 tall, so
+  14 is zero leading and ADDING / CAPABILITIES rasterised as one crushed block of type.
+- **Six columns of 176 with 10px gaps leave a 47px lane inside each side wall, and the lane is
+  load-bearing in both directions.** Closing it (186×14, wall spanning the full room) trapped a mark
+  served out of the ceiling *above* the wall, chewing blocks on its own: the stage played itself. But a
+  47px lane was a soft lock in the first cut, because a mark returned straight up can rattle in it for
+  ever without meeting a block. Which brings us to the one real bug in this pass.
+
+### The soft lock, and the two lines that fix it
+
+The exit is an empty wall. So a rally that cannot break another block is a room the player can never
+leave — the same family as the pocket the Compliance staircase paid for, and worse, because there is no
+way to die out of it either.
+
+A probe of 27 policies (tracking · predictive · react-only, three dead zones, three start offsets)
+found **six of them still going at 300 seconds with up to 16 blocks left**. Cause: a paddle centred
+under the mark returns it *vertically*, and a vertical mark in a column that has been emptied is a
+closed orbit between the tray and the ceiling.
+
+- **`PADDLE.MIN_BOUNCE_DEG`** — the mark is never returned straight up. A dead-centre hit leans the way
+  it was already going.
+- **12 degrees was not enough, and that is the second finding.** Any non-zero minimum kills the orbit,
+  but 12 leaves 210px of drift per round trip — about one block — so a player who simply parks under the
+  mark clears the wall left to right and then spends half a minute in the half they have already
+  cleared. Measured: at 12 the tracking runs took **89s with ten watchdog nudges**; at **20** (364px,
+  two blocks) they take **39s with one**.
+- **The same floor applies to the serve**, because a rule about the ball's angle that only the paddle
+  enforces leaves the one bounce nobody controls able to break it.
+- **`BALL.STALL_NUDGE_AFTER` (5s) + `NUDGE_DEG` (18)** is the belt to that braces: five seconds without
+  touching the wall is not a rally, so the mark is turned until it is. It has its own counter so the
+  host can sound it — something moving on its own with nothing to hear reads as a defect.
+- And the nudge needed the *same* clamp it was written to enforce: rotating a mark that is already at 20
+  degrees by 18 can land it at 2, which is precisely the orbit. Right in code, wrong in effect, and only
+  a test that measures the ball on **every** frame catches it. `keepAngleHonest` is now the one place a
+  direction is allowed to be chosen.
+
+After all of it: **25-40s for a player who follows the mark, 50-130s for one who only reacts when it
+falls, no stalls in 27 policies.** An idle player who never touches the controls still finishes, in
+**132s with 33 misses** — misses are free by the owner's own rule ("a new logo shows up continuing the
+game from where it was"), so the gradient is skill making it 4× faster rather than skill being the
+difference between finishing and not. Flagged in `docs/OPEN.md`.
+
+### The rest of the model
+
+- **The tray is carried above the head**, not pushed along the floor. That is legibility before it is a
+  picture: a paddle at foot level puts the hero's own body in the ball's lane, so every rally would be
+  played through him. Held up, the bounce line is 26px clear of his drawn crown and the one thing in the
+  room that is not a block stays readable.
+- **The tray is released over his own column**, falls, lands and slides to him over `EQUIP_SLIDE` — a
+  gift that lands somewhere else and slides across the room reads as a bug, and one that teleports into
+  his hands is not a delivery. Equipped at ~2.4s against a wall that appears at 3.6s: **1.2s**, inside
+  the owner's "1-2 secs before" and tested (it fails under 0.9s; at `TRAY_AT` 2.0 it was 0.7s and the two
+  events read as one beat).
+- **The skateboard is a number**: `SKATE_SPEED_MULT` 1.25, so 260 → 325 px/s. It is the only place in
+  the game the player is quicker than the run.
+- **Jump is masked for the whole stage.** The tray is over his head, so a jump would take the bounce line
+  with it, and there is nothing in the room to jump onto.
+- **The ball is a breakout ball, not a falling body**: constant speed, pure reflection. Gravity on top of
+  it would make every miss the room's fault rather than the player's, and the serve is already a drop.
+  Speed 470 rising 6 per block to a 620 cap.
+- **The tray is deliberately forgiving**: any contact while the mark is falling counts as a top hit. This
+  is a bonus stage in a game about being helped; a pixel-exact paddle would be the only thing in it that
+  punishes.
+- **The shaft is one number at both ends.** `BONUS.ROOM.TUNNEL_W` is 80 and the hatch in `levels.json` is
+  two tiles, so the shaft he falls down is the shaft that takes him back up — the owner's "sucking in a
+  straight line, the width of the tunnel" is not a second measurement. The draught never expires, it only
+  carries him **while he is inside the column**, and it is the one place in this stage where the room
+  moves the player.
+
+### Art, and the five defects only the raster found
+
+Own palette, as asked: **indigo**, because it is a plant room under a plaza and because the four block
+hues have to separate from each other *and* from the ANSR mark that breaks them. Orange appears nowhere
+except the mark itself, so the only warm thing on the frame is the thing the player is hitting the wall
+with. Two equipment racks with mint LEDs are the only thing in the room that says *why* it exists: the
+centre is downstairs and it is running.
+
+Rasterised with `@napi-rs/canvas` (`/tmp/brrender/growth.mts`), five frames plus the hatch. What the PNGs
+caught, none of which is visible in the code:
+
+1. **The break flash was a pale 176×34 rectangle on the block's own footprint** — a grey slab sitting in
+   the wall, i.e. light-as-an-object at brick size. It is an expanding **outline** now, which reads as a
+   shell coming apart and costs four fills. A test measures it (no pale cell may be block-sized).
+2. **The suction was seven 20px chevrons at 0.2-0.7 alpha up a 600px shaft** — specks of dirt on the back
+   wall, and this is the only way out of the room. It is a **column** now: the whole 80px lane tinted,
+   a bright rail down each edge, 30px chevrons at full alpha, a lit patch of floor. (And the chevrons
+   were 8px off-centre, because the offset was hand-written for a grid width — hence `upChevron`.)
+3. **The dado register was a flat fill** — 170px of untextured indigo across a laid wall read as a big
+   empty box hanging in the room. It is brickwork one value down.
+4. **The stage printed its own name twice**, once at scale 4 in the middle of the frame and once
+   stencilled on the floor. The stencil fades up exactly as the title fades out.
+5. **The hatch read as a bench.** A frame all the way round the slot, 4px proud of the paving with a lit
+   top rail, is a silhouette with a back and a seat. What reads as a hole: nothing above the ground line ·
+   the far inside wall in near-black · the **near lip lit** · side cheeks only · and two ladder rungs
+   going down out of sight, which is "you can get down there" said with no arrow at all. Plus: the prompt
+   plaque at 74px landed across the hero's chest — he is standing *on* the thing being labelled, so this
+   is the one plaque in the game whose clearance is measured against the player. It is at 118 now, and the
+   key is a **cap** rather than a letter in the sentence ("F  DROP IN" reads as a word beginning with F).
+
+### The HUD comes off, and that is an accessibility decision
+
+The wall spans the full frame, the delay log's four rows hang over its right-hand column, and the
+rasteriser has no HUD — the same trap the deleted archive wall paid for. But the better reason is that
+**nothing down there can cost a life or a month**, so a lives plaque and a delay log would be furniture
+that lies. So the plaques go.
+
+`setVisible(false)` was the wrong lever: it sets `display: none` on the wrapper, and the `aria-live`
+region lives inside it, so hiding the HUD outright would have dropped every announcement this stage
+makes — for exactly the players who need them. `Hud.setBare()` hides the two stacks and keeps the
+wrapper, and the stage announces three things: what the room is and how it is played, the wall coming
+down, and that the shaft is drawing.
+
+### The touch call, caught after the rasters and before the tests were finished
+
+**One-tap auto-run had to come off in there**, and it is the biggest usability call on the feature.
+Auto-run synthesises "right" every frame and it is the *default on touch* — most of this audience — so an
+auto-running player would have arrived in a room that is played by moving both ways under a ball and been
+pinned against the far wall with LEFT as their only control. `Game` turns it off on `onTunnelEnter` (and
+gives the pad both arrows back), and restores it on the way out **from the assist controller rather than
+from a flag remembered on the way in**: the pause menu is up in there like everywhere else, so a player can
+change the setting while they are down a shaft. One-tap means "you never have to press forward", and this
+room has no forward — the same distinction that kept the BACK button on the auto-run pad for the Compliance
+badge.
+
+### Sound: six edges, no new cues
+
+`world/BrickBreaker.ts` counts (`serves` · `paddleHits` · `wallHits` · `breaks` · `losses` · `nudges`)
+and `Game.syncBonusAudio` sounds the difference, exactly as the three hazards do. Every cue already
+exists: the shaft breathes (`hush`), the mark lands on the tray like shoes on a floor (`land`), it knocks
+off masonry (`stampDud` **at 0.35** — it happens several times a second and at full level it is a drum
+machine, which is what screen 1's four stamps taught), a block goes with a `pickup` blip, a miss
+evaporates (`steam`), the wall coming down is a `screenClear`, and the shaft taking him home is the
+`badge` arpeggio, because being carried back up is ANSR doing the work. A bonus stage is not worth a byte
+of the audio budget.
+
+### Numbers
+
+**607 tests** (48 files), +35: `world/BrickBreaker.test.ts` (15 — the room, the sequence, the mark, and
+"it can always be finished"), `render/brickBreaker.test.ts` (11 — the words fit the blocks, no block-sized
+flash, the shaft is a column, the hatch is a hole), `core/bonusStage.test.ts` (9 — it costs nothing, it
+cannot be fallen into, it cannot win the game, it hands the plaza back). `driveToScreen` takes
+`SimulationOptions` now, so a test can watch the two tunnel events.
+
+IIFE **77.5 KB** gzip / ESM 77.0; site payload **79.8 KB** (+8.5). That is **86% of the 90 KB budget**
+with ~12 KB of headroom, and it is the price of a whole extra level — no prose leaked (grepped: the
+tunnel's own note is stripped by `strip-level-notes.ts` in both builds, and the only new strings in the
+bundle are the ones that are *drawn*). typecheck · lint · test · build · build:site · validate:levels
+green; `analyze` still reads the sum of both payloads (`docs/OPEN.md` §1).
+
+**Not verified:** nobody has played it. The three figures that want a hand are the ball's speed, the tray's
+width and whether the hatch is findable without being told — a marker that is subtle on a 1280 raster may
+be invisible on a phone.
+
+## Pass — the mark is fired out of a cannon, and the down arrow opens the hatch
+
+**The ask** (owner, two notes on The Growth Floor, the secret stage under the Tech Park):
+1. "The ball should come from one of the cannon that throws it because right now because it is coming
+   from the top while dropping it's breaking some of the bricks automatically, and the first time the
+   ball should come a bit late so the actual person has some time to see the screen and understand."
+2. "We don't need to press the f button, instead the down arrow can do the work."
+
+### 1. The serve was opening the wall on the room's behalf, and it was geometry, not feel
+
+The first cut served the mark out of the tunnel mouth — the same 80px shaft the player falls down. That
+mouth is at **x 640**, and the wall spans **87..1193 across and 132..322 down**: the serve therefore
+started *inside the wall's own footprint*, above the middle of it, and took two or three blocks out on
+the way through before the player had touched anything. The owner read that as the game breaking bricks
+by itself, which is exactly what it was. Worse, it inverted the wall's own argument: the four rows are
+authored to be read **bottom-up** (footprint → people → capability → run it better, the order a GCC
+actually grows in), and a mark falling through the middle opened the capability and people rows first.
+
+**The fix is two cannons on the floor, one in the lane inside each side wall, alternating.** The mark
+is fired *up* and towards the middle of the room, so the first thing it can reach is the bottom course.
+Numbers, and each one is pinned:
+
+- **Placement.** The lane inside each side wall is 47px (that lane already existed, and it was already
+  load-bearing twice — see the `BRICKS.W` note). A 44px carriage fits it, and it is the only floor in
+  the room with no wall overhead. The cannons are **solid**, because a machine the hero walks through
+  is scenery and this one is the thing serving him. **It costs him nothing**, which is the only reason
+  it is allowed: the tray is clamped to `PLAY_LEFT + PADDLE.W/2` = 106, and a player stopped by the
+  left carriage still centres at 110, so the tray's reach over the lane is unchanged. (It does move one
+  number in a test: `bonusStage.test.ts` used to assert he ends up flat against x 1240 when he holds
+  right; he now stops at the right cannon's face, 1193. The claim that test makes — that walking right
+  in the plant room must not trip screen 5's win trigger at x 1040 — is untouched.)
+- **Angle.** `CANNON.LEAN_MIN/MAX` = **24..38 degrees from vertical**, leaning inboard, seeded per shot.
+  The floor is `PADDLE.MIN_BOUNCE_DEG` (20) with a margin, for the same reason the tray obeys it: a mark
+  with no horizontal component is a closed vertical orbit and the only way out of this room is an empty
+  wall. The ceiling is arithmetic: at 38 degrees the mark drifts 198px while climbing the 254px from the
+  muzzle to the bottom course, so it is still under the first or second column when it arrives.
+- **A tell.** `CANNON.AIM` 0.9s: the barrel lays itself at the angle it will fire on, a three-cell
+  charge gauge fills on the carriage, and the mark shows in the muzzle. A gauge rather than a blinking
+  lamp, because the player needs to know *when*, not just *that*. `CANNON.RECOIL` 0.3s pushes the barrel
+  back down its own axis and flashes the muzzle. **The flash is cool, not warm** — the only warm thing
+  in this room is the ANSR mark, and an orange flash would put a second one on the frame on the exact
+  frame the first appears.
+- **Measured.** A tracking player now clears the wall in **31.9s** (it was 39s), one serve, no losses,
+  and the watchdog is still not needed. The determinism, angle-floor and always-clearable sweeps all
+  still hold.
+
+**The barrel is stepped cells, not `ctx.rotate`**, and it needed a second pass to read: a single run of
+mid-value cells on a mid-value wall rasterised as a thin dark stick. A dark cell one size up under each
+face cell fixed it — **an angled sprite needs its keyline more than a square one does**, because half of
+every cell's edge is a corner rather than a side. Caught in the raster, invisible in the code.
+
+### 2. The first mark now comes at 7.6s, not 4.8s
+
+The wall finishes building at 4.32 (`BRICKS_AT` + 4 × `ROW_REVEAL`). 4.8 was long enough to watch it go
+up and not long enough to read a word on it — and this is the one room in the game a player arrives in
+having *fallen through a hole in a pavement*, holding a tray nobody offered them, in front of fifteen
+phrases that are the whole point of the stage. `BEAT.SERVE_AT` is **7.6**, i.e. 3.3s of reading, and the
+cannon's 0.9s of aiming lands inside the last of it so the wait ends with something to watch. **Every
+later serve is unchanged** (`BALL.RESPAWN_GAP`): the room only has to be learned once.
+
+### 3. The down arrow acts
+
+`ArrowDown` is mapped to `shoot` alongside `KeyF`/`KeyJ`. It cost nothing: **nothing in this game
+crouches**, so the down arrow had no other job, and it was already in `PREVENT_DEFAULT` (which is the
+other half of not scrolling the host page with it). The hatch's prompt cap is now **↓** rather than F,
+which needed a new glyph in the 5×7 font — authored under `\u2193` and not under a letter, because
+`drawText` upper-cases everything it is handed and a lower-case stand-in would fold into a word. Third
+character in that font that exists for one caller, after `>` and `<`.
+
+F still fires everywhere, including the hatch, and nothing advertises it on the hatch any more. Left
+alone deliberately: the title screen's legend and `canvasLabel` still name F as the act key, because F
+is the act key game-wide and the down arrow is the one place the action has a *direction* in it. Whether
+the legend should name both is `docs/OPEN.md` §25.
+
+**Green:** 611 tests (48 files), typecheck, lint, build, build:site, validate:levels. IIFE **78.25 KB**
+gzip (77.5 → 78.25, +0.75 for the cannons and the glyph), site payload **81.07 KB** — 87% of the 90 KB
+budget. Headroom is 11.75 KB and it is still the thing to watch.
+
+## Pass — the cannon goes on the wall and throws to the tray, and the board gets twice as quick
+
+**The ask** (owner, one note, three parts): "Place the cannon on the side wall hanging so the user
+catches it and mostly it should fall on the tray but sometimes away but still around the tray, and make
+the character faster it's too slow to catch up with the ansr ball we have, and make the cannon look
+better and more refined."
+
+### 1. The serve stops being a direction and becomes a throw with a destination
+
+The floor cannons from the previous pass fired *up and inboard* at a seeded angle: correct (the wall was
+no longer opened by the room itself) but still a shot the player had to go and meet. The owner's note
+turns it round — the mark should be **thrown to the player**.
+
+- **The machines hang off the side walls at `MOUNT_Y` 356**, and that number has no freedom in it. The
+  throw has to reach the tray without meeting a block, and the only band in the room where that is true
+  is between the bottom course (322) and the bounce line (540). Above it the shot crosses the wall;
+  below it there is no room to aim. So the machine hangs in the band and the throw passes under the
+  brickwork.
+- **The far machine throws.** Not an alternation: the one on the other side of the room puts the mark in
+  the air for 1–2.4s, which is the time the player needs to place the tray. The near one would drop it
+  190px onto somebody's head.
+- **Where it lands is a decision.** `takeAim` reads the tray at the *start* of the wind-up and aims at
+  its middle plus a seeded offset: `CANNON.ON_TRAY` (0.68) of throws land inside ±44 — a catch without
+  moving, since tray-plus-mark is ±86 — and the rest inside ±118, which is a step. Clamped off the side
+  walls, because a throw laid into a corner is one the tray cannot get under.
+- **The aim is laid before the shot and the barrel *is* the aim.** The shot is planned at
+  `nextServeAt - CANNON.AIM`, so what the player watches for 0.9s is the actual trajectory — the machine
+  is not decorating, it is telling them where to stand.
+- **The aim point is 6px INSIDE the tray, not on its top face.** A throw laid exactly on the bounce line
+  arrives with its box bottom at 540 against a paddle top of 540 — a tangent, not an overlap — so it can
+  pass through the tray it was aimed at. Six pixels of overlap is the whole fix.
+- The cannons **left `solids`**: hung 190px over the walking line, the hero passes under them, so the
+  question the floor pair raised (a machine you can walk through is scenery) disappears, and the room
+  gets its full width back.
+- Measured, 27 policies: clear in **33.5s min / 41.6 median / 60.8 max, and zero misses**. The throw is
+  catchable, which is what the owner asked for.
+
+### 2. The board is twice as quick
+
+`PADDLE.SKATE_SPEED_MULT` 1.25 → **2.0**, i.e. 325 → **520 px/s**. The number it is measured against is
+the mark's own horizontal pace: at the 620 cap off a 55-degree edge hit that is 508, so the board now
+matches the fastest sideways the mark can ever travel. At 1.25 it could not, and the rally was a chase
+the player was structurally losing. The multiplier scales `GROUND_ACCEL` too, so the answer off a
+standing start moved with it. (The old comment claiming 1.35 was a ceiling was written when the serve
+came out of the ceiling and the tray only had to cover the middle of the room.)
+
+### 3. Two hours of the pass went on one clamp, and it is the finding worth keeping
+
+Moving the throw onto the tray made the room **unclearable for a player who never moves**. A parked tray
+can only return the mark up its own end, so the far columns stand: 1 to 3 blocks left after ten minutes
+of holding one direction. That is not a taste question — "a room whose only exit is an empty wall must be
+provably clearable" is an invariant, so the throw needed a valve.
+
+`CANNON.RESCUE_AFTER` (5): after five marks lost **with no block down**, the machine stops throwing to
+the tray and throws at the wall — the lowest block far enough across to keep the shot off the vertical,
+and *the machine is chosen for the block* rather than the block for the machine (with the survivor
+directly overhead, the far machine has no legal line and the shot came out vertical). It is visible
+rather than hidden: the barrel swings up off the tray line onto the brickwork, which reads as the plant
+getting on with it. It cannot fire in real play — 27 policies clear the wall with zero misses.
+
+And then it still did not work, for a reason that was right in general and wrong here: the wall throw ran
+through `keepAngleHonest`, which enforces **both** floors, and the `MIN_VY_FRACTION` one bent a shot laid
+at 2 degrees off the horizontal up to 20 degrees. It sailed over the block. Every time, identically —
+seeded, so the same miss for ever. Split into `keepOffVertical` (the sideways floor, which *every*
+direction obeys because a vertical is a closed orbit) and `keepAngleHonest` (that plus the vertical
+floor, which is a rule about the mark **in play**: it stops a shallow paddle return skimming the ceiling,
+and a throw is not a return). With that split: idle clears in **163s**, hold-left 49s, hold-right 87s,
+against ~35s for somebody playing. Skill is worth 2–4x again, and there is a test whose only job is to
+stand still for five minutes and finish.
+
+### 4. The machine, drawn: five parts and three defects fixed in the raster
+
+Plate with four bolts · strut and gusset · yoke with a hub · barrel · magazine. Refinements, all of them
+found in the image and none visible in the code:
+
+- **`EDGE_LIT` is this machine's highlight, and it is the brightest metal in the room.** Lit like the
+  ducts and the racks it hung directly over a rack's own top rail and read as one more pipe fitting.
+- **A constant-width tube, not a taper.** Cells shrinking 18 → 14 along a diagonal frayed into a ragged
+  wedge: a step that changes size at the same time as it moves has no edge that lines up with the step
+  before it. One width, then a collar at one end and a **mouth** at the other — a lit frame round a dark
+  bore — and the two ends do all the tapering the eye needs.
+- **Nine cells at 4px, not four at 7.** On a shallow line the *spacing* sets how coarse the stair is, and
+  a barrel that can be laid nearly flat has to survive its flattest angle.
+- **The lit rail goes on whichever side of the axis is up.** Hand-picking one perpendicular lit the left
+  machine on top and the right one underneath — light from two directions in one room.
+- Bolts are a **lit face with a dark notch**, never a dark hole (a dark square on a mid plate is a window
+  into the wall, which is the opposite of a fixing), and the loaded mark sits **inside** the bore rather
+  than filling it, or the aperture stops reading as one.
+- `BARREL` 46 → **56**: at 46 the whole machine read as a fitting in the corner, and it is the thing the
+  player watches for two seconds before every throw.
+
+**Green:** 612 tests (48 files), typecheck, lint, build, build:site, validate:levels. IIFE **79.07 KB**
+gzip (78.25 → 79.07), site payload **81.88 KB** — 88% of the 90 KB budget, ~11 KB of headroom.
+
+---
+
+## Pass: the wall says where you are, the powerup is called a powerup, and the broken room can be heard
+
+Owner, five notes in one message, and four of them are copy. Nothing structural changed: no geometry, no
+physics, no level data, one new getter and one rebuilt sound. The interesting part of the pass is that
+**two of the five asks were already "done" in the code** — and both were genuinely wrong anyway, for
+reasons the code could not show.
+
+### 1. The Head Office wall sign: "MARKET ENTRY: ON PAPER" → "HEAD OFFICE"
+
+The board hanging under the lobby soffit was carrying an *argument*: on paper, this all looks fine. It
+was a good line, and it was on the wrong object. A directory board in a lobby names the building — that
+is the whole of what that piece of furniture does — and the verdict it was making is already made twice
+on the same screen: the briefing card says "Every plan looks clean from the lobby.", and the three
+labelled steps (BUSINESS CASE · BOARD APPROVAL · BUDGET) are the joke in physical form. So the sign was
+the third statement of one idea, in the one place the player looks to answer a different question.
+
+Rasterised at 1280 (`/tmp/brrender/s0.mts`, existing harness): `drawLabelPlaque` sizes itself from the
+string, so 11 characters instead of 21 is simply a smaller sign, still centred at `W * 0.5`, still under
+the soffit, still clear of the lit feature bay below it. No layout work needed.
+
+**Accepted cost, written up as `docs/OPEN.md` §26:** the HUD stage plaque also says "Head Office", so
+the name is now on the frame twice, which is the exact defect this build has caught three times in
+rasters (COMPLIANCE over "compliance does not run in a straight line", WORKPLACE over "the workplace is
+not", CONTINUE under a cap labelled Continue). The argument for leaving it: those three were all *chrome
+over chrome*, two strings in one centred column. This is an object in a room, 100px up a back wall,
+behind the play — and a lobby whose sign named anything else would be a lobby in someone else's
+building. It is flagged rather than decided.
+
+### 2. The Workplace brief: a line that was true one screen too early
+
+"The team is ready. The floor is not." — the best of the six briefs as a sentence, and wrong in
+position. **Hiring is stage 4 and the Workplace is stage 3.** The run has not recruited anybody when
+that card is shown, so it promises a team out of nowhere, and the next card ("Talent never waits, and it
+never plays fair.") then reads as a contradiction of the one before it rather than as the next problem.
+
+It says **"The lease is signed. Nothing works yet."** Same gap — the enablement gap — named through the
+*property* rather than through the people: the site is committed, signed, paid for, on the plan, and
+none of it works. It names nobody, which is what makes it survive being a screen early, and it is the
+language a buyer uses about this stage of a programme. Checked against the card's own constraints, all
+of which are tested: 39 characters (ceiling ~50), wraps at the 26-character measure to "THE LEASE IS
+SIGNED." / "NOTHING WORKS YET." — 20 and 18, well inside the 2:1 balance test — no apostrophe, and no
+word longer than three characters shared with the stage label WORKPLACE above it. Rasterised with the
+existing `card2.mts` harness.
+
+The permanent rule: **read the six briefs in order as one paragraph.** They live in one object where the
+others are 40 lines away, and this defect is invisible in the file and obvious in sequence.
+
+### 3. "ANSR badge" → "powerup" on every surface a player reads
+
+Three strings: `lifeLost.retryHint` ("Take the ANSR powerup"), `gameOver.advice` and `a11y.outOfLives`.
+Nothing in `src/` was renamed — the ask was about wording, and `BadgeType`, `badgeFloat`, `badgeDrop`,
+`badgePerch`, `badgeCeiling`, `badgeBox` and several hundred comments are internal vocabulary no player
+can reach. That is a real inconsistency and it is written up as `docs/OPEN.md` §27 rather than pretended
+away; the invariant now says which side of the line a new string is on.
+
+One measurement, because the new word is two characters longer and the closing screen is the surface
+this build has broken most often with copy: at the 26-character measure the advice still wraps to two
+balanced lines — "TAKE THE ANSR POWERUP AND" (25) / "THESE MONTHS NEVER HAPPEN." (26). The word got
+longer and the picture did not change.
+
+### 4. The retry card's line, on a screen with no powerup on it
+
+The ask was "from the intro screen of ANSR tech park remove the line take the ANSR badge". Grepping
+`dist-site/` first (the rule that saved a pass three passes ago) found exactly three occurrences of that
+sentence, and the only one that can appear on a *title card* is the retry hint — `Game` prints it
+whenever `sim.retrying`. So the line is not authored on the Tech Park at all: it is the retry hint,
+appearing on whichever stage was just lost, and the Tech Park is one of **two** screens that carry no
+mark at all (Head Office is the other, both by earlier owner calls).
+
+Fixing it as "not on screen 5" would have been a coincidence. The real rule is that **a coaching line
+has to be honoured by the screen it is printed on**: with nothing to collect, "take the ANSR powerup" is
+advice the room cannot obey, and it reads as a rule the player has already broken. New getter
+`Simulation.screenHasPowerup` (the level's own `badge` field, so the card can never disagree with the
+screen) and the host gates the hint on `retrying && screenHasPowerup`.
+
+Deliberately **not** `badgeBox !== null`, and that distinction is the trap: `badgeBox` answers "is it
+collectable on this frame", which is null on a taken mark and null while a delivery is in the air (the
+Hire Under Fire drone, the Workplace's ceiling drop). A card shown *before* the stage starts needs the
+level's shape, which is constant for the whole visit. One test, which also asserts the mark staying
+"present" after collection.
+
+### 5. The spark sound the game already had, and could not be heard
+
+"Add spark sound in the workplace screen when things are not fixed." It was there: `AudioEngine`'s
+`spark` cue, `Workplace.isSparking` gated on the same `restore < 0.5` the renderer draws the arc from,
+a host-side timer in `Game.syncWorkplaceAudio` because the sparks are drawn off a render hash and have
+no sim clock, a line in `SCREENS.md`, and a test. Everything about the wiring was right and the owner was
+right too.
+
+**The energy was in the two bands nothing reproduces.** The cue was a 120 Hz square at 0.08 gain plus
+three 35ms bandpass bursts at **Q 4** centred 3000–4800 Hz. The first is below what a laptop or phone
+speaker can move; the second is a needle up where those speakers are already rolling off, and 35ms of it
+is barely an event. It measured as a cue and played as silence.
+
+Rebuilt as what an arc actually is — a snap with a tail, three times:
+- buzz keeps its 120 Hz body and gains its **octave** at 240 (the lowest genuinely audible thing on a
+  phone), 0.14/0.10 gain;
+- each crack is a **wide** burst, Q **1.1** instead of 4, falling 5200 → 900 over 70ms, gain 0.5 — width
+  is what gives a burst a body instead of a whistle;
+- a square tick under each one, 2000 → 700 Hz, which is the transient and is also what keeps the cue
+  alive on a host with no noise source (the `AudioContextLike` noise half is optional by design).
+
+`SPARK_INTERVAL` 1.7 → **1.5s**, so the first arc lands inside the walk from spawn (~2.5s to the mark)
+rather than after a quick player has already fixed the room. It is still the longest gap of any
+repeating cue in the game, and still the quietest thing on that screen relative to the `chime`:
+**audible and ignorable are different axes**, and confusing them is how the cue got written this way in
+the first place ("quiet on purpose" is in the original comment).
+
+Worth stating plainly for the next session: **there is no raster equivalent for sound.** Every other
+class of defect in this build was caught by looking at a picture; this one could only have been caught
+by a pair of speakers, and it survived a pass whose entire subject was giving that screen a voice.
+
+### Green
+
+613 tests (48 files, one new), typecheck, lint, build, build:site, validate:levels. IIFE **79.09 KB**
+gzip (79.07 → 79.09), site payload **81.40 KB** (81.88 → 81.40 — the deleted sign string and the shorter
+brief pay for the longer word). `analyze` still reads 154 KB and still fails, for the documented reason
+(`docs/OPEN.md` §1: it sums both output formats). Verified in the built bundle: no occurrence of
+"MARKET ENTRY: ON PAPER" and no occurrence of "Take the ANSR badge" in `dist-site/`.
+
+---
+
+## Pass: the hint stops following the player, the out-of-lives screen gets a shape, the secret stage gets a name, and the mark turns
+
+Four owner notes, in the order they arrived. Two of them were copy or composition; one was a bug that had
+been shipping for several passes and had nothing to do with the code everybody would have looked at; and
+one was an art change whose two halves cancelled out until a raster said so.
+
+### 1. "Take the ANSR powerup" was on every briefing card after the first death
+
+**The report.** By default no introduction carries the line; once the player dies, *every* later screen's
+introduction carries it. Only the retry should.
+
+**Everything that looked guilty was innocent.** The model says the line is `Simulation.retrying &&
+Simulation.screenHasPowerup`. `_retry` is set in `setback()` and cleared by `loadScreen`, which runs on
+every retry, every advance and every reset; there is a test (`Simulation.test.ts`) that drives to screen 1,
+kills the player, asserts `retrying`, clears the stage and asserts `retrying` is false on screen 2. The
+host recomputes the hint in `syncUI` every rendered frame. `Overlays.show` keys the card on
+`label|brief|hint` so a changed hint always repaints, and it sets `titleCardHint.hidden = !data.hint`.
+Every one of those was correct, and the defect was real.
+
+**It was the stylesheet.** `[hidden]` is a **UA** rule — `display: none` — and it loses to any author rule
+that sets `display` on the same element. `.beam-run__advice` (and `.beam-run__brief`) are
+`display: flex`, being flex columns of bitmap SVG. So `el.hidden = true` set the attribute and changed
+nothing: the hint was painted once, on the card of the stage that took the life, and then stayed up for
+the rest of the run. Before the first death it was absent for the **wrong reason** — the element had no
+content yet, not because it was hidden — which is exactly why the report reads as "by default there is no
+line, but once I die…".
+
+The fix is one rule, scoped to the widget, with `!important` because the whole job is out-ranking a
+declaration further down the same file:
+
+```
+.beam-run [hidden] { display: none !important; }
+```
+
+Plus belt and braces: `show()` now **empties** `titleCardBrief` / `titleCardHint` when there is no line,
+because a hidden element holding its last text is one cascade mistake away from printing it again.
+
+**Then the fix had to be proved, and proving it moved it.** The first placement was near the top of the
+stylesheet, which is right per spec — an `!important` declaration with an extra class in the selector beats
+a normal one whatever the order. It was also **unprovable**: a jsdom probe reported `flex` with the rule in
+place. That is not a bug in the rule, it is jsdom's cascade, which takes the **last matching rule** and
+ignores specificity and `!important` entirely. Measured on the identical sheet: rule early → `flex`, rule
+moved to the end → `none`. So the rule is now the **last line in the file** — correct in a browser for two
+reasons and correct here for a third — and the comment says why, because it looks like a tidiness choice.
+
+A second thing the probe taught: **every rule in this stylesheet is scoped to `.beam-run`, and the tests'
+fixture is a bare `<div>`**. The real host sets that class on the widget root; `makeParent()` does not, so no
+scoped rule applies in the default fixture and the first version of the guard was measuring an unstyled
+document. The guard adds the class, injects the real sheet, and reads the computed `display` back — it fails
+with `flex` the moment the rule is deleted, which is the check a regex over the CSS text could never be.
+
+The retry-hint test also now walks the sequence that broke: card with no hint, card with hint, next stage's
+card, hint gone and empty.
+
+**The general form, into `docs/INVARIANTS.md`:** if you toggle visibility with the `hidden` attribute,
+every class on those elements is a place `display` can be re-declared, and the existing tests will not tell
+you (the old one asserted `.hidden === true` and passed throughout). The symptom of this bug class is always
+"it appears where it should not, and the code that decides is provably right".
+
+### 2. The out-of-lives screen had no design in it
+
+**The report.** The page after three deaths is not well designed and the proportions need sorting out.
+
+**Rasterised, the diagnosis is the win screen's from two passes ago, read from the other end.** The screen
+was four centred bitmap lines on one axis — the headline, a sentence ("3 DELAYS COST 6 MONTHS") at
+`clockStrong`, a two-line instruction at `advice`, and a cap — floating in the middle of an otherwise
+empty 1280×720 frame with `gap` doing all the work. Two things were wrong, and neither is a spacing value:
+
+- **the one fact that matters was not drawn as a fact.** Months lost to delays is the figure both end
+  screens close on, and here it was a *sentence* set within one step of the size of everything around it.
+  Headline 195px wide, cost line 570, instruction 530: no hierarchy, and the widest thing on the screen
+  was the smallest type on it.
+- **nothing on the screen had an edge.** Ragged centred lines have no mass, which is the exact finding
+  that rebuilt the win screen's left column into a panel.
+
+**So the fix is borrowed rather than invented**, which is the point: a caption on its own line
+(`gameOver.costLabel`, "What the delays cost"), then ONE panel in the receipt row's own fill and rail
+holding the months as a big orange numeral with its unit, `gameOver.fromDelays(n)` ("From 3 delays.") as
+its small print, and the argument divided off under a hairline. Loudness runs numeral → headline →
+argument → cap. The two end screens now report the run in the same words, the same specs
+(`PX_TYPE.figure` / `unitText`) and the same shape.
+
+Three things the raster decided:
+
+- **The rail has to hug what it encloses.** At the old stack width of 640 (and at 560) the panel left
+  ~110px of empty box either side of its widest line — a border drawn round nothing, which reads as a
+  panel that has lost its contents. The widest line inside is the instruction at its 26-character
+  measure, ~335px, so the column is **440**.
+- **The argument moved inside the panel and dropped a size.** It was `PX_TYPE.advice` (unit 0.24), the
+  last survivor of the title screen's deleted three-line hook. In the win screen's verdict slot the
+  equivalent line is `body`, and a sentence a third of the way down a panel cannot also be the
+  second-loudest thing on the screen. `PX_TYPE.advice` had no other caller and went with it.
+- **The months are printed once.** The small print is the delay *count*, never the figure again — the same
+  defect the win screen's "What cost you" heading was written to fix. `gameOver.cost(delays, months)` is
+  deleted.
+
+"These months never happen" still says *months* under a unit reading "months", and that stays: it is a
+**reference** to the number directly above it, which is the one licensed way to repeat a word in a column.
+
+Phone (390×844) checked in the same harness: 594px of content, gaps on their floors, nothing clipped.
+
+### 3. The Growth Floor is now THE ENGINE ROOM
+
+**The report.** The name is not going well, and the description line under it needs to be better — think
+like a copywriter who conveys more in less.
+
+Both halves were wrong for their own reason. **Growth** is the word every consultancy applies to
+everything, so it named nothing and pictured nothing. **Floor** is office vocabulary bolted to a room that
+is visibly plant: a services duct, cable runs, two racks of equipment with mint LEDs, brick. The name had
+to be checked against the *art*, not only against the meaning, and it had never been.
+
+**THE ENGINE ROOM** is what the picture already draws and what the fifteen phrases on the wall already
+argue — the machinery under the building, where the work that keeps a place running happens, which is what
+a GCC becomes once it stops being a project. Considered and dropped: *The Scale-Up Floor* (the same
+register with a hyphen in it), *Day Two* (true, and not a place), *Sub-Level 1* (a place that says
+nothing).
+
+The line went from **LIVE IS WHERE THE WORK STARTS** to **LIVE IS DAY ONE, NOT THE FINISH**. The old one
+put a subordinate clause in the middle and had no second half to land on; the new one is a contrast, and
+the comma is doing real work. 31 characters at scale 2 is 372px, centred, well inside the room's walls.
+
+Rasterised at 3.9s: name at scale 4 over the orange hairline over the line, and then the stencil on the
+floor once the wall builds. It reads, and it now agrees with the room it is painted in.
+
+Two structural notes:
+
+- **The name lives in two places on purpose** — `COPY.bonus.name` for the HUD plaque, `STAGE_NAME` in
+  `render/brickBreaker.ts` for the frame, because no render module imports `data/copy.ts` and none ever
+  has. A rename landing on one of the two is a room that disagrees with its own label, so both are now
+  exported and `brickBreaker.test.ts` asserts they are equal, measures both drawn lines against the font
+  and the frame width, and applies the briefing cards' no-echo rule to the line under the name.
+- **The symbols were renamed too** (`drawEngineRoom`, `drawEngineRoomProps`, `EngineRoomView`), which is
+  the opposite call to the badge/powerup split — and the difference is where the word lives. "Badge" is
+  300 sites of internal vocabulary no player reads; `drawGrowthFloorRoom` *is* the rejected name, in three
+  files. `docs/JOURNAL.md` keeps the old name wherever it was written, because it is history.
+
+### 4. The mark turns, and the two halves of "brighter" cancelled out
+
+**The report.** On every page where the ANSR logo is a powerup, make it rotate and a bit brighter so it is
+noticeable; in the secret screen rotate it too, on the higher side, but not so fast the logo stops being
+visible.
+
+**Rotation.** `drawAnsrBadgeMark` takes a `spin` in radians and hands it to `drawAnsrLogo` (which has
+turned the mark on the plaza and the attract facade since the first pass — this is not a new capability,
+it was simply never asked of the pickup). All four deliveries pass it: the rail, the drone drop
+(`render/carrier.ts`), the Compliance perch and the Workplace ceiling drop. Every one of them already
+receives a **phase in turns** from the host, held constant under `prefers-reduced-motion` — so the spin is
+`phase × turns`, reduced motion is free, and no new branch exists anywhere. The core backing does **not**
+turn with it: it is a square of whole cells, and a rotated grid of cells at 20px is anti-aliased mush.
+
+**Rate.** `MARK_SPIN_TURNS` 1 against the hosts' own 0.3 turns/s is one revolution every 3.3s for a
+pickup; `BALL_SPIN_TURNS` 4 in the secret stage is 1.2 rev/s. The ceiling is not taste: the sunburst
+repeats every 11.25 degrees, so once it advances more than about a ray-pitch per frame it samples onto its
+own neighbours and strobes — ~1.9 rev/s at 60Hz. Both numbers sit under it, with the faster one justified
+by being *a ball somebody has just thrown across a room*. The number is written into the constant with the
+ceiling beside it.
+
+**Brightness, and the finding that cost the pass.** New tones `#ff7a45` / `#ff9570` — the brand
+`#f05722` at the same hue and saturation, one step up in lightness. Rasterised against the shipped mark on
+screen 1's own backdrop, four phases each, cropped and blown up 4×, **the new one was dimmer.** The
+sunburst is ~32 rays, so at 40px each ray is about **one pixel** across: unrotated, the axis-aligned rays
+land on whole pixels and the mark is crisp, and at any other angle every ray is spread over two columns at
+partial coverage. The rotation was taking back more weight than the tone lift was adding, and both halves
+were individually correct — invisible in review, obvious in a PNG. This is the `ctx.rotate` warning the
+cannon barrel paid for, met from the other side: there, the answer was not to rotate; here the owner has
+asked for rotation, so the answer is to pay for it.
+
+The fix is a **second source-over fill of the same path** (`drawAnsrLogo`'s new `bold`, on only when the
+mark is spinning), which takes a half-covered pixel from 0.5 to 0.75 — most of the weight back for one
+extra fill and no change to the shape. Not a stroke: an outline round a 32-ray star closes the gaps
+between the rays. Re-rasterised, the new mark is brighter *and* the same weight as the old.
+
+The first lit tone was `#ffa88a`, and two things sent it back. It failed the test's own hue check (6.5
+degrees off the brand mark, because it was picked by eye), and at 4× in the indigo room it read salmon.
+`#ff9570` is the same lift at 72% lightness: 15.5 degrees, brighter than the `#ff8a4d` it replaces, still
+unmistakably the brand orange. `badge.test.ts` now measures the **relationship** — same hue within 4
+degrees, lighter on every channel than `#f05722`, red > green > blue, never `#FF5400` — rather than pinning
+a literal, because "brighter" is how a pickup ends up cream. The translucent form of the lit tone (the
+perch plinth, the secret stage's trail) is exported as channels and checked against the hex, since those
+two had already drifted from the mark once.
+
+### Green
+
+616 tests (48 files; three new: the `[hidden]` guard, the stage-name coupling, the mark's spin),
+typecheck, lint, build, build:site, validate:levels. IIFE **79.35 KB** gzip (79.09 → 79.35), site payload
+**81.61 KB** (81.40 → 81.61) — +0.25 KB for the extra fill, the spin arithmetic and the game-over panel's
+four repainted elements, against ~10.6 KB of headroom. `analyze` still reads over budget for the
+documented reason (`docs/OPEN.md` §1: it sums both output formats).
+
+Rasters, all in `/tmp/brrender`: `gameover.mts` → `z-gameover440.png`, `z-gameover-phone.png` (the rebuilt
+screen at 1280 and 390); `mark.mts` → `mark-strip.png` (old vs new mark, four phases, 4×) and
+`mark-frame.png`; `growth.mts` → `gf-arming.png` (the new title and line), `gf-rally.png` (the floor
+stencil) and `gf-ball.png` (the spinning mark at 4×).
+
+---
+
+## Pass — the Godzilla is rebuilt from reference, and its ending is rebuilt with it
+
+**Owner, one note in five parts, all of it screen 4 and all of it presentation:** "I want the godzilla to
+be made better, it's not looking good right now, it's very badly shaped — I am sharing two reference images
+you can see and learn from and give a better, more refined godzilla; and also the dying animation of
+godzilla is also bad, and the costume opening can also be made better, and the 5 candidates that come out
+can also be more refined and made better, and the fire animation can also be more refined and better."
+
+Two reference rasters came with it: a wide 8-bit city scene with a plated beast in profile, and a small
+upright sprite with a heavy tail and a cyan-lit dorsal ridge. What both of them have that the shipped
+animal did not is **a silhouette with parts**: a skull you can point at, a neck narrower than both, plates
+that are plainly separate objects, and legs with room between them.
+
+Nothing in `world/` or `data/` was touched. Every change is in `src/render/dragon.ts`, which is what the
+architecture doc promises for a note about how a screen *looks* — the fight's timing, the cone's geometry,
+the five candidates' positions and the costume's clock are all still the hazard's, and the renderer still
+only paints the snapshot it is handed.
+
+### What the old animal actually was, measured in a PNG
+
+`/tmp/brrender/s4.mts` rasterises this screen with the shipped level data, and the crop of the beast is the
+whole diagnosis: a **featureless oval torso** with a small turtle-like head stuck on the front, four pale
+flags standing off the spine with dark gaps behind them (so they read as pinned-on paper, not as plates),
+a tail that merged into the legs so the stance disappeared, and a tall pale belly strip running the full
+height of the front edge, which rasterised as **a sash worn by the animal**. The owner's "very badly shaped"
+is precise: the shape was the defect, not the detail.
+
+### Three attempts, and the one that worked
+
+The first two attempts were **procedural masks written blind**: per-row spans plus an auto-shader, adjusted
+by reasoning about numbers and re-rendered afterwards. Both produced something worse than what shipped — in
+the second, the dorsal plates came out as detached pink blobs floating *beside* the body, because the plate
+anchor was "the leftmost solid cell in this row" and for every row the tail occupies that is a tail column
+fifteen cells away. The plates were correct code and nonsense as a picture.
+
+That is two failures of the same approach, so the approach changed rather than the numbers. **The technique
+this repo already documented for exactly this problem** (`docs/INVARIANTS.md`, "a big creature is composed,
+not authored as one grid — UNLESS the creature is a silhouette") is: author the silhouette in a **throwaway
+generator** in `/tmp`, iterate it against a PNG at 6× zoom until the shape reads, then paste the **output**
+into the module as a literal. `/tmp/brrender/gz2.mts` is that generator; it prints the grid and writes
+`gz2.png`, and four visual iterations went into it:
+
+1. **Anchor each object's plates to that object.** Torso plates anchor to the *torso's own* back edge
+   (`bodySpan`), never to the union silhouette's leftmost cell. This is the floating-blob fix.
+2. **Stop the torso plates above the tail junction.** The tail's top edge reaches row 19 at the hips, so a
+   plate hung below that protrudes *into* the tail and rasterised as a pink smear across the animal's back.
+   Below the junction the spine is carried by the tail's own plates, which is where it goes anatomically.
+3. **A plate needs a base and a point, and that costs three columns.** Authored one cell wide, the tail
+   plates rasterised as a dotted diagonal line of **bristles** running off the tail. They are triangles now,
+   three cells at the base tapering to one.
+4. **The belly is an abdomen, not a front edge.** Three cells wide, rows 16–26 only, held two cells *inside*
+   the front edge and stopped well short of the chin — which is what kills the sash read.
+
+The animal that came out is **48×38 at scale 5 → 240×190** (the box is 200×190, so 20px of tail and muzzle
+hang out of each side, which is allowed because the box is a water *target* and not a hitbox). 900 cells.
+Deep skull with a brow shelf over an amber eye set **back** from the muzzle, teeth on both lips, short thick
+neck, upright plated torso, three big dorsal plates on the back continuing as six triangles down the tail,
+two legs with the room showing through, and the tail lying flat on the floor for its last third. The grid
+ships as a **literal**, so nothing generated runs at load time.
+
+### The fall is a rotation now, and rotation has a bill
+
+The topple was a **shear**: each row offset sideways in proportion to its height, plus a squash. Cheap, and
+it reads as a deck of cards sliding rather than as a body falling. It is a real **pivot** now — every cell
+rotated about a point between the feet, eased, with a 16% compression and a short ground shadow plus two
+outward dust kicks over the last fifth, which is the impact the fall never had.
+
+**And the first cut of it rasterised as a speckled, half-transparent beast.** Rotating a *cell grid* spreads
+the cells apart — at 45° the centres are 1.41× further apart than a cell is wide — so drawing them at their
+authored size leaves the animal riddled with holes. That is this build's oldest art trap wearing a new
+costume (loose cells over a lit material read as dirt), and it is the `ctx.rotate` warning the cannon barrel
+paid for, met from a third side. The fix is arithmetic rather than taste: grow every cell by the rotation's
+own spread, `ceil(scale × (|cos θ| + |sin θ|))`, which closes the seams exactly.
+
+The dust and the shadow are keyed to `state.progress`, i.e. **sim time**, so they stay under reduced motion —
+they are the fall's own state, not decoration on top of it.
+
+### The costume opens like a costume
+
+It was a **black rectangle** cut through the middle of the suit: eleven columns of `i` cells revealed as the
+zip ran, which is a hole with vertical cliffs, in a shape that is otherwise all slumped curves. What replaced
+it is a **side hatch at the point the five actually walk out of** (authored column 34, which lands on the
+hazard's own `door`, `cx + dir × 40`): a tapered cavity whose half-width per row grows with `openness`, two
+**peeled lips** displaced outwards along it — one lit, one in shade, so the fabric has two faces — with bone
+studs down them, and the bright zip pull travelling down the seam as it spreads. The base suit is painted
+intact underneath, so at `openness` 0 there is still not one cell of interior, which is the rule the old
+implementation existed to keep: the opening has to be an *event*.
+
+### Five people, not one person five times
+
+They were **one 8×14 sprite in four palettes**, so the line-up was the same body repeated with recoloured
+shirts, and the "cheer" was two rectangles of *shirt colour* at the shoulders — sleeves with no hands.
+There are **five distinct 10×15 sprites** now (different builds, shoulder widths, hair masses and one
+bare-headed), five palettes, and the celebration **alternates high and side arms** per person with a skin
+cell at each wrist, so the row has a rhythm instead of a repeat. Scale 4 → 40×60, against the hero's 48×60.
+
+### The fire
+
+Three profile changes, all inside `fire.boxes` — the rule that what is painted is exactly what burns is
+untouched, and both the axis and the half-thickness still come from `coneAxisY`/`coneHalfAt`:
+
+- **the mid flame wanders around the axis** instead of sitting as a second straight stripe inside the shell,
+  with its offset keyed to the column's own hash;
+- **the core is broken**, skipping roughly one column in five away from the jaw, because a continuous cream
+  line down a 500px jet is a ruler drawn through the fire;
+- **a narrow lick of air** opens between two lobes every eleventh column past the near quarter, which is what
+  breaks the remaining "hose" read in the silhouette.
+
+All three are stable per column and per flicker frame, so the flame lives without crawling, and the reduced
+motion branch still resolves to one fixed frame.
+
+### Two contract tests moved, and both for the right reason
+
+`dragon.test.ts` needed no new tests but two of its assertions were reading the old art. The jaw's "lit from
+inside" check looked for the cream core and the new skull's mouth line is wider, so the hinge and tip columns
+had to be re-read off the grid (38 and 47 — never guessed; a jaw that hinges in the wrong column is a head
+coming apart). The confetti check counts 8×8 cells and the new cheer's hands were 7×7, which the filter
+caught as confetti under reduced motion; the hands are 6×6. Both are the same lesson the fixture that kept
+the old label formula taught: **a raster test pins a number off the art, so re-read it when the art moves.**
+
+### Green
+
+**616 tests (48 files)**, typecheck, lint, build, build:site, validate:levels — all green, no test count
+change. IIFE **79.99 KB** gzip (79.35 → 79.99), site payload **82.90 KB** (81.61 → 82.90): **+0.64 KB** on
+the game for a 900-cell literal grid, five candidate sprites, the pivot, the hatch and the flame's three
+profile changes, against **~10 KB of headroom**. `analyze` still reads over budget for the documented reason
+(`docs/OPEN.md` §1: it sums both output formats).
+
+Rasters, all in `/tmp/brrender`: `gz2.mts` → `gz2.png` (the grid at 6×, four iterations), and `s4.mts` →
+`s4-idle.png`, `s4-windup.png`, `s4-burn.png`, `s4-fall.png`, `s4-open.png`, `s4-hired.png` — the beast
+against the skyline, the telegraph on its head, the cone, the pivot mid-fall, the hatch open with the first
+two hires out, and the full line-up of five in the recovered daylight.

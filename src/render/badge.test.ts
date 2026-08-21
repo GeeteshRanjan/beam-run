@@ -1,5 +1,14 @@
 import { describe, it, expect, vi } from 'vitest';
-import { drawAnsrBadgeMark, drawBadgePickup, drawBadgePerch, BADGE_MARK_D } from './badge';
+import {
+  drawAnsrBadgeMark,
+  drawBadgePickup,
+  drawBadgePerch,
+  markSpin,
+  BADGE_MARK_D,
+  MARK_SPIN_TURNS,
+  MARK_TONES,
+  MARK_LIT_RGB,
+} from './badge';
 import { RESOLUTION } from '../data/tuning.config';
 import { ANSR_MARK_PATH, ANSR_MARK_W, ANSR_MARK_H, LOGO_ORANGE } from '../ui/ansrMark';
 
@@ -37,6 +46,7 @@ interface Rect {
  */
 function recorder() {
   const rects: Rect[] = [];
+  const angles: number[] = [];
   const fills: { d: string; color: string; scale: number; at: [number, number] }[] = [];
   let fill = '';
   const stack: { x: number; y: number; s: number }[] = [];
@@ -64,7 +74,11 @@ function recorder() {
     scale(s: number) {
       tf = { ...tf, s: tf.s * s };
     },
-    rotate() {},
+    // Recorded, not applied: the mark turns now, and the angle is the only thing about
+    // that a non-rasterising double can check.
+    rotate(a: number) {
+      angles.push(a);
+    },
     fill(path: FakePath2D) {
       fills.push({ d: path.d, color: fill, scale: tf.s, at: [tf.x, tf.y] });
     },
@@ -75,7 +89,7 @@ function recorder() {
       throw new Error('arcs are not 8-bit');
     },
   } as unknown as CanvasRenderingContext2D;
-  return { ctx, rects, fills };
+  return { ctx, rects, fills, angles };
 }
 
 const VIEW = {
@@ -89,7 +103,7 @@ const VIEW = {
 };
 
 describe('the ANSR badge mark', () => {
-  it('is the real brand path, in brand orange — not a lookalike', () => {
+  it('is the real brand path, in a lifted brand orange — not a lookalike', () => {
     const { ctx, fills } = recorder();
     drawAnsrBadgeMark(ctx, 100, 100);
     expect(fills).toHaveLength(1);
@@ -97,8 +111,66 @@ describe('the ANSR badge mark', () => {
     // sunburst used to stand in for this and read as a generic star; the owner
     // asked for the logo we already have, so this is the assertion that matters.
     expect(fills[0]!.d).toBe(ANSR_MARK_PATH);
-    expect(fills[0]!.color).toBe(LOGO_ORANGE);
+    expect(fills[0]!.color).toBe(MARK_TONES[0]);
     expect(fills[0]!.color).not.toBe('#FF5400'); // never the value accent
+    /*
+     * **The tone is a LIFT of the brand orange, not a different colour** (owner: make it
+     * brighter so it is noticeable). What has to stay true is the relationship, because
+     * "brighter" is how a pickup ends up cream: same hue to within a couple of degrees,
+     * fully saturated, and lighter than the asset's own `#f05722` — which is still what
+     * the lockup, the plaza and the finale draw, where the mark is big and standing still.
+     */
+    const rgb = (hex: string) =>
+      [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)) as [number, number, number];
+    for (const tone of MARK_TONES) {
+      const [r, g, b] = rgb(tone);
+      const [br, bg, bb] = rgb(LOGO_ORANGE);
+      // Lighter than the asset, on every channel.
+      expect(r).toBeGreaterThanOrEqual(br);
+      expect(g).toBeGreaterThan(bg);
+      expect(b).toBeGreaterThan(bb);
+      // Still orange: red leads, green is the middle, blue is the floor, and the hue is
+      // within 4 degrees of the brand mark's own.
+      expect(r).toBeGreaterThan(g);
+      expect(g).toBeGreaterThan(b);
+      const hue = (h: [number, number, number]) => {
+        const [x, y, z] = h.map((c) => c / 255) as [number, number, number];
+        const max = Math.max(x, y, z);
+        const d = max - Math.min(x, y, z);
+        return (60 * (y - z)) / d;
+      };
+      expect(Math.abs(hue([r, g, b]) - hue([br, bg, bb]))).toBeLessThan(4);
+    }
+    // …and the translucent form used for the plinth is the same colour in channels.
+    expect(MARK_LIT_RGB).toBe(rgb(MARK_TONES[1]!).join(','));
+  });
+
+  it('turns, and the turn is a pure function of the phase the host passes in', () => {
+    /*
+     * Owner call: rotate the logo everywhere it is a powerup. The sunburst is nearly
+     * rotationally symmetric (32 rays, a repeat every 11.25 degrees), so what a rotation
+     * buys is *motion* — a still 40px icon in a still column is furniture, and this is
+     * the one collectable in the game.
+     *
+     * Asserted as the transform rather than the picture: the recorder cannot rasterise,
+     * so what it can prove is that the angle exists, that it comes off the phase, and
+     * that a held phase (which is what `prefers-reduced-motion` hands in) holds it.
+     */
+    const at = (phase: number) => {
+      const r = recorder();
+      drawBadgePickup(r.ctx, { ...VIEW, phase });
+      return r.angles;
+    };
+    // Zero is not a transform (`drawAnsrLogo` skips the rotate), so an unturned mark
+    // records nothing at all.
+    expect(at(0)).toEqual([]);
+    expect(at(0.25)).toEqual([markSpin(0.25 * MARK_SPIN_TURNS)]);
+    // Same phase in, same angle out — and the mark is the only thing that turns.
+    expect(at(0.6)).toEqual(at(0.6));
+    expect(at(0.6)[0]).toBeCloseTo(Math.PI * 1.2, 6);
+    // A full turn per cycle of the host's phase, so the pickup revolves once every 3.3s
+    // at the 0.3 turns/s the hosts run it at — slow enough to read as a turning object.
+    expect(MARK_SPIN_TURNS).toBe(1);
   });
 
   it('spans the pickup hitbox exactly, so what you see is what you can take', () => {
@@ -238,9 +310,9 @@ describe('the badge standing on a wall (the Compliance perch)', () => {
      * The other pair fell inside its own rays. So "few cells at full alpha say light" is
      * true and still the wrong device here — two cells flanking a logo are two dots.
      */
-    expect(rects.filter((r) => r.color === '#ff8a4d')).toHaveLength(0);
+    expect(rects.filter((r) => r.color === MARK_TONES[1])).toHaveLength(0);
     // What replaced them is what was always doing the work: a lit plinth under the mark.
-    expect(rects.some((r) => r.color.includes('255,138,77') && r.y < PERCH.surfaceY)).toBe(
+    expect(rects.some((r) => r.color.includes(MARK_LIT_RGB) && r.y < PERCH.surfaceY)).toBe(
       true,
     );
   });

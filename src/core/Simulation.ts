@@ -52,6 +52,7 @@ import {
   type LogPanelView,
   type SetbackLogEntry,
 } from './setbackLog';
+import { BrickBreaker } from '../world/BrickBreaker';
 import { Stamps } from '../world/Hazards/Stamps';
 import { Dragon } from '../world/Hazards/Dragon';
 import { ComplianceMaze } from '../world/Hazards/ComplianceMaze';
@@ -134,6 +135,15 @@ export interface SimulationEvents {
   ) => void;
   /** The attempt ran out of lives. Fired once, before the state change. */
   onOutOfLives?: (screenId: number, months: number, delays: number) => void;
+  /**
+   * The player dropped into the secret tunnel, or came back up out of it.
+   *
+   * Not a state change, on purpose: the run is still `PLAYING` the Tech Park and
+   * nothing about its months, lives or receipt moves. The host uses these two to
+   * announce the stage, clear the frame's particles and swap the HUD's stage plaque.
+   */
+  onTunnelEnter?: () => void;
+  onTunnelExit?: () => void;
   onBadgeCollected?: (screenId: number, badgeType: BadgeType) => void;
 }
 
@@ -170,6 +180,19 @@ export class Simulation {
 
   readonly powerups = new Powerups();
   private hazard: Hazard | null = null;
+
+  /**
+   * The secret stage, while the player is in it (`world/BrickBreaker.ts`).
+   *
+   * It is deliberately **not** a screen and **not** a hazard: it books no months, it
+   * cannot cost a life, and it is not in `SCREEN_COUNT`. While it is non-null it owns
+   * the frame — `updatePlaying` hands it the whole step, including the player — and the
+   * run is exactly where it was when the player comes back up. See the module for why
+   * a bonus with stakes would break the model.
+   */
+  private _bonus: BrickBreaker | null = null;
+  /** The column he dropped in at, so the plaza gives him back the ground he left. */
+  private bonusReturnX = 0;
 
   /**
    * Seconds of play on the current screen. Two jobs, one accumulator: it is the
@@ -280,6 +303,21 @@ export class Simulation {
   /** Simulation time on the current screen (s) — drives the badge float. */
   get clock(): number {
     return this.screenClock;
+  }
+
+  /**
+   * Does this screen carry a powerup at all — whatever its delivery, and whether or
+   * not it has already been taken?
+   *
+   * Deliberately **not** `badgeBox !== null`, which is a different question: that one
+   * answers "can it be collected on this frame" and goes null on a taken mark and on
+   * a delivery mid-flight. This is the level's own shape, so it is constant for the
+   * whole visit — which is what the retry card needs, since two of the six screens
+   * (Head Office and the Tech Park) carry no mark and the card must not tell a player
+   * to take one that does not exist.
+   */
+  get screenHasPowerup(): boolean {
+    return this._screen.data.badge != null;
   }
 
   /**
@@ -425,6 +463,9 @@ export class Simulation {
   private loadScreen(id: number): void {
     this._screenId = id;
     this._retry = false;
+    // Loading any screen leaves the secret stage: it exists only inside one visit to
+    // the Tech Park, and a reset that kept it would put the plant room under screen 0.
+    this._bonus = null;
     this._screen = new Screen(id);
     this.powerups.reset();
     this.hazard = this.buildHazard();
@@ -458,6 +499,63 @@ export class Simulation {
   /** Current hazard (for rendering). */
   get activeHazard(): Hazard | null {
     return this.hazard;
+  }
+
+  // --- the secret stage under the Tech Park ---------------------------------
+
+  /** The bonus stage in progress, or null (which is almost always). */
+  get bonus(): BrickBreaker | null {
+    return this._bonus;
+  }
+  get inBonus(): boolean {
+    return this._bonus !== null;
+  }
+
+  /** The tunnel mouth on this screen, in px, or null on the five without one. */
+  get tunnelSpan(): { x: number; w: number } | null {
+    const t = this._screen.data.tunnel;
+    if (!t) return null;
+    return { x: t.gx * RESOLUTION.TILE, w: t.w * RESOLUTION.TILE };
+  }
+
+  /**
+   * True when the player is standing on the mouth and a press would take him down.
+   *
+   * The host reads this for two things and both of them are the *reveal*: the prompt
+   * painted on the hatch, and the touch act pad, which otherwise only exists where a
+   * badge has armed a tool. Standing on the hatch is the whole of how this feature
+   * announces itself, so nothing about it is shown anywhere else.
+   */
+  get canEnterTunnel(): boolean {
+    const span = this.tunnelSpan;
+    if (!span || this._bonus || this.sm.state !== 'PLAYING') return false;
+    if (!this._player.onGround) return false;
+    const cx = this._player.box.x + this._player.box.w / 2;
+    return cx >= span.x && cx <= span.x + span.w;
+  }
+
+  /**
+   * Drop into the tunnel. No-op unless the player is standing on it.
+   *
+   * Entered on the **act button**, never by walking over the mouth: this screen is the
+   * payoff, and a hole a runner falls into would take the arrival away from anybody who
+   * found it by accident — including every one-tap auto-run player, who cannot choose
+   * not to walk over it.
+   */
+  enterTunnel(): void {
+    if (!this.canEnterTunnel) return;
+    this.bonusReturnX = this._player.box.x;
+    this._bonus = new BrickBreaker();
+    const at = BrickBreaker.spawnPoint();
+    this._player.respawn(at.x, at.y);
+    this.events.onTunnelEnter?.();
+  }
+
+  /** Back onto the plaza, at the column he left it from. */
+  private leaveTunnel(): void {
+    this._bonus = null;
+    this._player.respawn(this.bonusReturnX, this._screen.spawnY);
+    this.events.onTunnelExit?.();
   }
 
   /**
@@ -692,6 +790,19 @@ export class Simulation {
   }
 
   private updatePlaying(dt: number, input: InputState): void {
+    /*
+     * The secret stage owns the whole step while it is up, and nothing after this
+     * branch may run: it moves the player itself, it has no hazard, no badge and no
+     * clock in the run's currency — and, load-bearing, the Tech Park's own
+     * `winTrigger` sits at x 1040, which is *inside* the bonus room's play area. Fall
+     * through to the tail of this method and walking right in the plant room finishes
+     * the game.
+     */
+    if (this._bonus) {
+      if (this._bonus.update(dt, this._player, input)) this.leaveTunnel();
+      return;
+    }
+
     // Advanced before anything reads a badge position this step.
     this.screenClock += dt;
 
@@ -747,7 +858,12 @@ export class Simulation {
       this._player.box.x + this._player.box.w >= this._screen.exitX
     ) {
       this.clearScreen();
+      return;
     }
+
+    // Standing on the secret tunnel with the act button: down he goes. Read last,
+    // after the exit and the win trigger, so a screen's own ending always wins.
+    if (input.shootPressed) this.enterTunnel();
   }
 
   /**

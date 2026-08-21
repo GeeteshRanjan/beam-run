@@ -65,6 +65,18 @@ describe('Input DOM key mapping', () => {
     window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyW' }));
     expect(input.getState().jumpHeld).toBe(true);
   });
+
+  it('acts on the down arrow as well as F (it is what opens the secret hatch)', () => {
+    for (const code of ['ArrowDown', 'KeyF']) {
+      window.dispatchEvent(new KeyboardEvent('keydown', { code }));
+      const s = input.getState();
+      expect(s.shootPressed, code).toBe(true);
+      expect(s.shoot, code).toBe(true);
+      window.dispatchEvent(new KeyboardEvent('keyup', { code }));
+      input.endFrame();
+      expect(input.getState().shoot, code).toBe(false);
+    }
+  });
 });
 
 describe('Input auto-run (one-tap play)', () => {

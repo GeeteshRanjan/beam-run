@@ -66,6 +66,13 @@ import {
   drawBurningHero,
 } from '../render/dragon';
 import { drawBadgeDelivery } from '../render/carrier';
+import {
+  drawEngineRoom,
+  drawEngineRoomProps,
+  drawTunnelHatch,
+  type EngineRoomView,
+} from '../render/brickBreaker';
+import type { BrickBreaker } from '../world/BrickBreaker';
 import { badgeCenter } from '../world/badgeFloat';
 import { isPerched, perchCenter } from '../world/badgePerch';
 import { drawTileRect, drawSceneBackground, drawReliefWash, CEILING } from '../render/scenery';
@@ -112,8 +119,13 @@ const DELAY_LOG_ANCHOR = { x: RESOLUTION.WIDTH - 160, y: 120 };
  * all, and a gameplay constant behind a sound that changes nothing would be a lie about
  * where the number matters. Long enough that the arc reads as a room the player is
  * standing in rather than an alarm — the screen can be on for half a minute.
+ *
+ * 1.7 → 1.5 with the cue itself rebuilt to be audible (`AudioEngine`'s `spark`): the
+ * first arc now has to land inside the walk from spawn to the first thing worth
+ * looking at, or a player who takes the mark quickly hears the room only after it has
+ * stopped being broken. It stays the longest gap of any repeating cue in the game.
  */
-const SPARK_INTERVAL = 1.7;
+const SPARK_INTERVAL = 1.5;
 
 /** A short-lived floating label (value gained / capability unlocked). */
 interface Popup {
@@ -204,6 +216,22 @@ export class Game {
    */
   private workplaceCues = { winds: 0, throws: 0, working: false, ok: false, sparkT: 0 };
   /**
+   * Last-seen counters for the secret stage. Same arrangement as the three hazards:
+   * `world/BrickBreaker.ts` is headless, so it counts and the host sounds the
+   * difference. **Every cue here is one the game already synthesises** — a bonus stage
+   * is not worth a byte of the audio budget, and the mark hitting a tray is honestly
+   * the same physical event as a pair of shoes hitting the floor.
+   */
+  private bonusCues = {
+    serves: 0,
+    paddleHits: 0,
+    wallHits: 0,
+    breaks: 0,
+    losses: 0,
+    cleared: false,
+    carrying: false,
+  };
+  /**
    * Walk-cycle phase (s), advanced by *distance covered* rather than wall clock,
    * so any hazard that drags the player visibly slows the stride too. A
    * time-driven cycle made a slowed hero look like he was running at full pace on
@@ -285,7 +313,9 @@ export class Game {
       },
       onOpenAssist: () => this.openAssist(),
       },
-      { reducedMotion: this.reducedMotion },
+      // `touch` is read by the title screen's control line only: arrow keys are not
+      // a guide for somebody holding a phone.
+      { reducedMotion: this.reducedMotion, touch: this.isTouch },
     );
 
     this.sim = new Simulation({
@@ -351,9 +381,53 @@ export class Game {
       },
       onOutOfLives: (screenId, months, delays) => {
         this.audio.playSfx('setback');
+        // `months` is still the run's total, because that is what the funnel scores a
+        // lead on. It is not announced: the screen shows what the delays cost, and an
+        // announcement that reports a figure nobody can see is a different game read
+        // out loud. No `ctaShown` either — this screen has no Navigator route any
+        // more (owner call); the only cap on it goes back into the stage.
         this.analytics.gameOver(screenId, months, delays);
-        this.analytics.ctaShown('summary');
-        this.hud.announce(COPY.a11y.outOfLives(months, delays));
+        this.hud.announce(COPY.a11y.outOfLives(this.sim.receipt.delayMonths, delays));
+      },
+      /*
+       * Into the secret stage and back out again. Both ends clear the frame's
+       * presentation state, because the two rooms share nothing: particles thrown on
+       * the plaza have no business falling through a plant room, and vice versa.
+       */
+      onTunnelEnter: () => {
+        this.effects.clear();
+        this.popups.length = 0;
+        this.prevOnGround = false;
+        this.audio.playSfx('hush');
+        this.hud.announce(COPY.a11y.tunnelEntered);
+        /*
+         * **Auto-run has to come off in there, and this is the single biggest usability
+         * call on the feature.** One-tap play synthesises "right" every frame — it is the
+         * default on touch, which is most of this audience — and this room is played by
+         * moving *both* ways under a ball. An auto-running player would be pinned against
+         * the right wall with LEFT as their only control. One-tap means "you never have to
+         * press forward", and there is no forward here; the pad gets both arrows back for
+         * the duration and the run's own setting is restored on the way out.
+         */
+        if (this.input.isAutoRun) {
+          this.input.setAutoRun(false);
+          this.touch.setAutoRun(false);
+        }
+      },
+      onTunnelExit: () => {
+        this.effects.clear();
+        this.popups.length = 0;
+        this.prevOnGround = false;
+        this.hud.announce(COPY.a11y.tunnelLeft);
+        /*
+         * Restored from the **assist controller**, not from a snapshot taken on the way
+         * in: the pause menu is up in there like everywhere else, so a player can turn
+         * one-tap play on or off while they are down a shaft, and a remembered flag would
+         * quietly undo the choice they just made.
+         */
+        const wanted = this.assist.isOn('autoRun');
+        this.input.setAutoRun(wanted);
+        this.touch.setAutoRun(wanted);
       },
       onBadgeCollected: (id, type) => {
         // The badge moves — it is mid-float on five screens and lying where a drone
@@ -484,8 +558,11 @@ export class Game {
         r.setbacks,
         r.engaged.length,
       );
+      // The receipt is still a conversion surface — four capability rows, each its
+      // own Navigator route — so the CTA impression stands even though the generic
+      // Navigator cap that used to sit under it is gone (owner call).
       this.analytics.ctaShown('win');
-      this.hud.announce(COPY.a11y.won(r.months));
+      this.hud.announce(COPY.a11y.won(r.delayMonths));
     }
     // A fresh attempt after running out of lives is a new run for the funnel:
     // without this, only the first attempt of a session was ever counted.
@@ -623,6 +700,7 @@ export class Game {
     this.syncStampAudio();
     this.syncWorkplaceAudio(dt);
     this.syncDragonAudio();
+    this.syncBonusAudio();
 
     const shake = this.effects.shakeOffset();
     this.renderer.begin(shake.x, shake.y);
@@ -709,8 +787,19 @@ export class Game {
       // than authored in `levels.json`: it is prose about the design, and every word
       // in that file ships to the host unless the stripper is taught to remove it.
       brief: COPY.titleCard.brief[this.sim.screenId],
-      // The retry hint, and the only surviving trace of the life-lost screen.
-      hint: this.sim.retrying ? COPY.lifeLost.retryHint : undefined,
+      /*
+       * The retry hint, and the only surviving trace of the life-lost screen.
+       *
+       * Two conditions, not one: it is a retry, **and** this screen has a powerup to
+       * take (owner call: "from the intro screen of ANSR tech park remove the line
+       * take the ANSR badge — we do not need it here"). Two of the six carry none —
+       * Head Office and the Tech Park — and on those the line is advice the room
+       * cannot honour: there is nothing to collect, so it reads as a rule the player
+       * has already broken. `screenHasPowerup` is the level's own data, so a screen
+       * that gains or loses a mark can never disagree with the card.
+       */
+      hint:
+        this.sim.retrying && this.sim.screenHasPowerup ? COPY.lifeLost.retryHint : undefined,
       receipt: this.sim.receipt,
       lifeLost: this.sim.lifeLost ?? undefined,
     });
@@ -718,9 +807,19 @@ export class Game {
     // The fourth thumb target exists only where it does something, and says which
     // tool it is: the Workplace cutter or the hiring dragon's water cannon.
     const cannon = this.dragon?.hasCannon === true;
+    /*
+     * …and it is also how a touch player finds the secret tunnel. The pad appears the
+     * moment they are standing on the mouth and says what it will do — which is the
+     * whole reveal on a phone, where there is no key cap to paint on the paving.
+     */
+    const onTunnel = this.sim.canEnterTunnel;
     this.touch.setShootVisible(
-      cannon || this.workplace?.hasCutter === true,
-      cannon ? COPY.controls.shootWater : COPY.controls.shoot,
+      cannon || onTunnel || this.workplace?.hasCutter === true,
+      onTunnel
+        ? COPY.controls.enterTunnel
+        : cannon
+          ? COPY.controls.shootWater
+          : COPY.controls.shoot,
     );
     // On-screen touch controls: only while actively playing on a touch device.
     this.touch.setVisible(
@@ -737,6 +836,15 @@ export class Game {
      * changes would be hiding the news. It goes on the last life, where the screen
      * over the top of it is the whole message.
      */
+    /*
+     * …and it goes in the secret stage too, which is the one place it would be
+     * furniture that lies: nothing down there can cost a life or a month, so a lives
+     * plaque and a delay log would be reporting stakes that are switched off. Hiding it
+     * is also what makes the room usable — the wall of blocks spans the full frame and
+     * the log's four rows hang over the right-hand column of it (the rasteriser has no
+     * HUD, so only the DOM's own extents catch that). The stage says its name on the
+     * frame instead: big for three seconds, then stencilled on the floor.
+     */
     const hudVisible =
       !this.paused &&
       !this.summaryOpen &&
@@ -744,6 +852,8 @@ export class Game {
         state === 'TITLE_CARD' ||
         (state === 'LIFE_LOST' && this.sim.lifeLost?.outOfLives === false));
     this.hud.setVisible(hudVisible);
+    // Plaques off in the secret stage, wrapper (and its live region) still up.
+    this.hud.setBare(this.sim.inBonus);
     // The model is fed even while hidden, so the plaques are already correct
     // (lives spent, log grown) the instant the next title card puts them back.
     {
@@ -753,7 +863,12 @@ export class Game {
         // ("Arrival — ANSR Tech Park"): a 24-character string set in the bitmap
         // font would run into the lives plaque opposite on a phone frame. The
         // title card still shows the full line on entry.
-        levelLabel: this.sim.screen.name,
+        //
+        // The secret stage names itself here too, although its plaques are hidden while
+        // the player is down there (`setBare`): the model is fed regardless — the same
+        // rule the lives and the log follow through a lost life — so the plaque is
+        // already correct on the frame the plaza puts it back.
+        levelLabel: this.sim.inBonus ? COPY.bonus.name : this.sim.screen.name,
         lives: this.sim.lives,
         livesTotal: this.sim.livesTotal,
         log: this.sim.logPanel,
@@ -808,12 +923,55 @@ export class Game {
     }
   }
 
+  /**
+   * The snapshot the secret stage is painted from. Built here rather than in the render
+   * module for the usual reason: the module is pure, so it must not know about a
+   * simulation, a wall clock or a motion preference.
+   */
+  private growthFloorView(bonus: BrickBreaker, alpha: number): EngineRoomView {
+    const p = this.sim.player;
+    return {
+      phase: bonus.phase,
+      clock: bonus.clock,
+      bricks: bonus.brickStates,
+      cannons: bonus.cannonStates,
+      ball: bonus.ballState,
+      lost: bonus.lostBall,
+      tray: bonus.trayState,
+      paddle: bonus.paddleBox(),
+      equipped: bonus.equipped,
+      suctionOn: bonus.suctionOn,
+      carrying: bonus.carrying,
+      heroX: lerp(p.prevX, p.box.x, alpha) + p.box.w / 2,
+      heroFeetY: lerp(p.prevY, p.box.y, alpha) + p.box.h,
+      phaseT: this.reducedMotion ? 0.12 : (this.now() * 0.3) % 1,
+      reduced: this.reducedMotion,
+    };
+  }
+
   private drawWorld(ctx: CanvasRenderingContext2D, alpha: number): void {
     const screen = this.sim.screen;
+
+    /*
+     * The secret stage replaces the frame outright — its own room, its own hero pass,
+     * its own kit. Nothing else in here applies: there is no hazard, no badge, no
+     * engaged label and none of the four death poses, because nothing in that room can
+     * cost a life. The hero goes between the two calls, so the room is behind him and
+     * the tray he is holding over his head is in front.
+     */
+    const bonus = this.sim.bonus;
+    if (bonus) {
+      const view = this.growthFloorView(bonus, alpha);
+      drawEngineRoom(ctx, view);
+      this.drawPlayer(ctx, view.heroX, view.heroFeetY);
+      drawEngineRoomProps(ctx, view);
+      return;
+    }
 
     if (screen.id === 5) {
       // Finale is the one hand-crafted hero scene (sky/plaza/glass tower/bloom).
       this.drawFinale(ctx);
+      this.drawTunnel(ctx);
     } else {
       // Ground/platforms/walls as textured 8-bit level material (per-level
       // meaning: lobby floor, red-tape ground, scorched brick, etc.). Solids the
@@ -996,6 +1154,54 @@ export class Game {
     } else {
       c.sparkT = 0;
     }
+  }
+
+  /**
+   * The secret stage, in sound. Six edges, and **not one new cue**: the shaft breathes
+   * (`hush`), the mark lands on the tray like a pair of shoes on a floor (`land`), it
+   * knocks off the masonry (`stampDud`, held well down — it happens several times a
+   * second and at full level it is a drum machine, which is the lesson screen 1's four
+   * stamps paid for), a block goes with a `pickup` blip, a miss evaporates (`steam`),
+   * the wall coming down is a `screenClear`, and the shaft taking him home is the
+   * `badge` arpeggio, because being carried back up is ANSR doing the work.
+   */
+  private syncBonusAudio(): void {
+    const bonus = this.sim.bonus;
+    if (!bonus) {
+      this.bonusCues = {
+        serves: 0,
+        paddleHits: 0,
+        wallHits: 0,
+        breaks: 0,
+        losses: 0,
+        cleared: false,
+        carrying: false,
+      };
+      return;
+    }
+    if (this.sim.state !== 'PLAYING') return;
+    const c = this.bonusCues;
+    if (bonus.serves > c.serves) this.audio.playSfx('hush');
+    if (bonus.paddleHits > c.paddleHits) this.audio.playSfx('land');
+    if (bonus.wallHits > c.wallHits) this.audio.playSfx('stampDud', 0.35);
+    if (bonus.breaks > c.breaks) this.audio.playSfx('pickup');
+    if (bonus.losses > c.losses) this.audio.playSfx('steam');
+    c.serves = bonus.serves;
+    c.paddleHits = bonus.paddleHits;
+    c.wallHits = bonus.wallHits;
+    c.breaks = bonus.breaks;
+    c.losses = bonus.losses;
+
+    const cleared = bonus.remaining === 0;
+    if (cleared && !c.cleared) {
+      this.audio.playSfx('screenClear');
+      this.hud.announce(COPY.a11y.bonusCleared);
+    }
+    c.cleared = cleared;
+
+    const carrying = bonus.carrying;
+    if (carrying && !c.carrying) this.audio.playSfx('badge');
+    c.carrying = carrying;
   }
 
   private syncDragonAudio(): void {
@@ -1446,18 +1652,20 @@ export class Game {
         // The lens it hangs from is the ROOM's geometry, so it comes from the room.
         hangFromY: CEILING.SPOT_BOTTOM,
       });
-      // The capability plaque rides above the mark: below it is the cabinet's own top
-      // course while it is down, and the fitting's cowl while it is still up there.
-      const ceilingTag = solutionTag(badge.type);
-      if (ceilingTag && ceiling.phase !== 'gone') {
-        drawLabelPlaque(ctx, ceilingTag, ceiling.badge.x, ceiling.badge.y - 52, {
-          scale: 2,
-          fg: '#CFE6EC',
-          bg: 'rgba(0,26,34,0.7)',
-          frame: 'rgba(28,130,150,0.6)',
-          alpha: 0.95,
-        });
-      }
+      /*
+       * **No capability plaque on this screen** (owner call: "remove the text from the
+       * powerup that says 500 leaders — for now do not keep any text").
+       *
+       * It used to ride 52px over the mark, which on the other three deliveries is dead
+       * sky. Here it is not: the badge hangs from a lit spotlight, falls down that
+       * fitting's axis and lands on a cabinet under a ceiling full of ducts, apertures
+       * and a hanging tile, so a framed label sat *inside* the room's own furniture for
+       * most of its life. The pickup is signposted by the light it comes out of, its
+       * cables, its contact shadow and the four-pip countdown — which is more than any
+       * other delivery has — so the words were the one thing on it that had to compete
+       * for space. The capability is still named on the pickup toast and on the HUD chip
+       * the moment it is taken.
+       */
       return;
     }
 
@@ -1528,6 +1736,34 @@ export class Game {
    */
   private drawFinale(ctx: CanvasRenderingContext2D): void {
     drawFinaleScene(ctx, finaleLayout(), this.reducedMotion ? 0 : this.now(), this.reducedMotion);
+  }
+
+  /**
+   * The secret tunnel's mouth in the plaza — quiet paving furniture until the player
+   * is standing on it, and then a prompt.
+   *
+   * Drawn after the plaza and before the hero, so he stands over it. The key cap is
+   * dropped on touch, where the act pad appears instead (`syncUI`): a keyboard legend
+   * on a phone is the defect the title screen's control row was rebuilt to fix.
+   */
+  private drawTunnel(ctx: CanvasRenderingContext2D): void {
+    const span = this.sim.tunnelSpan;
+    if (!span) return;
+    drawTunnelHatch(ctx, {
+      x: span.x,
+      w: span.w,
+      groundY: 15 * RESOLUTION.TILE,
+      active: this.sim.canEnterTunnel,
+      /*
+       * The **down arrow**, not F (owner call: "we don't need to press the f button
+       * instead the down arrow can do the work"). It is the one place in the game where
+       * the act button has a direction in it — the thing it does is *go down* — so the
+       * cap that teaches it should be the key whose glyph says so. F still fires (both
+       * are mapped to `shoot`), but nothing advertises it here.
+       */
+      keyCap: this.isTouch ? null : '\u2193',
+      phaseT: this.reducedMotion ? 0.12 : (this.now() * 0.3) % 1,
+    });
   }
 
   // --- teardown -------------------------------------------------------------

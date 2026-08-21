@@ -364,13 +364,37 @@ export class AudioEngine {
         break;
       }
       case 'spark': {
-        // The unfixed terminal arcing: three short cracks over a mains buzz. Quiet on
-        // purpose — it repeats for as long as the room is broken, so it has to sit under
-        // everything else and read as a room the player is standing in.
-        this.tone(120, 108, 'square', 0.16, 0.08);
-        const cracks = [0, 0.07, 0.15];
+        /*
+         * The unfixed terminal arcing (owner call: "add spark sound in the workplace
+         * screen when things are not fixed" — the cue existed and could not be heard).
+         *
+         * What was wrong with it was not the level knob, it was **where the energy
+         * sat**: a 120 Hz square at 0.08 plus three 35ms bandpass cracks at Q 4 up
+         * around 3-4.8 kHz. Both ends of that are the two places a laptop or phone
+         * speaker gives you nothing — well under its low roll-off, and a needle-thin
+         * band up where it is already rolling off again. So it measured as a cue and
+         * played as silence.
+         *
+         * Rebuilt into the band a small speaker actually reproduces, and built the way
+         * an arc is: a **snap** with a **tail**, three times.
+         *  - the buzz keeps its 120 Hz body but carries an octave over it at 240, which
+         *    is the lowest thing on a phone that is genuinely audible;
+         *  - each crack is a **wide** burst (Q 1.1, not 4) falling 5200 -> 900 over 70ms,
+         *    so it has a body instead of a whistle;
+         *  - a square tick under each one drops 2 kHz -> 700, which is the transient. It
+         *    is also what keeps the cue alive on a host with no noise source.
+         *
+         * Still the quietest thing on the screen relative to the chime, because it
+         * repeats every `SPARK_INTERVAL` for as long as the room is broken: it has to
+         * read as a room the player is standing in, not as an alarm. Audible and
+         * ignorable are not the same axis.
+         */
+        this.tone(120, 110, 'square', 0.22, 0.14);
+        this.tone(240, 226, 'square', 0.18, 0.1);
+        const cracks = [0, 0.08, 0.17];
         for (let i = 0; i < cracks.length; i += 1) {
-          this.noise(3000 + i * 900, 1400, 0.035, 0.34, cracks[i]!, 4, 'bandpass');
+          this.noise(5200 - i * 700, 900, 0.07, 0.5, cracks[i]!, 1.1, 'bandpass');
+          this.tone(2000 - i * 240, 700, 'square', 0.05, 0.12, cracks[i]!);
         }
         break;
       }

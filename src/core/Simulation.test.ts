@@ -192,9 +192,34 @@ describe('Simulation setbacks: months, a life and a log line', () => {
     expect(sim.log).toHaveLength(1);
   });
 
-  it('flags the retry so its title card can carry the badge instruction', () => {
+  it('reports whether the stage carries a powerup at all, for the whole visit', () => {
+    /*
+     * The retry card's line ("take the ANSR powerup") is gated on this, because two
+     * screens carry no mark — Head Office and the Tech Park — and there the line is
+     * advice the room cannot honour (owner call).
+     *
+     * It is the level's shape, not the pickup's state: unlike `badgeBox` it stays true
+     * after the mark has been taken and while a delivery is mid-flight, which is what
+     * a card shown at the *start* of the stage needs.
+     */
+    const sim = toPlaying();
+    expect(sim.screenId).toBe(0);
+    expect(sim.screenHasPowerup).toBe(false);
+    for (const id of [1, 2, 3, 4]) {
+      expect(driveToScreen(id).screenHasPowerup, `screen ${id}`).toBe(true);
+    }
+    expect(driveToScreen(5).screenHasPowerup).toBe(false);
+
+    // Taking the mark does not turn it off — the question is not "is it collectable".
+    const s1 = driveToScreen(1);
+    s1.powerups.collect(s1.screen.data.badge!);
+    expect(s1.badgeBox).toBeNull();
+    expect(s1.screenHasPowerup).toBe(true);
+  });
+
+  it('flags the retry so its title card can carry the powerup instruction', () => {
     // There is no life-lost screen any more (owner call): the stage simply starts
-    // again, so the one thing that screen said which mattered — take the ANSR badge
+    // again, so the one thing that screen said which mattered — take the ANSR powerup
     // — is printed on the retry's title card instead. This flag is how the host
     // knows to print it, and it must not survive into a stage reached by playing.
     const sim = driveToScreen(1);

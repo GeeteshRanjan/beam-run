@@ -2020,10 +2020,18 @@ export function drawSceneBackground(
        * distinct from the Workplace floor two screens later.
        */
       drawLobbyInterior(ctx, t, reduced);
-      // The sign sets the honest frame — none of this is hard yet, because none of
-      // it has left the slide deck. It hangs on the wall under the soffit rather
-      // than in a sky that no longer exists.
-      drawFloorSign(ctx, W * 0.5, 100, 'MARKET ENTRY: ON PAPER');
+      /*
+       * The sign names the ROOM (owner call), the way the sign in a real lobby does:
+       * this is the player's own head office, and the three labelled steps in front
+       * of it are what the building has approved so far.
+       *
+       * It used to read "MARKET ENTRY: ON PAPER" — an editorial verdict on the stage,
+       * written on the one piece of furniture in the game whose whole job is to say
+       * where you are. The verdict is already carried by the briefing card ("every
+       * plan looks clean from the lobby") and by the steps themselves, so the wall
+       * was arguing a point the screen had made twice.
+       */
+      drawFloorSign(ctx, W * 0.5, 100, 'HEAD OFFICE');
       /*
        * Name the three easy hops. The three arguments after the ctx are the step's
        * own `gx`, `gy` and `w` from `levels.json` screen 0 — the width is not

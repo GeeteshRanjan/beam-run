@@ -339,6 +339,28 @@ export interface ClutterSpec {
   gx: number;
 }
 
+/**
+ * The mouth of the secret service tunnel in the Tech Park's pavement — the way into
+ * **The Engine Room** (owner call).
+ *
+ * The only thing about that stage which belongs in this file, because it is the only
+ * part of it that is *screen geometry*: `gx`/`w` are the tiles the hatch is cut into,
+ * and its width is the width of the shaft the bonus room is built around
+ * (`BONUS.ROOM.TUNNEL_W`). Everything else about the stage — the room, the wall of
+ * blocks, the tray, the ball, the suction — is in `tuning.config.ts`, because the
+ * bonus is not a screen: it books no months, it cannot cost a life, it carries no
+ * badge, and it is therefore in nothing this file's validator counts.
+ *
+ * It is entered with the **act button** while standing on it, never by walking over
+ * it: this screen is the payoff and a hole a runner falls into would take the arrival
+ * away from anybody who found it by accident.
+ */
+export interface TunnelSpec {
+  gx: number;
+  w: number;
+  note?: string;
+}
+
 export interface ScreenCopy {
   titleCard?: string;
   hint?: string;
@@ -374,6 +396,8 @@ export interface ScreenData {
   clutter?: ClutterSpec[];
   /** Where the monsters gather once the badge is taken (Compliance maze). */
   gather?: GridPos;
+  /** The secret tunnel's mouth (Tech Park only — see {@link TunnelSpec}). */
+  tunnel?: TunnelSpec;
   badge?: BadgeSpec;
   copy?: ScreenCopy;
 }

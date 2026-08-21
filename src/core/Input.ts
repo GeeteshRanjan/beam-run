@@ -68,9 +68,15 @@ const KEY_MAP: Record<string, InputAction> = {
   Space: 'jump',
   ArrowUp: 'jump',
   KeyW: 'jump',
-  // Two keys for the cutter, both reachable without leaving the arrow keys or
+  // Three keys for the act button, all reachable without leaving the arrow keys or
   // WASD. Not Ctrl/Shift (browser and screen-reader shortcuts) and not Enter,
   // which activates whatever overlay button has focus.
+  //
+  // `ArrowDown` is the owner's (it opens the Tech Park's secret hatch, and "down" is
+  // what that action *is*), and it costs nothing to add: nothing in this game crouches,
+  // so the down arrow had no other job. It was already in `PREVENT_DEFAULT`, which is
+  // the other half of not scrolling the host page with it.
+  ArrowDown: 'shoot',
   KeyF: 'shoot',
   KeyJ: 'shoot',
   Escape: 'pause',

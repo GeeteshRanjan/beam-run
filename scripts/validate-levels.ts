@@ -360,11 +360,13 @@ function validateModel(): Problem[] {
         `(${JOURNEY.BASELINE_MONTHS}) so leaning on ANSR always beats going alone`,
     );
   }
-  const saved = CAPABILITIES.reduce((sum, c) => sum + c.monthsSaved, 0);
-  const gap = JOURNEY.BASELINE_MONTHS - JOURNEY.ANSR_BENCHMARK_MONTHS;
-  if (saved !== gap) {
-    push(`capability monthsSaved sums to ${saved} but the baseline gap is ${gap}`);
-  }
+  /*
+   * The rule that used to be here checked that the four capabilities' `monthsSaved`
+   * summed to the baseline gap. Both ends of it are gone: the field was deleted with
+   * the per-row month claim on the closing receipt (owner call — the receipt states
+   * the outcome now, not a share of a benchmark gap), and the two published averages
+   * it was measured against are no longer printed anywhere in the game.
+   */
 
   /*
    * Each capability must be earned exactly once across the run, and there is no longer

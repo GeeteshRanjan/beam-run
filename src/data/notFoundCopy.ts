@@ -8,7 +8,7 @@
  * embeds the game. Same rule as ever, no hardcoded strings in UI code; just a
  * module the bundle has no reason to reach.
  *
- * The page exists because the two Navigator routes (the title screen's "Skip to
+ * The page exists because the Navigator routes (the pause menu's "Skip to
  * the Navigator" and the closing receipt) deep-link a path the static host does
  * not serve, so the last thing a prospect saw was the host's raw 404. A dead end
  * is a dead end whoever renders it, so the page is ours: same cabinet, same

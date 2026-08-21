@@ -37,20 +37,37 @@
  */
 import { drawPixels, pxRect, type Palette } from './PixelArt';
 import { drawAnsrLogo } from './ansrLogo';
-import { LOGO_ORANGE } from '../ui/ansrMark';
 import { RESOLUTION } from '../data/tuning.config';
 
-/** Brand orange, and a lighter tint of it for the shimmer. */
-const RAY = LOGO_ORANGE;
-const RAY_LIT = '#ff8a4d';
-
 /**
- * The two shimmer tones, held on alternate frames. The old pixel mark shimmered
- * by swapping ray *classes* between them; the real mark is one path, so the whole
- * sunburst glints instead. Both tones are brand orange, so it reads as light
- * catching the mark rather than as a colour change.
+ * The mark's two tones: brand orange **lifted**, and a lighter tint of it for the
+ * shimmer.
+ *
+ * `LOGO_ORANGE` itself (`#f05722`) is what the DOM lockup, the plaza and the finale
+ * draw, and it is right on all three — they are large, still and on their own. On a
+ * 40px object moving against a deep teal sky it sits close in value to the ground band
+ * behind it, and the owner asked for the pickup to be brighter so it is noticeable.
+ * These are the same hue and saturation one step up in lightness (L 54% → 63%), so the
+ * mark reads as the brand mark catching more light rather than as a different colour —
+ * and neither is the value accent `#FF5400`, which is reserved.
+ *
+ * Held on alternate frames. The old pixel mark shimmered by swapping ray *classes*;
+ * the real mark is one path, so the whole sunburst glints instead.
  */
-const MARK_TONES: readonly string[] = [RAY, RAY_LIT];
+const RAY = '#ff7a45';
+const RAY_LIT = '#ff9570';
+/**
+ * The same lit tone as channels, for the two places that need it translucent (the
+ * perch's plinth, and the trail in the secret stage's own module). Written out rather
+ * than parsed because this file has no business shipping a hex parser — but a test
+ * checks the two forms agree, so they cannot drift when the mark's tone next moves.
+ */
+const RAY_LIT_RGB = '255,149,112';
+
+/** Exported for the tests, which measure the tone rather than restating a literal. */
+export const MARK_TONES: readonly string[] = [RAY, RAY_LIT];
+/** Exported for the same reason: the translucent form of {@link MARK_TONES}[1]. */
+export const MARK_LIT_RGB = RAY_LIT_RGB;
 
 /**
  * Diameter of the mark, in px: exactly the pickup hitbox (`RESOLUTION.TILE`, the
@@ -80,8 +97,30 @@ const SHAFT = '92, 226, 244';
 const P = 4;
 
 /**
+ * Turns per second the mark revolves at as a pickup (owner call: "make the logo
+ * rotate"). The hosts hand this module a phase in turns that already advances at
+ * 0.3/s, so passing it straight through is one revolution every 3.3s — slow enough
+ * that the sunburst is a *turning object* rather than a flicker, which matters because
+ * the mark is 32 rays with a repeat every 11.25 degrees: spin it quickly and the shape
+ * stops resolving and starts strobing. The secret stage's ball is deliberately faster
+ * (`render/brickBreaker.ts`), because it is a ball.
+ *
+ * Under `prefers-reduced-motion` the host holds the phase, so this holds with it — the
+ * mark stops turning without disappearing, and the angle it stops at does not matter
+ * to a shape that is nearly rotationally symmetric.
+ */
+export const MARK_SPIN_TURNS = 1;
+
+/** Turns → radians, for a caller that has a phase and wants an angle. */
+export function markSpin(turns: number): number {
+  return turns * Math.PI * 2;
+}
+
+/**
  * Draw the ANSR mark centred on (cx, cy). `twinkle` (0 or 1) picks the tone; hold
- * it constant for a static mark.
+ * it constant for a static mark. `spin` is in **radians** and turns the whole
+ * sunburst — the core backing does not turn with it, because it is a square of whole
+ * cells and a rotated grid of cells is anti-aliased mush at 20px.
  *
  * `diameter` defaults to the pickup hitbox. Where `Path2D` is unavailable (jsdom)
  * `drawAnsrLogo` is a no-op, so the shaft, flare and chevron still mark the spot —
@@ -93,6 +132,7 @@ export function drawAnsrBadgeMark(
   cy: number,
   diameter: number = BADGE_MARK_D,
   twinkle: 0 | 1 = 0,
+  spin = 0,
 ): void {
   // Core first, so the rays always sit on top of their own backing.
   // 0.12 of the diameter per cell (20px of 40) fills the void with a cell to
@@ -100,7 +140,10 @@ export function drawAnsrBadgeMark(
   // 0.10 the window edges still showed at 3 and 9 o'clock.
   const core = Math.round(diameter * 0.12);
   drawPixels(ctx, CORE_CELLS, CORE_PALETTE, cx - core * 2, cy - core * 2, { scale: core });
-  drawAnsrLogo(ctx, cx, cy, diameter, 0, MARK_TONES[twinkle]!);
+  // Bold while it is turning: a rotated one-pixel ray is spread over two columns at
+  // partial coverage, so the spin costs the mark more weight than the lifted tone adds
+  // (measured in a raster, not reasoned about — see `drawAnsrLogo`).
+  drawAnsrLogo(ctx, cx, cy, diameter, spin, MARK_TONES[twinkle]!, spin !== 0);
 }
 
 export interface BadgePickupView {
@@ -135,6 +178,7 @@ export function drawBadgePickup(ctx: CanvasRenderingContext2D, v: BadgePickupVie
     v.cy,
     v.diameter ?? BADGE_MARK_D,
     Math.floor(v.phase * 8) % 2 === 0 ? 0 : 1,
+    markSpin(v.phase * MARK_SPIN_TURNS),
   );
   drawGroundChevron(ctx, v.cx, v.groundY, v.phase);
 }
@@ -165,9 +209,23 @@ export function drawBadgePerch(
   pxRect(ctx, 'rgba(0,16,22,0.35)', v.cx - 14, v.surfaceY, 28, 3, 1);
   // The course it stands on, lit: a plinth two cells deep, which is what tells the
   // player the wall's top is a place they can be.
-  pxRect(ctx, 'rgba(255,138,77,0.55)', v.cx - 18, v.surfaceY - 4, 36, 4, 2);
+  pxRect(ctx, `rgba(${RAY_LIT_RGB},0.55)`, v.cx - 18, v.surfaceY - 4, 36, 4, 2);
 
-  drawAnsrBadgeMark(ctx, v.cx, v.cy, BADGE_MARK_D, Math.floor(v.phase * 8) % 2 === 0 ? 0 : 1);
+  /*
+   * It turns here too, and on a perch that is the *only* motion the pickup has (owner
+   * call: rotate the logo on every page it is a powerup on). Note the deleted dashed
+   * ring was rejected partly for turning round a mark that stands still — a ring
+   * revolving round a static object is a lasso; the object itself revolving is a thing
+   * on a spindle, which is what a mark hanging over a plinth wants to look like.
+   */
+  drawAnsrBadgeMark(
+    ctx,
+    v.cx,
+    v.cy,
+    BADGE_MARK_D,
+    Math.floor(v.phase * 8) % 2 === 0 ? 0 : 1,
+    markSpin(v.phase * MARK_SPIN_TURNS),
+  );
 
   /*
    * **Nothing is drawn out beyond the mark, and the flare cells were the sixth and last
@@ -287,7 +345,14 @@ export function drawBadgeCeilingDrop(
     return;
   }
 
-  drawAnsrBadgeMark(ctx, cx, v.badge.y, BADGE_MARK_D, Math.floor(v.tick * 8) % 2 === 0 ? 0 : 1);
+  drawAnsrBadgeMark(
+    ctx,
+    cx,
+    v.badge.y,
+    BADGE_MARK_D,
+    Math.floor(v.tick * 8) % 2 === 0 ? 0 : 1,
+    markSpin(v.tick * MARK_SPIN_TURNS),
+  );
 }
 
 /**

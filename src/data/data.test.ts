@@ -3,6 +3,7 @@ import { BRAND, RESOLUTION, PLAYER, JOURNEY } from './tuning.config';
 import { PALETTE, SEMANTIC } from './tokens';
 import { COPY, CAPABILITIES, capabilityFor } from './copy';
 import { SCREENS, SCREEN_COUNT, getScreen, GRID, TOTAL_MONTHS_BASE } from './levels';
+import { wrapPixelLabel, normalizeForPixels } from '../ui/PixelType';
 
 describe('brand tokens', () => {
   it('exposes exactly the five brand colours', () => {
@@ -47,8 +48,76 @@ describe('copy', () => {
     expect(COPY.win.title).toBe('Market Entry Complete.');
   });
 
-  it('leads with the stake, interpolated from the tuning model (never typed)', () => {
-    expect(COPY.start.stake(JOURNEY.BASELINE_MONTHS)).toContain('24');
+  it('quotes no industry statistic anywhere a player can read one', () => {
+    /*
+     * The title screen led with "The average India GCC takes 24 months to go live."
+     * and the closing screen answered it with "ANSR clients average 11 months." Both
+     * are gone (owner call): an unsourced average is a claim the player can argue
+     * with, printed on the two surfaces they are most likely to screenshot.
+     *
+     * This is the guard, and it is deliberately a *search* rather than a check on the
+     * two deleted keys: the figures came back once already, as a per-row "saves 4
+     * months" on the receipt, which was the same claim split four ways.
+     */
+    const player: string[] = [
+      COPY.start.tagline,
+      COPY.start.controlsKeys,
+      COPY.start.controlsTap,
+      COPY.win.title,
+      COPY.win.lostLabel,
+      COPY.win.verdictClean,
+      COPY.win.verdictDelayed,
+      COPY.win.delaysNone,
+      COPY.win.replay,
+      COPY.gameOver.title,
+      COPY.gameOver.costLabel,
+      COPY.gameOver.advice,
+      COPY.gameOver.restart,
+      COPY.a11y.won(0),
+      COPY.a11y.won(4),
+    ];
+    for (const s of player) {
+      expect(s, s).not.toContain(String(JOURNEY.BASELINE_MONTHS));
+      expect(s, s).not.toContain(String(JOURNEY.ANSR_BENCHMARK_MONTHS));
+      expect(s.toLowerCase(), s).not.toContain('average');
+      expect(s.toLowerCase(), s).not.toContain('benchmark');
+    }
+  });
+
+  it('leads the title screen with the offer, and nothing else in words', () => {
+    /*
+     * Four things have now been deleted from this screen by the owner, in order: the
+     * 24-month average, the dare that pointed at it ("Think you can?"), the arcade
+     * contract ("6 STAGES. 3 LIVES.", drafted and rejected in its own raster), and the
+     * three-line hook ("Any board can approve a GCC. / BUILDING IT / is the hard
+     * part."). The tagline is the headline, it carries no figure, and the keys under it
+     * are drawn as caps rather than described in a sentence.
+     */
+    expect(COPY.start.tagline).toBe('Play the GCC journey before you plan it.');
+    expect(COPY.start.tagline).not.toMatch(/\d/);
+    expect(COPY.start).not.toHaveProperty('hook');
+    expect(COPY.start).not.toHaveProperty('challenge');
+    // Two balanced lines at the measure the screen sets it at (20/19), so the last
+    // line is never a single word standing over the Start cap.
+    const lines = wrapPixelLabel(COPY.start.tagline, 20);
+    expect(lines).toHaveLength(2);
+    expect(Math.abs(lines[0]!.length - lines[1]!.length)).toBeLessThanOrEqual(4);
+    /*
+     * The two control sentences are the legend's *accessible* copy — the visible row is
+     * caps — so they are not measured against the headline any more. What they must do
+     * is name the third button: the act key exists, it is the one control a player
+     * cannot guess, and it was missing from both the legend and this copy.
+     */
+    expect(COPY.start.controlsKeys).toMatch(/\bF\b/);
+    for (const line of [COPY.start.controlsKeys, COPY.start.controlsTap]) {
+      expect(line.toLowerCase(), line).toContain('fire');
+      expect(line.toLowerCase(), line).toContain('jump');
+    }
+    // Every cap label sets inside its own cap, which is what keeps the row a row of
+    // buttons rather than a row of words.
+    for (const label of Object.values(COPY.start.legend)) {
+      expect(normalizeForPixels(label).length, label).toBeLessThanOrEqual(5);
+    }
   });
 
   it('names a capability, a product and a topic for every capability badge', () => {
@@ -101,9 +170,15 @@ describe('the journey model', () => {
     expect(JOURNEY.MAX_MONTHS).toBeLessThan(JOURNEY.BASELINE_MONTHS);
   });
 
-  it('capability savings account for the whole baseline gap', () => {
-    const saved = CAPABILITIES.reduce((sum, c) => sum + c.monthsSaved, 0);
-    expect(saved).toBe(JOURNEY.BASELINE_MONTHS - JOURNEY.ANSR_BENCHMARK_MONTHS);
+  it('claims no months for any single capability', () => {
+    // The receipt row used to read "saves 4 months", and the four figures summed to
+    // the gap between the two published averages. Both averages are out of the game,
+    // so the field went with them: a row states what ANSR did, from COPY.powers.
+    for (const cap of CAPABILITIES) {
+      expect(cap, cap.product).not.toHaveProperty('monthsSaved');
+      expect(COPY.powers[cap.badge], cap.product).toBeTruthy();
+      expect(COPY.powers[cap.badge]!, cap.product).not.toMatch(/month/i);
+    }
   });
 });
 

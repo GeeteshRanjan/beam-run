@@ -155,8 +155,11 @@ describe('the Godzilla', () => {
     expect(D.BODY_W / 48).toBeGreaterThanOrEqual(4);
     expect(D.BODY_H / 60).toBeGreaterThanOrEqual(3);
     // …and the cell is small enough to describe an animal. 10px cells are what "blocks of
-    // red colour" was, and a grid this size cannot be made of them.
-    expect(BEAST_W / 46).toBeLessThanOrEqual(6);
+    // red colour" was, and a grid this size cannot be made of them. 48 columns since the
+    // rebuild against the owner's reference rasters — re-read off the art, because a
+    // divisor left at the previous grid's width is an assertion about a picture that is
+    // no longer drawn.
+    expect(BEAST_W / 48).toBeLessThanOrEqual(6);
     // The grid is a little wider and no taller than the box: the extra is all tail,
     // which is allowed to hang out of the back of a box that is only a water target.
     expect(BEAST_W).toBeGreaterThan(D.BODY_W);

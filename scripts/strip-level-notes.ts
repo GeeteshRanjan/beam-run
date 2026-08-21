@@ -27,6 +27,7 @@ interface LevelDoc {
     badge?: { note?: unknown };
     lift?: { note?: unknown };
     hoist?: { note?: unknown };
+    tunnel?: { note?: unknown };
   })[];
 }
 
@@ -72,6 +73,9 @@ export function stripLevelNotes(json: string): string {
     // The hoist is the lift's twin and carries prose for the same reason: its parking
     // row is load-bearing and the next person needs to know why.
     if (screen.hoist) delete screen.hoist.note;
+    // The Tech Park's secret tunnel: two numbers and a paragraph explaining why they
+    // are those numbers. The paragraph is the biggest note on that screen.
+    if (screen.tunnel) delete screen.tunnel.note;
     // `role` is documentation too, with two exceptions: `Screen` reads it to skip
     // decorative facades (`noncollide`) and the renderer reads it to paint a
     // `pedestal` as its screen's own prop instead of as level material. A solid may

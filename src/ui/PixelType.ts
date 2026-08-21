@@ -28,6 +28,7 @@ const SUBSTITUTES: Record<string, string> = {
   '\u2014': '-', // em dash
   '\u2013': '-', // en dash
   '\u2192': '>', // right arrow
+  '\u2190': '<', // left arrow (the font gained '<' with the control legend)
   '\u00b7': '.', // middle dot
   '\u2019': '', // curly apostrophe (dropped: no glyph, reads fine without)
   "'": '',

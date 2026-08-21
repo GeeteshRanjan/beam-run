@@ -70,6 +70,20 @@ export const FONT: Record<string, string[]> = {
   '/': ['....#', '....#', '...#.', '..#..', '.#...', '#....', '#....'],
   // '>' renders as a right-arrow (used for CTAs / "solution" flow).
   '>': ['.....', '..#..', '...#.', '#####', '...#.', '..#..', '.....'],
+  /*
+   * '<' is its mirror, and it exists for exactly one reason: the title screen's control
+   * legend draws the two movement keys as key caps, and a legend with a right arrow and
+   * a hole in it is worse than no legend. `normalizeForPixels` folds `\u2192` to '>' and
+   * now `\u2190` to '<', so arrow *copy* renders too instead of losing a character.
+   */
+  '<': ['.....', '..#..', '.#...', '#####', '.#...', '..#..', '.....'],
+  /*
+   * A down arrow, and it exists for one reason too: the secret hatch in the Tech Park is
+   * opened with the down arrow key, and the cap on its prompt has to carry that key's own
+   * glyph. It is authored under `\u2193` rather than under a letter because `drawText`
+   * upper-cases everything it is given, so a lower-case stand-in would fold into a word.
+   */
+  '\u2193': ['..#..', '..#..', '..#..', '#.#.#', '.###.', '..#..', '.....'],
 };
 
 export interface TextOptions {

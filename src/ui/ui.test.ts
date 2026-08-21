@@ -6,7 +6,8 @@ import { Overlays, type LifeLostModel, type ReceiptModel } from './Overlays';
 import { injectStyles, STYLE_ELEMENT_ID, CSS } from './styles';
 import { COPY, CAPABILITIES } from '../data/copy';
 import { SCREENS } from '../data/levels';
-import { wrapPixelLabel } from './PixelType';
+import { wrapPixelLabel, normalizeForPixels } from './PixelType';
+import { FONT } from '../render/PixelText';
 import { JOURNEY, LIVES } from '../data/tuning.config';
 import { logPanelView, type SetbackLogEntry } from '../core/setbackLog';
 
@@ -320,20 +321,49 @@ describe('Overlays', () => {
     expect(parent.querySelectorAll('.beam-run__overlay--visible').length).toBe(1);
   });
 
-  it('leads the start screen with the 24-month stake, all in the bitmap font', () => {
+  it('leads the start screen with the offer, set as its headline', () => {
+    // The three-line hook is deleted (owner call) and the stake element with it, so the
+    // tagline is the screen's headline — which is also what gives it the orange value
+    // rule under it, the same as every other title in the game.
     overlays.show('start');
-    const stake = visible(parent).querySelector('.beam-run__stake')!;
-    // Still exactly one clean sentence for assistive tech...
-    expect(stake.textContent).toBe(COPY.start.stake(JOURNEY.BASELINE_MONTHS));
-    // ...and three pixel lines on screen, with the figure at display size, so no
-    // web typeface is mixed into the game's own type.
-    expect(stake.querySelectorAll('svg.beam-run__pixels')).toHaveLength(3);
-    expect(stake.querySelector('.beam-run__stake-figure svg')).not.toBeNull();
-    // The three display lines must still read as the accessible sentence.
-    const spoken = `${COPY.start.stakeLead} ${COPY.start.stakeFigure(
-      JOURNEY.BASELINE_MONTHS,
-    )} ${COPY.start.stakeTail}`;
-    expect(spoken).toBe(COPY.start.stake(JOURNEY.BASELINE_MONTHS));
+    const start = visible(parent);
+    expect(start.querySelector('.beam-run__stake')).toBeNull();
+    const title = start.querySelector('.beam-run__title')!;
+    // One clean sentence for assistive tech, two centred bitmap lines on screen.
+    expect(title.textContent).toBe(COPY.start.tagline);
+    const art = title.querySelector('svg.beam-run__pixels')!;
+    expect(art.getAttribute('aria-hidden')).toBe('true');
+    expect(Number(art.getAttribute('viewBox')!.split(' ')[3])).toBeGreaterThan(14); // 2 lines
+    // The 24-month average this screen used to print is gone from it entirely.
+    expect(start.textContent).not.toContain(String(JOURNEY.BASELINE_MONTHS));
+  });
+
+  it('draws the controls as key caps, fire included', () => {
+    /*
+     * Owner: show the buttons instead of text, and the fire button was missing. So the
+     * legend is three groups of caps — move, jump, fire — each cap an 8-bit key with a
+     * drawn glyph in it, and the row carries ONE hidden sentence rather than a label per
+     * cap ("left right move space jump f fire" is not a sentence).
+     */
+    overlays.show('start');
+    const keys = visible(parent).querySelector('.beam-run__keys')!;
+    const groups = keys.querySelectorAll('.beam-run__key-group');
+    expect(groups).toHaveLength(3);
+    // Move takes two caps (both arrows), jump and fire one each: four buttons.
+    expect(keys.querySelectorAll('.beam-run__key')).toHaveLength(4);
+    expect(groups[0]!.querySelectorAll('.beam-run__key')).toHaveLength(2);
+    // Every cap is decorative pixel artwork, never a font character from the host.
+    for (const cap of Array.from(keys.querySelectorAll('.beam-run__key svg'))) {
+      expect(cap.getAttribute('aria-hidden')).toBe('true');
+      expect(cap.querySelector('path')!.getAttribute('shape-rendering')).toBe('crispEdges');
+    }
+    // One sentence for assistive tech, and it names the fire key.
+    expect(keys.textContent).toBe(COPY.start.controlsKeys);
+    expect(keys.querySelectorAll('.beam-run__sr')).toHaveLength(1);
+    // The left arrow is a real glyph now: the font gained '<' for this row, so a cap
+    // cannot render as a hole.
+    expect(FONT['<']).toBeTruthy();
+    expect(normalizeForPixels('\u2190 \u2192')).toBe('< >');
   });
 
   it('brands the start and end screens with the ANSRcade lockup', () => {
@@ -358,13 +388,18 @@ describe('Overlays', () => {
   it('sets every headline in the game\u2019s own bitmap font, text intact', () => {
     // No card, no web type: each title is decorative pixel art plus the real
     // sentence in a visually-hidden span (so textContent still reads as prose).
+    // On the title screen the headline is the tagline: with the hook deleted there is
+    // nothing above it, so it is set as the title like every other screen's is.
     overlays.show('start');
-    const title = visible(parent).querySelector('.beam-run__title')!;
-    expect(title.textContent).toBe(COPY.start.challenge);
-    const art = title.querySelector('svg')!;
+    const tagline = visible(parent).querySelector('.beam-run__title')!;
+    expect(tagline.textContent).toBe(COPY.start.tagline);
+    const art = tagline.querySelector('svg')!;
     expect(art.getAttribute('aria-hidden')).toBe('true');
     expect(art.querySelector('path')!.getAttribute('shape-rendering')).toBe('crispEdges');
     expect(parent.querySelector('.beam-run__panel')).toBeNull();
+
+    overlays.show('win', { receipt: receipt() });
+    expect(visible(parent).querySelector('.beam-run__title')!.textContent).toBe(COPY.win.title);
 
     overlays.show('titlecard', { levelLabel: 'Compliance' });
     expect(visible(parent).querySelector('.beam-run__title')!.textContent).toBe('Compliance');
@@ -395,50 +430,95 @@ describe('Overlays', () => {
     expect(per(art)).toBeGreaterThan(per(unit) * 2);
   });
 
-  it('draws the closing months figure as bitmap digits that follow the count-up', () => {
-    overlays.show('win', { receipt: receipt({ months: 14 }) });
-    const value = visible(parent).querySelector('.beam-run__months-value')!;
+  it('closes on what the delays cost, not on how long the run took', () => {
+    // Owner call: the run's absolute total and the two averages it was measured
+    // against are out of the game. What is left is the avoidable part — and it is
+    // the delay figure, not `months`, that the count-up lands on.
+    overlays.show('win', { receipt: receipt({ months: 14, delayMonths: 4 }) });
+    const win = visible(parent);
+    expect(win.querySelector('.beam-run__months-label')!.textContent).toBe(COPY.win.lostLabel);
+    const value = win.querySelector('.beam-run__months-value')!;
     expect(value.textContent).toBe('0');
     const before = value.querySelector('path')!.getAttribute('d');
     overlays.advanceMonths(5);
-    expect(value.textContent).toBe('14');
+    expect(value.textContent).toBe('4');
     // The pixel art was repainted, not left showing the old figure.
     expect(value.querySelector('path')!.getAttribute('d')).not.toBe(before);
+    // The run's own total appears nowhere on the screen.
+    expect(win.textContent).not.toContain('14');
   });
 
-  it('charts the run against both references, scaled to the going-alone baseline', () => {
+  it('composes the closing screen as two blocks under captions on one line', () => {
+    /*
+     * Owner: the last screen does not look designed or symmetrical. It was five
+     * centred, ragged bitmap lines (caption, figure, unit, verdict, heading, rows)
+     * standing opposite four solid full-width receipt rows, in two columns of equal
+     * width — so only one side had mass and the screen leaned right whatever the gaps
+     * did. Each column is now a caption plus ONE block, and the blocks fill their
+     * columns, so their edges line up and the button is centred under both.
+     */
+    overlays.show('win', { receipt: receipt() });
+    const win = visible(parent);
+    const main = win.querySelector('.beam-run__col--main')!;
+    expect(Array.from(main.children).map((c) => c.className)).toEqual([
+      'beam-run__months-label',
+      'beam-run__cost',
+    ]);
+    // The figure, the line it is evidence for and its itemisation are the same fact at
+    // three levels of detail, so they are one panel rather than three loose lines.
+    const cost = main.querySelector('.beam-run__cost')!;
+    for (const sel of ['.beam-run__months', '.beam-run__matched', '.beam-run__receipt-delays']) {
+      expect(cost.querySelector(sel), sel).not.toBeNull();
+    }
+    // Opposite it: the caption, the rows, then the instruction as a footnote UNDER
+    // them. Between the heading and the rows it pushed the right-hand block a line and
+    // a half below the left-hand one, which is what stopped the two masses aligning.
+    const list = win.querySelector('.beam-run__col--aside .beam-run__receipt')!;
+    expect(Array.from(list.children).map((c) => c.className)).toEqual([
+      'beam-run__receipt-title',
+      'beam-run__receipt-list',
+      'beam-run__hint',
+    ]);
+    // Equal columns, both blocks at full width — the symmetry is structural, not a
+    // hand-tuned pair of widths.
+    expect(CSS).toContain('.beam-run__cost {');
+    expect(CSS).toMatch(/\.beam-run__col \{ flex: 1 1 0/);
+    // A clean run writes no breakdown, and an empty box must not draw its divider.
+    expect(CSS).toContain('.beam-run__cost .beam-run__receipt-delays:empty');
+  });
+
+  it('charts nothing and quotes nobody: no meters, no attributed averages', () => {
     overlays.show('win', { receipt: receipt({ months: 12 }) });
     const win = visible(parent);
-    const bars = win.querySelector('.beam-run__bars')!;
-    // Decorative: the same facts are in the attributed ref lines below it.
-    expect(bars.getAttribute('aria-hidden')).toBe('true');
-    const value = (sel: string): number =>
-      Number.parseInt(win.querySelector<HTMLElement>(sel)!.style.width, 10);
-
-    // Baseline (24) is the full-width reference; ANSR's 11 is under half of it.
-    expect(value('.beam-run__bar-fill--alone')).toBe(100);
-    expect(value('.beam-run__bar-fill--ansr')).toBe(
-      Math.round((JOURNEY.ANSR_BENCHMARK_MONTHS / JOURNEY.BASELINE_MONTHS) * 100),
-    );
-    // The player's bar tracks the count-up, so figure and picture always agree.
-    expect(value('.beam-run__bar-fill--you')).toBe(4); // clamped floor at 0 months
-    overlays.advanceMonths(5);
-    expect(overlays.monthsDisplay).toBe(12);
-    expect(value('.beam-run__bar-fill--you')).toBe(50);
-    expect(win.querySelector('.beam-run__bar-value')!.textContent).toBe('12');
+    for (const sel of [
+      '.beam-run__bars',
+      '.beam-run__bar',
+      '.beam-run__bar-fill--you',
+      '.beam-run__bar-fill--ansr',
+      '.beam-run__bar-fill--alone',
+      '.beam-run__refs',
+      '.beam-run__ref',
+    ]) {
+      expect(win.querySelector(sel), sel).toBeNull();
+    }
+    // …and their CSS went with them, so the bundle is not carrying dead rules.
+    expect(CSS).not.toContain('beam-run__bar-fill');
+    expect(CSS).not.toContain('beam-run__refs');
+    // Neither statistic is anywhere in the screen's text.
+    expect(win.textContent).not.toContain(String(JOURNEY.ANSR_BENCHMARK_MONTHS));
+    expect(win.textContent).not.toContain(String(JOURNEY.BASELINE_MONTHS));
   });
 
   it('sets the whole end screen in the bitmap font, prose intact', () => {
-    overlays.show('win', { receipt: receipt({ matchedBenchmark: true, months: 11 }) });
+    // A delayed run, so the itemised breakdown is on the screen too (a clean run
+    // prints no credit line here — the verdict under the figure has said it).
+    overlays.show('win', { receipt: receipt() });
     const win = visible(parent);
-    // Every readout on the screen: caption, unit, bar labels/values, the two
-    // attributed refs, the clean-run line, the receipt and its rows.
+    // Every readout on the screen: caption, unit, the verdict line, the breakdown,
+    // the receipt and its rows.
     const selectors = [
       '.beam-run__months-label',
       '.beam-run__months-unit',
-      '.beam-run__bar-label',
-      '.beam-run__bar-value',
-      '.beam-run__ref',
       '.beam-run__matched',
       '.beam-run__receipt-title',
       // The delay summary holds one line per obstacle, so this checks the first.
@@ -512,40 +592,32 @@ describe('Overlays', () => {
     // "ANSRS" and read like a typo. Any string drawn as pixels must avoid one.
     const drawn = [
       COPY.win.title,
-      COPY.win.monthsLabel,
-      COPY.win.matched,
+      COPY.win.lostLabel,
+      COPY.win.verdictClean,
+      COPY.win.verdictDelayed,
       COPY.win.receiptTitle,
       COPY.win.receiptHint,
-      COPY.win.benchmark(11),
-      COPY.win.baseline(24),
       COPY.win.delaysNone,
-      COPY.win.delays(2, 4),
+      COPY.win.delaysTitle,
       COPY.win.delayRow('RED TAPE', 2, 4),
-      COPY.win.savesMonths(4),
       COPY.win.notReached,
-      COPY.win.barYou,
-      COPY.win.barAnsr,
-      COPY.win.barAlone,
-      COPY.win.cta,
-      COPY.win.ctaGap,
       COPY.win.replay,
       COPY.summary.title,
       COPY.summary.reached('Compliance'),
       COPY.summary.cta,
       COPY.summary.resume,
       COPY.start.play,
-      COPY.start.skip,
-      COPY.start.challenge,
-      COPY.start.stakeLead,
-      COPY.start.stakeTail,
+      COPY.start.tagline,
+      ...Object.values(COPY.start.legend),
       COPY.lifeLost.retryHint,
       COPY.titleCard.begin,
       ...Object.values(COPY.titleCard.brief),
       COPY.gameOver.title,
-      COPY.gameOver.cost(3, 6),
+      COPY.gameOver.costLabel,
+      COPY.gameOver.fromDelays(3),
       COPY.gameOver.advice,
       COPY.gameOver.restart,
-      COPY.gameOver.cta,
+      ...Object.values(COPY.powers),
       COPY.hud.logLabel,
       COPY.hud.logTotal,
       COPY.hud.livesLabel,
@@ -575,6 +647,48 @@ describe('Overlays', () => {
     overlays.show('titlecard', { levelLabel: 'Compliance', hint: COPY.lifeLost.retryHint });
     expect(hint.hidden).toBe(false);
     expect(hint.textContent).toBe(COPY.lifeLost.retryHint);
+    /*
+     * …and it comes back OFF on the next stage. The line only makes sense on the card
+     * of the stage that just took a life; a player who dies once on screen 1 was being
+     * told to take the powerup on the introduction to every screen after it (owner
+     * note). The bug was not here — this assignment was always made — it was in the
+     * stylesheet, which is what the next test guards.
+     */
+    overlays.show('titlecard', { levelLabel: 'Workplace', brief: COPY.titleCard.brief[3] });
+    expect(hint.hidden).toBe(true);
+    expect(hint.textContent).toBe('');
+  });
+
+  it('makes the hidden attribute beat a display rule, or a hidden line stays on screen', () => {
+    /*
+     * The hidden attribute is a UA rule (display: none) and loses to any author rule
+     * that sets display on the same element. Both lines on the briefing card do set it
+     * (they are flex columns of bitmap SVG), and both are shown and hidden by assigning
+     * to el.hidden — so without one scoped override the retry hint was painted once and
+     * then stayed on every later card, with `hidden` set and doing nothing.
+     *
+     * Measured, not asserted as a selector: this is a *cascade* claim, so the test puts
+     * the real stylesheet in a document and reads back the computed display. It is also
+     * why that rule is the last one in the file — jsdom cascades by source order alone,
+     * and higher up it was correct per spec and unprovable here.
+     */
+    injectStyles(document);
+    // The rule is scoped to the widget root, which the real host puts the class on and
+    // these tests' bare parent div does not — so the root has to exist for the cascade
+    // to be the shipped one.
+    parent.classList.add('beam-run');
+    overlays.show('titlecard', { levelLabel: 'Compliance' });
+    for (const cls of ['beam-run__brief', 'beam-run__advice']) {
+      const el = visible(parent).querySelector(`.${cls}`) as HTMLElement;
+      // Driven by the attribute, not by a class of its own.
+      expect(el.hidden, cls).toBe(true);
+      expect(el.className, cls).not.toMatch(/hidden|--off/);
+      const win = parent.ownerDocument.defaultView!;
+      expect(win.getComputedStyle(el).display, cls).toBe('none');
+      // …and the rule it depends on is the *general* one, so a new line hidden the same
+      // way is covered without anybody remembering to add a selector.
+      expect(CSS).toMatch(/\.beam-run \[hidden\][^{]*\{[^}]*display:\s*none\s*!important/);
+    }
   });
 
   it('briefs the stage ahead and waits for a press', () => {
@@ -652,33 +766,52 @@ describe('Overlays', () => {
     }
   });
 
-  it('ends an attempt on four things and two routes, not a ledger', () => {
+  it('ends an attempt on three things and one route, not a ledger', () => {
     overlays.show('gameover', lifeLost({ delays: 3, delayMonths: 6 }));
     const el = visible(parent);
     expect(overlays.current).toBe('gameover');
     expect(el.getAttribute('role')).toBe('alertdialog');
     // The headline, the one figure, the argument.
     expect(el.textContent).toContain(COPY.gameOver.title);
-    expect(el.textContent).toContain(COPY.gameOver.cost(3, 6));
+    expect(el.textContent).toContain(COPY.gameOver.costLabel);
     expect(el.querySelector('.beam-run__advice')!.textContent).toBe(COPY.gameOver.advice);
+    /*
+     * The figure is a FIGURE, in the same shape the win screen closes on: a caption, an
+     * orange numeral, a unit and its small print, inside one panel. It used to be a
+     * sentence set at the same weight as everything else on the screen, which is why the
+     * screen had no hierarchy (owner note).
+     */
+    const panel = el.querySelector('.beam-run__cost')!;
+    expect(panel.querySelector('.beam-run__months-value')!.textContent).toBe('6');
+    expect(panel.querySelector('.beam-run__months-unit')!.textContent).toBe(
+      COPY.win.monthsUnit(6),
+    );
+    expect(panel.querySelector('.beam-run__matched')!.textContent).toBe(
+      COPY.gameOver.fromDelays(3),
+    );
+    // The argument is inside the panel, under the figure it argues about.
+    expect(panel.querySelector('.beam-run__advice')).not.toBeNull();
+    // The months are not printed twice: the numeral carries them, the small print
+    // carries the count. A total and a restatement of the total in one column is the
+    // defect the win screen's "What cost you" heading was written to fix.
+    expect(panel.querySelector('.beam-run__matched')!.textContent).not.toMatch(/6/);
     // …and nothing else. No itemised table, no lives readout (there are none left),
     // no two-column split: one centred column, symmetrical about its own axis.
     expect(el.querySelector('.beam-run__ledger')).toBeNull();
     expect(el.querySelector('.beam-run__lives')).toBeNull();
     expect(el.querySelector('.beam-run__cols')).toBeNull();
     expect(el.querySelector('.beam-run__stack--gameover')).not.toBeNull();
-    // Not a dead end: start again AND a route to the Navigator.
+    // One route, and it goes back into the stage that stopped them (owner call: no
+    // Navigator button on the first screen, this one or the win receipt). Still not a
+    // dead end — the Navigator is on the pause menu and on every receipt row.
     const btns = buttons(parent).filter((b) => !b.hidden);
-    expect(btns).toHaveLength(2);
+    expect(btns).toHaveLength(1);
     expect(btns[0]!.textContent).toBe(COPY.gameOver.restart);
-    // Both labels fit one bitmap line, so the pair is not lopsided: the sentence
-    // form the other end screens use wraps onto two.
-    expect(btns[1]!.textContent).toBe(COPY.gameOver.cta);
-    for (const b of btns) expect(wrapPixelLabel(b.textContent!)).toHaveLength(1);
+    expect(el.textContent).not.toMatch(/navigator/i);
+    expect(wrapPixelLabel(btns[0]!.textContent!)).toHaveLength(1);
     btns[0]!.click();
     expect(cb.onContinue).toHaveBeenCalled();
-    btns[1]!.click();
-    expect(cb.onCta).toHaveBeenCalledWith('summary');
+    expect(cb.onCta).not.toHaveBeenCalled();
   });
 
   it('sizes every readout on the out-of-lives screen in frame units', () => {
@@ -700,69 +833,113 @@ describe('Overlays', () => {
   });
 
   it('repaints the out-of-lives figure for each attempt', () => {
+    // One delay is reachable with the assists on, so the unit has to follow the value.
     overlays.show('gameover', lifeLost({ delays: 1, delayMonths: 2 }));
-    expect(visible(parent).textContent).toContain(COPY.gameOver.cost(1, 2));
+    let panel = visible(parent).querySelector('.beam-run__cost')!;
+    expect(panel.querySelector('.beam-run__months-value')!.textContent).toBe('2');
+    expect(panel.querySelector('.beam-run__matched')!.textContent).toBe(
+      COPY.gameOver.fromDelays(1),
+    );
     overlays.show('titlecard', { levelLabel: 'Compliance' });
     overlays.show('gameover', lifeLost({ delays: 4, delayMonths: 8 }));
-    expect(visible(parent).textContent).toContain(COPY.gameOver.cost(4, 8));
+    panel = visible(parent).querySelector('.beam-run__cost')!;
+    expect(panel.querySelector('.beam-run__months-value')!.textContent).toBe('8');
+    expect(panel.querySelector('.beam-run__matched')!.textContent).toBe(
+      COPY.gameOver.fromDelays(4),
+    );
   });
 
-  it('itemises the run\u2019s delays on the closing receipt', () => {
-    overlays.show('win', { receipt: receipt() });
-    const delays = visible(parent).querySelector('.beam-run__receipt-delays')!;
-    expect(delays.textContent).toContain(COPY.win.delays(2, 4));
+  it('itemises the delays under the figure they add up to, not under the capabilities', () => {
+    overlays.show('win', { receipt: receipt({ delayMonths: 4 }) });
+    const main = visible(parent).querySelector('.beam-run__col--main')!;
+    const delays = main.querySelector('.beam-run__receipt-delays')!;
+    // The breakdown is in the run's own column — the raster caught it sitting in the
+    // value column, where it read as a second copy of the closing figure.
+    expect(delays).not.toBeNull();
+    expect(
+      visible(parent).querySelector('.beam-run__col--aside .beam-run__receipt-delays'),
+    ).toBeNull();
+    // A label, not a restatement of the total: the figure above already said "4".
+    expect(delays.textContent).toContain(COPY.win.delaysTitle);
     expect(delays.textContent).toContain('OFFER DECLINED');
-    // A clean run gets the credit instead.
+    expect(delays.textContent).not.toContain('4 months');
+    // A clean run prints nothing here: the verdict under the figure already says it,
+    // and the two lines together were one fact twice in one column.
     overlays.show('start');
     overlays.show('win', { receipt: receipt({ setbacks: 0, delayMonths: 0, ledger: [] }) });
+    expect(visible(parent).querySelector('.beam-run__receipt-delays')!.textContent).toBe('');
+    // The mid-run summary has no verdict slot, so there it is the credit line.
+    overlays.show('summary', { receipt: receipt({ setbacks: 0, delayMonths: 0, ledger: [] }) });
     expect(
       visible(parent).querySelector('.beam-run__receipt-delays')!.textContent,
     ).toContain(COPY.win.delaysNone);
   });
 
-  it('counts the months up from 0 to the final figure', () => {
-    overlays.show('win', { receipt: receipt({ months: 14 }) });
+  it('counts the delay cost up from 0 to the final figure', () => {
+    overlays.show('win', { receipt: receipt({ delayMonths: 6 }) });
     expect(overlays.monthsDisplay).toBe(0);
     overlays.advanceMonths(0.3);
     const mid = overlays.monthsDisplay;
     expect(mid).toBeGreaterThan(0);
-    expect(mid).toBeLessThan(14);
+    expect(mid).toBeLessThan(6);
     overlays.advanceMonths(2); // past the count-up duration
-    expect(visible(parent).querySelector('.beam-run__months-value')!.textContent).toBe('14');
+    expect(visible(parent).querySelector('.beam-run__months-value')!.textContent).toBe('6');
     overlays.advanceMonths(1); // no-op once complete
-    expect(overlays.monthsDisplay).toBe(14);
+    expect(overlays.monthsDisplay).toBe(6);
   });
 
   it('reduced-motion shows the final figure instantly (no count-up)', () => {
     const rm = new Overlays(makeParent(), cb, { reducedMotion: true });
-    rm.show('win', { receipt: receipt({ months: 11 }) });
-    expect(rm.monthsDisplay).toBe(11);
+    rm.show('win', { receipt: receipt({ delayMonths: 4 }) });
+    expect(rm.monthsDisplay).toBe(4);
     rm.advanceMonths(0.1);
-    expect(rm.monthsDisplay).toBe(11);
+    expect(rm.monthsDisplay).toBe(4);
   });
 
-  it('states ANSR\u2019s benchmark and the going-alone baseline as attributed facts', () => {
+  it('keeps every closing line to one bitmap line at its own measure', () => {
+    // Measured, not felt. The raster caught the first draft of the delayed verdict
+    // (37 characters) printing ANSWER on its own under the figure — a widow directly
+    // beneath the loudest element on the screen.
+    for (const line of [COPY.win.verdictClean, COPY.win.verdictDelayed, COPY.win.delaysNone]) {
+      expect(wrapPixelLabel(line, 34), line).toHaveLength(1);
+    }
+    // The out-of-lives panel's caption and its small print, in the same slots.
+    expect(wrapPixelLabel(COPY.gameOver.costLabel, 34)).toHaveLength(1);
+    expect(wrapPixelLabel(COPY.gameOver.fromDelays(3), 24)).toHaveLength(1);
+    // The two column headings share a caption measure and sit opposite each other.
+    for (const line of [COPY.win.receiptTitle, COPY.win.delaysTitle, COPY.win.lostLabel]) {
+      expect(wrapPixelLabel(line, 34), line).toHaveLength(1);
+    }
+  });
+
+  it('a clean run closes on zero, and says so in the value accent', () => {
+    // Nothing to count up to and nothing to explain: the figure is the reward.
+    overlays.show('win', { receipt: receipt({ setbacks: 0, delayMonths: 0, ledger: [] }) });
+    expect(overlays.monthsDisplay).toBe(0);
+    const verdict = visible(parent).querySelector('.beam-run__matched')!;
+    expect(verdict.textContent).toBe(COPY.win.verdictClean);
+  });
+
+  it('a delayed run gets the argument, not a comparison', () => {
+    overlays.show('win', { receipt: receipt({ setbacks: 2, delayMonths: 4 }) });
+    const verdict = visible(parent).querySelector('.beam-run__matched')!;
+    expect(verdict.textContent).toBe(COPY.win.verdictDelayed);
+  });
+
+  it('leaves the closing screen one cap, and it is not the Navigator', () => {
+    // Owner call: the generic Navigator cap is gone — it was the same offer as the
+    // four capability rows beside it, with no topic attached.
     overlays.show('win', { receipt: receipt() });
-    const refs = Array.from(visible(parent).querySelectorAll('.beam-run__ref')).map(
-      (n) => n.textContent,
+    const caps = buttons(parent).filter((b) => b.classList.contains('beam-run__btn'));
+    expect(caps).toHaveLength(1);
+    expect(caps[0]!.textContent).toBe(COPY.win.replay);
+    caps[0]!.click();
+    expect(cb.onRestart).toHaveBeenCalled();
+    expect(cb.onCta).not.toHaveBeenCalled();
+    // The instruction that now carries the conversion still points at the rows.
+    expect(visible(parent).querySelector('.beam-run__receipt')!.textContent).toContain(
+      COPY.win.receiptHint,
     );
-    expect(refs[0]).toContain(String(JOURNEY.ANSR_BENCHMARK_MONTHS));
-    expect(refs[1]).toContain(String(JOURNEY.BASELINE_MONTHS));
-  });
-
-  it('calls out a clean run and swaps to the plain CTA', () => {
-    overlays.show('win', { receipt: receipt({ matchedBenchmark: true, months: 11 }) });
-    const matched = visible(parent).querySelector('.beam-run__matched') as HTMLElement;
-    expect(matched.hidden).toBe(false);
-    expect(matched.textContent).toBe(COPY.win.matched);
-    const cta = buttons(parent).find((b) => b.classList.contains('beam-run__btn--primary'))!;
-    expect(cta.textContent).toBe(COPY.win.cta);
-  });
-
-  it('offers the gap-closing CTA when the run was not clean', () => {
-    overlays.show('win', { receipt: receipt({ matchedBenchmark: false }) });
-    const cta = buttons(parent).find((b) => b.classList.contains('beam-run__btn--primary'))!;
-    expect(cta.textContent).toBe(COPY.win.ctaGap);
   });
 
   it('marks engaged capabilities and leaves unreached ones dim but clickable', () => {
@@ -774,7 +951,10 @@ describe('Overlays', () => {
     const engaged = rows.filter((r) => r.classList.contains('beam-run__receipt-row--engaged'));
     expect(engaged).toHaveLength(1);
     expect(engaged[0]!.textContent).toContain('1Wrk');
-    expect(engaged[0]!.textContent).toContain(COPY.win.savesMonths(4));
+    // The row states the outcome, not a months-saved figure (that claim was a share
+    // of the benchmark gap, and the benchmark is out of the game).
+    expect(engaged[0]!.textContent).toContain(COPY.powers.PLACE_TILE);
+    expect(engaged[0]!.textContent).not.toMatch(/month/i);
     const dim = rows.find((r) => !r.classList.contains('beam-run__receipt-row--engaged'))!;
     expect(dim.textContent).toContain(COPY.win.notReached);
     expect(dim.disabled).toBe(false);
@@ -799,11 +979,21 @@ describe('Overlays', () => {
     expect(cb.onCta).toHaveBeenCalledWith('summary');
   });
 
-  it('wires the Start button and the skip route', () => {
+  it('offers one way off the title screen, and it is into the game', () => {
+    // Owner call: the "Skip to the Navigator" ghost cap that sat beside Start handed
+    // a busy executive a way out of a 90-second game before they had seen any of it.
+    // It survives on the pause menu, for somebody who has started and wants out.
     overlays.show('start');
-    buttons(parent).find((b) => b.textContent === COPY.start.play)!.click();
+    const caps = buttons(parent);
+    expect(caps).toHaveLength(1);
+    expect(caps[0]!.textContent).toBe(COPY.start.play);
+    caps[0]!.click();
     expect(cb.onStart).toHaveBeenCalledOnce();
-    buttons(parent).find((b) => b.textContent === COPY.start.skip)!.click();
+    expect(cb.onSkip).not.toHaveBeenCalled();
+    expect(visible(parent).textContent).not.toMatch(/navigator/i);
+
+    overlays.show('pause');
+    buttons(parent).find((b) => b.textContent === COPY.pause.skip)!.click();
     expect(cb.onSkip).toHaveBeenCalledOnce();
   });
 
@@ -828,24 +1018,52 @@ describe('Overlays', () => {
         expect(svg!.getAttribute('style')).not.toContain('%');
       }
     }
-    // Long CTA copy wraps instead of overflowing, and the arrow folds to '>'.
-    const lines = wrapPixelLabel(COPY.win.cta);
+    // Long CTA copy wraps instead of overflowing, and the arrow folds to '>'. The
+    // last long cap in the game is the mid-run summary's, the Navigator route that
+    // survived the cut on the three end screens.
+    const lines = wrapPixelLabel(COPY.summary.cta);
     expect(lines.length).toBeGreaterThan(1);
     expect(lines.every((l) => l.length <= 26)).toBe(true);
     expect(lines.join(' ')).toContain('NAVIGATOR');
     expect(wrapPixelLabel(COPY.start.play)).toEqual(['START']);
   });
 
-  it('keeps the title screen to the stake, the challenge and the two routes', () => {
+  it('keeps the title screen to the offer, the buttons and one route', () => {
     overlays.show('start');
     const start = visible(parent);
-    // No control legend and no run-length estimate (owner call): a title screen
-    // that explains the arrow keys reads as a manual.
-    expect(start.querySelectorAll('.beam-run__hint')).toHaveLength(0);
+    // Three things in one order: what the game is, how to play it, play.
+    const stack = start.querySelector('.beam-run__stack')!;
+    expect(Array.from(stack.children).map((n) => n.className)).toEqual([
+      'beam-run__title',
+      'beam-run__keys',
+      'beam-run__actions',
+    ]);
+    // The legend sits ABOVE the cap: a line of chrome under a button reads as a
+    // caption on the button (the briefing card paid for that one twice).
     expect(start.textContent).not.toContain(COPY.meta.estimatedTime);
-    expect(start.textContent).not.toContain(COPY.start.controlsDesktop);
-    // The controls still reach screen-reader users via the canvas description.
+    expect(start.textContent).not.toContain(COPY.start.controlsTap);
+    // The controls also still reach screen-reader users via the canvas description,
+    // the act key included.
     expect(COPY.a11y.canvasLabel).toContain('Space');
-    expect(buttons(parent)).toHaveLength(2);
+    expect(COPY.a11y.canvasLabel).toContain('F to');
+    expect(buttons(parent)).toHaveLength(1);
+  });
+
+  it('shows the on-screen pads instead of keys on a touch device', () => {
+    // A phone player has no arrow keys and gets one-tap play by default, so the legend
+    // draws the pads they will actually see: two arrows, a round jump, an act button.
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const touch = new Overlays(host, cb, { touch: true });
+    touch.show('start');
+    const start = host.querySelector('.beam-run__overlay--visible')!;
+    const keys = start.querySelector('.beam-run__keys')!;
+    expect(keys.textContent).toBe(COPY.start.controlsTap);
+    expect(start.textContent).not.toContain(COPY.start.controlsKeys);
+    // Round caps, and still four of them — the pads are the same three controls.
+    expect(keys.querySelectorAll('.beam-run__key--pad')).toHaveLength(4);
+    expect(CSS).toContain('.beam-run__key--pad { border-radius: 50%; }');
+    touch.destroy();
+    host.remove();
   });
 });

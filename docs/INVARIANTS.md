@@ -125,6 +125,12 @@ into `docs/INVARIANTS-<screen>.md` and leave the cross-screen rules here.
   was an eager field initialiser, so the class stayed reachable and shipped to every host.
 - Copy for build-time-only pages does not belong in `COPY` — that object is imported by the game,
   so anything in it ships (this is why the 404 strings live in `data/notFoundCopy.ts`).
+- **A CSS rule may have a caller the game does not contain.** `NotFoundPage.ts` builds the 404 out of
+  the game's own class names, and it is a **build-time** page — so deleting `.beam-run__stake` /
+  `--stake-figure` along with the title screen's hook left the 404's "404" as unstyled bitmap art, with
+  every test in the suite green. Before deleting a shared rule, grep `src/ui/NotFoundPage.ts` (and the
+  standalone pages) as well as the game. `notFound.test.ts` now does it mechanically: every
+  `beam-run__` class in the page's markup must appear as a selector in the stylesheet it inlines.
 - **There are TWO builds, and a build-time plugin has to be in both.** `vite.config.site.ts` never ran
   `stripLevelNotesPlugin`, so every word of `levels.json`'s authoring prose shipped to the deployed
   page — ~5 KB gzipped — for as long as that plugin has existed. Nothing reported it because the budget
@@ -149,6 +155,28 @@ into `docs/INVARIANTS-<screen>.md` and leave the cross-screen rules here.
   download is the IIFE figure. Effective per-bundle budget is therefore ~45 KB.
 
 **DOM bitmap type**
+- **THE `hidden` ATTRIBUTE LOSES TO ANY AUTHOR RULE THAT SETS `display`, AND TWO OF OURS DID.** `[hidden]`
+  is a UA stylesheet rule (`display: none`), so `.beam-run__advice { display: flex }` beats it outright —
+  and both lines on the briefing card are flex columns of bitmap SVG that are shown and hidden by
+  assigning to `el.hidden`. Symptom, which took several passes to be reported: the retry hint ("TAKE THE
+  ANSR POWERUP") was painted on the card of the first stage a player died on and then **stayed on the
+  briefing card of every screen after it**, with the attribute set and doing nothing. It looked like a
+  model bug and every candidate for it was innocent — `Simulation._retry` is cleared by `loadScreen`,
+  `screenHasPowerup` reads level data, the host recomputes the hint every frame and there is a test for
+  each. Before the first death the line was absent for the *wrong reason*: the element had no content yet.
+  Three rules out of it. **`.beam-run [hidden] { display: none !important; }` exists and must stay** — the
+  extra class and the `!important` are what a browser reads. **It is the LAST rule in the file, and that is
+  not tidiness:** jsdom's `getComputedStyle` cascades by *source order alone*, ignoring specificity and
+  `!important`, so with the rule up at the top the fix was correct per spec and **unprovable in any test we
+  could write** (measured: identical sheet, rule early → `flex`, rule last → `none`). Anything added below
+  that line which hides by attribute is on its own. And **clear the content as well as hiding it**, because a
+  hidden element holding its last text is one cascade mistake away from printing it again.
+- **A cascade claim has to be tested as a cascade, and that needs the widget ROOT.** The guard in
+  `ui.test.ts` injects the real stylesheet and reads the computed `display` back — it fails with `flex` the
+  moment the rule is removed, which a regex over the CSS never would. It also has to put `class="beam-run"`
+  on the test's parent: every rule in this stylesheet is scoped to that root, the real host sets it and the
+  bare `<div>` these tests mount into does not, so *no* scoped rule applies in the default fixture. Any
+  future test that reasons about the shipped cascade needs the same line.
 - **Any `PixelSpec` without `maxShare` is a bug waiting to happen.** The default `min(96%, …)` cap
   is circular inside a shrink-wrapping flex box, and the browser silently falls back to the SVG's
   intrinsic width — that is how the closing months figure rendered at a third of its size.
@@ -324,9 +352,47 @@ into `docs/INVARIANTS-<screen>.md` and leave the cross-screen rules here.
   perch the lit plinth plus four flare cells at full alpha. `badge.test.ts` counts the cells in the
   24-34px annulus (4 on a perch, <6 on a rail, all of them on the shaft's axis) so a fifth ring fails
   immediately. **Do not add one.**
+- **A pickup's LABEL is per delivery, and one of the four now carries none.** The capability plaque is
+  positioned in dead sky on the rail, the drop and the perch; on the Workplace's ceiling drop 52px above
+  the mark is the **spotlight's own canopy and the two cables the badge hangs from**, and on the cabinet
+  it is over the four countdown pips — so the words were painted onto the fitting that explains the
+  pickup. It is deleted there (owner call, "for now do not keep any text"), which is safe *because that
+  delivery is the most signposted of the four*: a lit lens, cables, a tightening contact shadow and a
+  blinking countdown. Rasterise a plaque against the room it hangs in, not against a clear sky, and
+  remember the capability is still named twice — the pickup toast and the HUD chip.
 - **A dithered glow works at bubble size and fails at badge size.** Warm cells at 0.15–0.4 alpha over
   the deep teal sky desaturate to grey-brown — a field round a 46px figure, dirt round a 38px icon.
   Few cells at full alpha say "light"; many at low alpha say "rendering fault".
+- **THE MARK TURNS, AND A ROTATED MARK LOSES WEIGHT — SO "ROTATE IT" AND "MAKE IT BRIGHTER" FIGHT EACH
+  OTHER UNLESS YOU PAY FOR BOTH.** Owner call: rotate the logo everywhere it is a powerup, and lift it so
+  it is noticeable. The sunburst is ~32 rays, so at the pickup's 40px each ray is about **one pixel**
+  across: unrotated, the axis-aligned rays land on whole pixels and the mark is crisp; at any other angle
+  every ray is spread over two columns at partial coverage. The first cut had the spin *and* the lighter
+  tone and rasterised **dimmer than what it replaced** — the AA gave back more than the tone lift added,
+  and it is invisible in the code because both halves are individually correct. The fix is a second
+  source-over fill of the same path (`drawAnsrLogo`'s `bold`), which takes a half-covered pixel from 0.5
+  to 0.75: most of the weight back for one fill, and no change to the shape. **Not a stroke** — an outline
+  round a 32-ray star closes the gaps between the rays. And only the *small, spinning* marks ask for it:
+  the plaza, the attract facade and the finale draw it large, where a ray is many pixels wide.
+- **A rotation rate is bounded by the ART's own repeat, not by taste.** The mark repeats every 11.25
+  degrees, so once it advances more than about one ray-pitch per frame it samples onto its own neighbours
+  and reads as a strobing blur rather than a turning object — ~1.9 rev/s at 60Hz. The pickups run at 0.3
+  rev/s (`MARK_SPIN_TURNS` 1 against the host's own phase) and the secret stage's ball at 1.2
+  (`BALL_SPIN_TURNS` 4, owner: higher, but not so high the logo stops being visible), i.e. both under the
+  ceiling with the faster one justified by being *a ball somebody just threw*. Write the ceiling into the
+  constant, or the next "make it quicker" note is answered with a number nobody can argue with.
+- **Reduced motion is free here, and that is because the hosts hand in a PHASE rather than a clock.**
+  Every mark's spin is `phase × turns`, and every caller already holds the phase constant under
+  `prefers-reduced-motion` — so the mark stops turning without disappearing, and no new branch was
+  needed. The angle it stops at does not matter to a shape that is nearly rotationally symmetric.
+- **The pickup's tone is a LIFT of the brand orange, and the relationship is what the test states.**
+  `#f05722` is right on the DOM lockup, the plaza and the finale — big, still, on its own — and against
+  screen 1's ground band a 40px moving mark in it is close in value to what is behind it. The pickup
+  draws `#ff7a45` / `#ff9570`: same hue to within 4 degrees, fully saturated, lighter on every channel,
+  and neither of them the value accent `#FF5400`. `badge.test.ts` measures the hue and the channels
+  rather than pinning a literal, because "brighter" is how a pickup ends up cream. The translucent form
+  used by the perch plinth and the secret stage's trail is exported as channels (`MARK_LIT_RGB`) and
+  checked against the hex, because those two had drifted from the mark once already.
 - **Anywhere the ANSR mark appears it is the brand asset, never an interpretation of it.** One path
   (`ui/ansrMark.ts`, from `ANSR Logo.svg`) feeds the DOM lockup, the plaza, the attract-screen facade
   *and* the badge. The owner has rejected a procedural stand-in three times: the real mark is a
@@ -528,6 +594,48 @@ into `docs/INVARIANTS-<screen>.md` and leave the cross-screen rules here.
 - **A grid is only as good as its size.** The same upright silhouette at 200×190 had no room for
   legible legs, arms, fins *and* tail — the lower half was one mass. 260×240 (five drawn heroes wide,
   four tall) is where it reads. If a creature is not reading, try the size before the shape.
+- **The generator-and-PNG loop is not optional, and "adjust the spans and re-render" is not it.** The
+  Godzilla was rebuilt a fourth time (owner: "very badly shaped", with two reference rasters), and the
+  two attempts that failed were **procedural masks reasoned about in code** and only rasterised
+  afterwards; both came out worse than what shipped. The one that worked authored the silhouette in
+  `/tmp/brrender/gz2.mts`, looked at `gz2.png` at 6× after **every** change, and pasted the output in as
+  a literal. Two failures of one approach is the signal to change the approach, not the numbers.
+- **Anchor a creature's parts to the PART they grow from, never to the union silhouette.** Dorsal plates
+  anchored to "the leftmost solid cell in this row" floated as detached blobs *beside* the animal,
+  because for every row the tail occupies, the leftmost cell is a tail column fifteen cells away —
+  correct code, nonsense picture. Anchor to that object's own span (`bodySpan`), and **stop a run of
+  parts where the next object starts**: torso plates below the tail junction (row 19 at the hips)
+  protrude *into* the tail and rasterise as a smear across the animal's own back.
+- **A plate, a fin or a spine needs a base and a point, and at 5px cells that costs three columns.**
+  Authored one cell wide they rasterise as a dotted diagonal line of **bristles**, which is the fur read
+  the plates exist to avoid. Same family as "a leg is a mark, not a limb" — below a certain width a
+  feature stops being the thing and becomes texture.
+- **A belly is an abdomen, not the front edge.** A pale course following the whole front edge, full
+  height, rasterised as **a sash worn by the animal** — a costume on the one creature that must wear
+  nothing. Three cells wide, held two cells inside the edge, stopped short of the chin.
+- **ROTATING A CELL GRID SPREADS ITS CELLS APART, AND YOU MUST PAY FOR IT IN CELL SIZE.** The topple is a
+  real pivot now, and the first cut rasterised as a **speckled, half-transparent beast**: at 45° the
+  rotated centres are 1.41× further apart than a cell is wide, so cells drawn at their authored size
+  leave the animal riddled with holes — this build's oldest trap (loose cells over a lit material read as
+  dirt) in a new costume, and the third side of the `ctx.rotate` bill the cannon barrel paid. Grow every
+  cell by the rotation's own spread: `ceil(scale × (|cos θ| + |sin θ|))`.
+- **A death or arrival animation's own beats are STATE, so they survive reduced motion.** The topple's
+  impact shadow and dust are keyed to `state.progress` (sim time), like the fall itself; only wall-clock
+  flicker is dropped. Freezing them would delete information, which is the line every reduced-motion
+  decision on this screen is drawn on.
+- **Five of anything must differ in SILHOUETTE, not only in palette.** The hires were one sprite in four
+  palettes: a line-up of the same body with recoloured shirts. Five distinct sprites, five palettes, and
+  arms that **alternate** high and side give the row a rhythm instead of a repeat. And a raised arm needs
+  a hand — two rectangles of shirt colour at the shoulder are sleeves with nothing in them.
+- **A cut-out is not an opening.** The costume's exit was eleven columns revealed as a black rectangle
+  with vertical cliffs, in a shape that is otherwise all slumped curves. What reads as *opening* is a
+  tapered cavity plus two **peeled lips** displaced outwards — one lit, one in shade, so the fabric has
+  two faces — and the pull travelling down the seam. Put it where the thing coming out actually emerges
+  (the hazard's own `door`), or the picture and the people disagree.
+- **A raster test pins a number taken off the art, so re-read it when the art moves.** Rebuilding the
+  skull moved the mouth line, so the jaw's hinge/tip columns had to be re-read off the grid (38/47), and
+  the new cheer's 7×7 hands were counted as confetti by a filter that means "8×8 cells". Neither was a
+  logic error; both were assertions still describing the previous picture.
 - **A backdrop that framed a flying boss will swallow a standing one.** `scenery.ts` had a scorched
   crag at x≈1080, authored under a dragon that hovered over that end. The beast now stands in exactly
   those columns, and two dark warm masses in the same place are one mass: the animal lost its
@@ -1224,6 +1332,26 @@ ending and the death pose; full narrative in `docs/JOURNAL.md`)
   the stage name above it (the raster caught COMPLIANCE over "compliance…" and WORKPLACE over "the
   workplace…"), so a rename can *create* that defect without the brief changing. Head Office over
   "Every plan looks clean from the lobby." is clear — "lobby" is not "office".
+- **A NAME MUST NOT BE A WORD EVERY DECK ALREADY USES, AND IT MAY NOT BORROW VOCABULARY THE ART DOES NOT
+  DRAW.** The secret stage was "The Growth Floor" and the owner sent it back. Both halves were wrong for
+  their own reason: *growth* is the word every consultancy applies to everything, so it names nothing and
+  pictures nothing; and *floor* is office vocabulary attached to a room that is visibly plant — services
+  overhead, equipment racks, masonry. **THE ENGINE ROOM** is what the picture already shows and what the
+  fifteen phrases on its wall already argue. Two rules for the next rename: check the name against **the
+  art**, not just against the meaning, and prefer a word that means one specific thing over a word that
+  means "good".
+- **A stage whose name is drawn on the FRAME has it in two places, and they have to be held equal.**
+  `COPY.bonus.name` is what the HUD plaque reads; `STAGE_NAME` in `render/brickBreaker.ts` is what the
+  title and the floor stencil paint (render modules do not import `data/copy.ts` — none of them ever
+  has). A rename that lands on one of the two is a room that disagrees with its own label, so
+  `brickBreaker.test.ts` asserts `STAGE_NAME === COPY.bonus.name.toUpperCase()`, checks both drawn lines
+  against the font and the frame width, and applies the briefing card's no-echo rule to the line under
+  the name.
+- **Renaming a stage renames its SYMBOLS when the old name is inside them.** This is the opposite call to
+  the badge/powerup split, and the difference is where the word lives: "badge" is 300 sites of internal
+  vocabulary that no player reads, whereas `drawGrowthFloorRoom` / `GrowthFloorView` *are* the rejected
+  name, in three files. They are `drawEngineRoom` / `drawEngineRoomProps` / `EngineRoomView` now. Leave
+  `docs/JOURNAL.md` alone either way — it is history, and history keeps the name it was written under.
 - **Screen names are places or plain pains, and the first one belongs to the PLAYER.** "Reception" said
   the player was arriving somewhere as a visitor; the screen is their own building, taking the GCC
   decision (its three steps are business case, board approval, budget), and screen 5 is the arrival.
@@ -1231,3 +1359,323 @@ ending and the death pose; full narrative in `docs/JOURNAL.md`)
   working from home, and to a UK reader it is the department that issues visas — the wrong association
   for a game about entering a market. **"Boardroom"** contradicts the art (a lobby, a counter, a lift
   bank; no table). Full reasoning: `docs/SCREENS.md` §4.13.
+
+---
+**Copy — figures a prospect can argue with, and the screens either end of the run**
+- **The game states NO industry statistic on any surface a player can read.** The 24-month going-alone
+  average and the 11-month ANSR benchmark are model constants only (`JOURNEY.BASELINE_MONTHS`,
+  `ANSR_BENCHMARK_MONTHS`): they drive `monthsBase`, the cap, the validator and `br_months`, and they are
+  never printed. An unsourced average on the title screen invites the one reader who has a different
+  number to stop reading, and it does it on the frame before they have played anything. `data.test.ts`
+  guards this by *searching* every player-facing string for either figure and for the words "average"
+  and "benchmark" — not by checking that two deleted keys are gone, because the claim came back once
+  already as a per-row "saves 4 months" on the receipt, which was the same assertion split four ways.
+- **A figure the player is shown has to be one they watched happen.** Months lost to delays is theirs:
+  they saw each `+2 MONTHS` fly off the body into the log. The run's *absolute* total was only ever
+  meaningful next to the two averages, so when those went it went — showing it would be asking "is 14
+  good?" of somebody with nothing to compare it to.
+- **Do not print a total and its own breakdown in the same colour in two columns.** The first draft of
+  this pass had the closing figure ("6 months") in the run's column and "2 delays added 6 months" under
+  the capability rows opposite. The raster read as one fact stated twice. The breakdown now sits under
+  the figure it itemises, headed "What cost you" — a label, never a restatement — and the capability
+  column carries only what ANSR did.
+- **The clean-run case has to be checked separately, and it is where duplication hides.** With no
+  delays the verdict line ("A clean run. Nothing to make up.") and the receipt's credit line ("No
+  delays. Cleared first time.") said the same thing twice in one column, so the win screen now prints
+  nothing in the breakdown slot on a clean run — the mid-run summary still prints the credit line
+  there, because it has no verdict slot of its own.
+- **Every line on an end screen fits ONE bitmap line at its own measure, and that is a test not a
+  feel.** The body measure is 34 characters: "Every one of them had an ANSR answer." (37) rasterised as
+  a line plus the word ANSWER alone under the loudest element on the screen, and "No delays. Every
+  stage cleared first time." (42) wrapped under a figure reading 0. `ui.test.ts` runs every closing line
+  through `wrapPixelLabel(line, 34)` and demands one line.
+- **A dare needs its antecedent on the same screen.** "Think you can beat that?" pointed at the
+  24-month statistic above it; delete the statistic and the pronoun points at nothing. The question now
+  hangs off "Building it is the hard part." directly above it, and lost four words doing it.
+- **The rules of the run are not title-screen copy.** The draft that replaced the statistic printed the
+  arcade contract, "6 STAGES. 3 LIVES.", as the headline. Under three centred lines of hook the raster
+  showed it reading as a fourth and fifth line of prose — a spec sheet where the screen needs a reason
+  to press. Both facts are on the HUD within five seconds of pressing Start.
+- **When a request names something that is not on the screen, grep the deployed bundle before deleting
+  anything.** "Remove the 6 stages 3 lives part" described a line that was drafted, rejected in its own
+  pass's raster and never shipped — the owner was remembering a *draft* picture. One `grep` of
+  `dist-site/` turned a three-part ask into two changes. The inverse is just as cheap to check: a thing
+  the owner says is there and is not may mean they are looking at a stale deploy.
+- **A footnote is measured against the lines around it at BOTH ends of its own sizing.** The title
+  screen's written control line was `body` (unit 0.17, floor 1.7px) under a headline at 0.24/2.4, and at
+  33 characters it rendered **337px against the headline's 312 on a 390px frame** — widest line on the
+  screen, footnote as headline. This is the briefing card's keyboard prompt (353 against 326) in a new
+  costume, and the character count says nothing: the 29-character variant was *longer* in characters and
+  comfortably narrower on screen. Compare `cells × unit` **and** `cells × minPx`; the floor is the one
+  that bites, because a narrow frame sits on it. The fix is the **copy**, never the cap — capping
+  `maxShare` to win the comparison takes the glyphs under 9px, which is "type below scale 2 is texture"
+  pointing the other way. (That line is now drawn as key caps, below, which removes the comparison
+  entirely.)
+- **A control guide should be the BUTTONS, and a cap is the size of its glyph rather than the size of
+  its explanation.** Three versions of this row have now been tried on the title screen: a legend of
+  arrow characters (cut — "stating them made the title screen read as a manual"), a written sentence
+  (out-measured the headline on a phone, above), and the caps that ship — three groups (move · jump ·
+  fire), each an 8-bit key in the same treatment as the action buttons and the HUD plaques, with a
+  4-letter label beside it. It is the only version that is both small and complete, because the thing
+  that scales with content is a 5-character glyph, not a clause. `PX_TYPE.key` / `keyLabel` own the two
+  sizes. Accessibility: the caps are decorative and the **row** carries one hidden sentence — a label
+  per cap reads out as "left right move space jump f fire", which is not a sentence.
+- **The act button exists, and for five passes no surface said so.** `KeyF`/`KeyJ` and a touch button
+  that appears once a badge arms a tool — the one control a player cannot guess, and it was missing from
+  the legend, from both control sentences and from `canvasLabel`. Any control the game *has* belongs in
+  all three. Name the **control** ("Fire"), not the tool: one button drives the Workplace cutter and the
+  hiring dragon's water cannon, and the per-tool wording is already on the button's own `aria-label`.
+- **Two controls may not share a glyph, and on touch they separate the way the real buttons do.** The
+  act pad was first drawn as `>` — the same character the right-hand move arrow uses — so the row read
+  "> MOVE … > FIRE". The on-screen buttons are both discs at different sizes, so the legend is too
+  (`.beam-run__key--small`). Related: the 5×7 font has no `\u2B24` and no `\u25C0`, and a font character
+  would come from the host's typeface, which is exactly the mismatch bitmap type was introduced to fix —
+  hand-authored grids go through `Overlays.pixelGrid`, like the receipt's tick.
+- **The font had no `<` for six passes because only `>` had ever been needed.** It has carried `>` as a
+  right-arrow since the first pass (CTAs, "solution flow"), and `normalizeForPixels` folded `\u2192` to
+  it — so the first cut of the movement caps rendered an arrow and a **hole**. `<` is now the mirror of
+  `>` and `\u2190` folds to it. Before drawing any new glyph as type, check `FONT` has it: an unsupported
+  character folds to a space silently.
+- **A screen split into two columns is only symmetrical if both columns have MASS, and ragged centred
+  lines have none.** The closing screen's left column was five centred bitmap lines (caption, figure,
+  unit, verdict, heading, rows) opposite four solid full-width receipt rows in a column of the same
+  width: it leaned right at every gap value anybody tried, because the fault was not the rhythm. Three
+  moves fix it and all three are structural — group the lines into **one panel** with the same fill and
+  rail as the rows opposite (they were the same fact at three levels of detail anyway), **stretch the
+  columns to one height** so a short run does not leave a box floating in a tall column, and keep the
+  two **captions outside** their blocks so they stay on one line. The clean run is the case to check:
+  three lines against four rows is the widest the two sides ever diverge.
+- **A ONE-COLUMN SCREEN NEEDS MASS TOO, AND GAPS CANNOT BUY IT.** Same finding as the two-column rule
+  above, arrived at from the other end and paid for again on the out-of-lives screen (owner: it is not
+  well designed and the proportions need sorting out). It was four centred bitmap lines on one axis —
+  headline, "3 DELAYS COST 6 MONTHS", a two-line instruction, a cap — floating in the middle of an empty
+  frame with `gap` doing all the work. Two things were wrong and neither is a spacing value: **the one
+  fact that matters was set at the same weight as everything around it** (a sentence at `clockStrong`,
+  not a figure), and **nothing on the screen had an edge**. What fixed it is borrowed wholesale from the
+  win screen rather than invented: a caption on its own line, then ONE PANEL in the receipt row's fill
+  and rail holding the months as a big orange numeral, the delay count as its small print, and the
+  argument divided off underneath. Loudness now runs numeral → headline → argument → cap, and the two end
+  screens report the run in the same words and the same shape, which is worth more than either of them
+  being individually pretty. Corollaries: **a rail must hug what it encloses** (at 560px the panel left
+  110px of empty box either side of its widest line and read as a border drawn round nothing — 440 is
+  measured off the raster), and **a figure and its own restatement may not both be printed** (the small
+  print says "From 3 delays.", never the months again).
+- **A line between a heading and the block it heads pushes that block out of alignment with the one
+  opposite.** The receipt's "Pick one to talk about." sat between its title and its four rows, so the
+  right-hand block started a line and a half below the left-hand one and the masses could never line up.
+  As a footnote *under* the rows it also reads where it is acted on. General form: in a two-column
+  composition, every column should be **caption, then block** — anything else goes below.
+- **There is no Navigator button on the start screen, the out-of-lives screen or the win receipt**
+  (owner call). Before playing it is an exit from a 90-second game; after a win it was the same offer as
+  the four capability rows beside it, with no `br_topic` attached. The route survives where it is
+  earned or asked for: the pause menu, the mid-run summary, and the four rows. Consequences that are
+  easy to miss when touching these screens: `Game.onOutOfLives` must **not** fire `ctaShown`, the win
+  screen's focus target is "Play again", and `COPY.win.receiptHint` is now the only instruction telling
+  a player the rows are clickable — do not shorten it into decoration.
+- **The player-facing word is POWERUP; "badge" is internal vocabulary** (owner call). The type, the
+  module, the data key, `badgeFloat`/`badgeDrop`/`badgePerch`/`badgeCeiling` and every comment in `src/`
+  still say badge, and none of that was renamed — the owner's own note said "change from the wording ANSR
+  badge to powerup", which is a *copy* decision, and a 300-site rename would have been a diff nobody
+  could review for a word no player reads. What changed is the three strings a player can reach:
+  `lifeLost.retryHint`, `gameOver.advice` and `a11y.outOfLives`. Before adding a new string, check which
+  side of that line it is on. It also has a measurement: at the 26-character measure "TAKE THE ANSR
+  POWERUP AND / THESE MONTHS NEVER HAPPEN." is still two balanced lines, so the longer word cost nothing —
+  the next synonym might not be so lucky (`ui.test.ts` measures every closing line).
+- **A coaching line has to be honoured by the screen it is printed on.** The retry card's "take the ANSR
+  powerup" is now gated on `Simulation.screenHasPowerup`, not on `retrying` alone: **two of the six screens
+  carry no mark** (Head Office and the Tech Park), and on those the line is advice the room cannot obey —
+  it reads as a rule the player has already broken, with nothing on the frame to act on. The gate reads the
+  level's own data, so a screen that gains or loses a mark can never disagree with its card. Note the
+  getter is deliberately *not* `badgeBox !== null`: that answers "collectable this frame" and goes null on
+  a taken mark and on a delivery mid-flight, which is the wrong question for a card shown before the stage
+  starts.
+- **A brief may not assume anything the run has not done yet — check the SCREEN ORDER, not just the
+  screen.** The Workplace's brief was "The team is ready. The floor is not.", which is a good line about
+  the enablement gap and wrong in position: **hiring is stage 4, this is stage 3**, so it promised people
+  the player has not recruited, and the next card ("talent never waits") then read as a contradiction of
+  it. It says "The lease is signed. Nothing works yet." — the same gap, named through the property instead
+  of the people, and true a screen early. General form: read the six briefs *in order* as one paragraph,
+  because each of them is written in a file where the others are 40 lines away.
+- **A sign in the world names the PLACE; the verdict on the place belongs on a surface that argues.**
+  Head Office's directory board read "MARKET ENTRY: ON PAPER" — an editorial line on the one piece of
+  furniture in the game whose whole job is to say where you are, and the third time that verdict is made
+  on that screen (the briefing card, and the three labelled steps). It says HEAD OFFICE. Accepted cost,
+  and it is the one deliberate exception to "do not print the same word twice": the HUD stage plaque says
+  it too, and a lobby sign 100px up a back wall and a HUD label are different objects
+  (`docs/OPEN.md` §26).
+- **A cue can be wired, counted, tested and inaudible — and "quiet on purpose" is how that gets waved
+  through.** The Workplace's `spark` had a host-paced timer, a hazard-side `isSparking` gate, a test and a
+  line in the docs, and the owner asked for it to be *added*. Nothing was missing: the energy sat in the
+  two bands a laptop or phone speaker does not reproduce — a 120 Hz square at 0.08 gain, and three 35ms
+  bandpass bursts at **Q 4** up at 3–4.8 kHz. Rules that came out of it: put a repeating cue's body in
+  **800 Hz–3 kHz**; a **wide** burst (Q ~1) has a body where a narrow one has a whistle; anything under
+  ~50ms needs a tonal transient under it or it does not exist on small speakers; and give a low buzz its
+  **octave**, because the fundamental alone is below what the speaker can move. Audible and ignorable are
+  different axes — the cue is still the quietest thing on its screen. **You cannot check this from the
+  code, and there is no raster equivalent for sound**: the only test that would have caught it is a pair
+  of laptop speakers.
+
+---
+**Gameplay & art — the secret stage under the Tech Park (THE ENGINE ROOM)**
+
+The bonus brick breaker is not a screen: it is a stage inside one visit to screen 5
+(`world/BrickBreaker.ts`, `render/brickBreaker.ts`, `BONUS` in `tuning.config.ts`). Rules it
+established, most of them general.
+
+- **A bonus may not touch the run's stakes.** No months, no lives, no log line, no badge. The run has
+  two stakes and they measure the same thing (HANDOFF §4.1), so a secret that could take a life hides
+  the argument's own currency behind a door most players never open, and one that *paid* months makes
+  the benchmark a matter of finding a secret. `bonusStage.test.ts` asserts all four.
+- **A sub-stage that reuses the screen's simulation must return BEFORE every one of that screen's own
+  endings.** The Tech Park's `winTrigger` is at x 1040 and the bonus room is 1280 wide, so falling
+  through to the tail of `updatePlaying` meant *walking right in the plant room finished the game*.
+  Same for the exit check, the fall check and the hazard update. There is a test whose only job is to
+  walk right in there for twelve seconds and still be `PLAYING`.
+- **A secret entrance is opened by a button, never by walking into it.** Screen 5 is the payoff, and
+  every one-tap auto-run player crosses that column: a hole they fall into takes the arrival away from
+  somebody who did not choose it. The act button is the one control with no other job on that screen.
+  Standing on the mouth (`canEnterTunnel`) is also the *whole* of the reveal — it lights the hatch,
+  prints the prompt, and on touch it is what makes the act pad appear at all.
+- **Anything that lives inside one screen visit must be cleared by `loadScreen`,** or a reset (or a
+  lost life) leaves the plant room under screen 0.
+- **A room whose only exit is "clear the wall" must be PROVABLY clearable, and a centred paddle is what
+  breaks it.** A mark returned straight up, in a column that has been emptied, is a closed orbit
+  between the tray and the ceiling: 6 of 27 policies were still going at 300s with up to 16 blocks
+  left. `PADDLE.MIN_BOUNCE_DEG` is the fix and **the size of it decides the length of the stage**: at
+  12 degrees the drift is 210px per round trip (one block) and a tracking player took 89s with ten
+  watchdog nudges; at 20 (364px, two blocks) 39s with one. Corollaries: the **serve** obeys the same
+  floor, because a rule only the paddle enforces leaves the one bounce nobody controls able to break
+  it; and the **watchdog's own nudge** has to obey it too — rotating a mark already at 20 degrees by 18
+  can land it at 2, which is the orbit it was written to prevent. One function (`keepAngleHonest`) is
+  the only place a direction may be chosen, and the test measures the ball on *every* frame.
+- **The lane at each end of a brick wall is load-bearing in both directions.** Close it (a wall
+  spanning the whole room) and a ball served from the ceiling is trapped *above* the wall chewing
+  blocks on its own — the stage plays itself. Leave it wide with no angle floor and it is the orbit
+  above. 47px against a 40px ball, plus a 20-degree floor, is both answered.
+- **A paddle in a game about being helped should be forgiving.** Any contact while the mark is falling
+  counts as a top hit. A pixel-exact paddle would be the only thing in this game that punishes.
+- **A block's size is set by the type on it, at both ends.** 14 characters at scale 2 is 166px and the
+  longest word in the owner's list is exactly 14, so 176 wide is as small as the words allow; 40 tall,
+  because at 34 a centred two-line label put its bottom row on the block's own shade course. And the
+  line pitch is **16, not 14**: a scale-2 glyph *is* 14 tall, so 14 is zero leading and two-line labels
+  rasterise as one crushed block of type.
+- **A paddle carried above the head beats a paddle on the floor** on a screen with a human on it: at
+  foot level the hero's own body is in the ball's lane and every rally is played through him.
+- **A gift the world hands the player is released over his own column.** Landing it elsewhere and
+  sliding it across the room reads as a bug; teleporting it into his hands is not a delivery. And the
+  gap between "armed" and "the thing you need it for" is a measured number, not a feel — 1.2s here,
+  tested, because at 0.7s the two events read as one beat.
+- **A break flash may not be the size of the thing that broke.** A pale rectangle on the block's own
+  footprint is a grey slab sitting in the wall — light-as-an-object at brick size. An expanding
+  **outline** reads as a shell coming apart and costs four fills.
+- **A draught, a suction or any other "come here" is a COLUMN, not a handful of arrows.** Seven 20px
+  chevrons at 0.2-0.7 alpha up a 600px shaft rasterise as specks of dirt — and this one is the only way
+  out of the room. Tint the whole lane, rail both edges, and put the chevrons at full alpha. Related:
+  **centre a sprite from its grid width, never from a hand-written offset** — `cx - 18` for a 5-cell
+  grid at scale 4 painted the whole draught 8px left of the shaft it belongs to.
+- **A hole in the ground is drawn with nothing above the ground line.** A frame all the way round a
+  slot, standing proud of the paving with a lit top rail, is a bench: it has a back and a seat. What
+  reads as an opening is the far inside wall in near-black, the **near lip lit**, side cheeks only, and
+  something going down out of sight (two ladder rungs say "you can get down there" with no arrow).
+- **A plaque over a thing the player is STANDING on is measured against the player.** At 74px it landed
+  across the hero's chest; 118 clears his drawn crown. Every other plaque in the game is measured
+  against the scenery.
+- **A key is drawn as a CAP, not as a letter in the sentence.** "F  DROP IN" reads as a word beginning
+  with F. The game already has the vocabulary (the title screen's control legend), and on touch there is
+  no cap at all — the act pad carries the same words in its own label.
+- **Hiding the HUD is not `setVisible(false)` if anything still has something to say.** That sets
+  `display: none` on the wrapper and the `aria-live` region lives inside it, so every announcement the
+  stage makes would be dropped for exactly the players who need them. `Hud.setBare()` hides the two
+  plaque stacks and keeps the wrapper. (The stage wants no plaques because nothing in it can cost a life
+  or a month — furniture that lies — and because the wall spans the full frame, which the rasteriser
+  cannot see.)
+- **ONE-TAP AUTO-RUN HAS TO COME OFF IN A ROOM THAT IS PLAYED BOTH WAYS.** Auto-run synthesises "right"
+  every frame and it is the default on touch, i.e. most of this audience: in the bonus room that pins the
+  player against the far wall with LEFT as their only control, and `bonusStage.test.ts`'s
+  "cannot win the game from inside the room" is the same behaviour seen from the other side (hold right
+  for twelve seconds and he is flat against x 1240). The host turns it off on `onTunnelEnter` and restores
+  it from the **assist controller** on the way out — not from a flag remembered on the way in, because the
+  pause menu is up in there too and a player may change the setting while they are down the shaft. One-tap
+  means "you never have to press forward"; this room has no forward. Same distinction that kept the BACK
+  button on the auto-run pad for the Compliance badge.
+- **A bonus stage is not worth a byte of the audio budget.** Six edges, all of them cues the game already
+  synthesises, and the repeated one is level-scaled (`stampDud` at 0.35): a knock that happens several
+  times a second at full level is a drum machine.
+- **A SERVE MAY NOT START INSIDE THE THING IT IS AIMED AT.** The mark used to drop out of the tunnel
+  mouth, which is at x 640 — i.e. above the middle of a wall spanning 87..1193 at 132..322 — so every
+  serve opened the wall on the room's behalf, two or three blocks before the player was involved, and it
+  opened it from the **middle**, which inverts a wall whose four rows are authored to be read bottom-up.
+  General form: a projectile's *origin* is part of the level's geometry, not a detail of the spawn.
+- **THE SERVE IS A THROW WITH A DESTINATION, AND THE DESTINATION IS THE TRAY** (owner call). The machines
+  hang off the side walls (`CANNON.MOUNT_Y` 356) and the **far** one throws, because the mark then spends
+  1–2.4s in the air, which is the time the player needs to place the tray; the near one would drop it
+  190px onto their head. `CANNON.MOUNT_Y` has no freedom in it: the throw has to reach the tray without
+  meeting a block, and the only band where that is true is between the bottom course (322) and the bounce
+  line (540). The aim is the tray's middle plus a seeded offset — `ON_TRAY` (0.68) inside ±44, which is a
+  catch without moving since tray-plus-mark is ±86, the rest inside ±118, which is a step — clamped off
+  the side walls, because a throw laid into a corner is one the tray cannot get under.
+- **AIM A FEW PIXELS INSIDE THE PADDLE, NEVER AT ITS TOP FACE.** A throw laid exactly on the bounce line
+  arrives with its box bottom at 540 against a paddle top of 540, which is a tangent and not an overlap —
+  so the mark passes through the tray it was aimed at. Six pixels of overlap is the whole fix, and it
+  applies to anything aimed at a surface rather than at a volume.
+- **A machine that throws something has to lay its angle BEFORE it throws, and the barrel must BE the
+  aim.** The shot is planned at `nextServeAt - CANNON.AIM` and the barrel is put on that exact line, so
+  the 0.9s of wind-up is the trajectory rather than a decoration: it is the one piece of information this
+  room gives the player before it asks them to move. Plus a three-cell charge gauge (a gauge and not a
+  blinking lamp — they need to know *when*, not just *that*) and `CANNON.RECOIL` 0.3s of the barrel
+  sitting back down its own axis after it.
+- **A ROOM WHOSE EXIT IS AN EMPTY WALL CANNOT DEPEND ON THE PLAYER PLAYING.** Aiming the throw at the tray
+  made the wall unclearable for somebody who never moves: a parked tray only ever returns the mark up its
+  own end, so the far columns stand — 1 to 3 blocks left after ten minutes. `CANNON.RESCUE_AFTER` (5) is
+  the valve: after five marks lost with **no block down**, the machine throws at the wall instead, and the
+  **machine is chosen for the block** rather than the block for the machine (with the survivor directly
+  overhead the far machine has no legal line, and the shot came out vertical). Visible, not hidden — the
+  barrel swings up off the tray line onto the brickwork. It cannot fire in real play: 27 policies clear
+  the wall with zero misses.
+- **THE ANGLE FLOORS ARE TWO DIFFERENT RULES AND ONLY ONE OF THEM APPLIES TO A THROW.**
+  `keepOffVertical` (the `MIN_BOUNCE_DEG` sideways floor) applies to **every** direction this room
+  chooses, because a vertical in an emptied column is a closed orbit. The `MIN_VY_FRACTION` floor is a
+  rule about the mark **in play** — it stops a shallow paddle return skimming along the ceiling — and
+  running a *throw* through it bent a shot laid 2 degrees off the horizontal up to 20, so it sailed over
+  the block it was aimed at, identically, for ever (seeded). Right in general, wrong for one caller: the
+  cost was the stuck room above, and the fix is two functions instead of one.
+- **New furniture in this room hangs, so nothing is solid.** The floor pair that came before were solid
+  (a machine the hero walks through is scenery) and that cost the tray part of its reach; 190px up, the
+  hero passes underneath and the room has its full width back. If you ever put something back on this
+  floor, check the *tray's clamp* (`PLAY_LEFT + PADDLE.W/2`), not the sprite.
+- **An angled sprite needs its keyline more than a square one does.** The barrel is a run of stepped
+  cells (never `ctx.rotate` — it anti-aliases a 15px bar into a grey smear at this scale), and one pass
+  of mid-value cells on a mid-value wall rasterised as a thin dark stick. A dark cell one size up under
+  each face cell is the whole fix: half of every cell's edge on a diagonal is a corner, so there is half
+  as much silhouette holding it off the background. Three more rules from the same sprite: **one width
+  all the way** (cells shrinking 18 → 14 along a diagonal fray, because a step that changes size as it
+  moves has no edge lining up with the step before it — put the taper in a collar at one end and a mouth
+  at the other), **fine spacing beats big cells** (nine cells at 4px, not four at 7: on a shallow line the
+  spacing sets how coarse the stair is, and a barrel that can be laid flat has to survive its flattest
+  angle), and **the lit rail goes on whichever side of the axis is up** — hand-picking one perpendicular
+  lit the left machine on top and the right one underneath, i.e. light from two directions in one room.
+- **The brightest metal in a room belongs to the thing the player is reading.** The cannons were lit in
+  `METAL_LIT` like the ducts and the racks, and hanging directly over a rack's own top rail they read as
+  one more pipe fitting; `EDGE_LIT` is theirs now. Same family of decision as the block labels' ink: the
+  object with a job gets the contrast. And two smaller ones: a bolt is a **lit face with a dark notch**,
+  never a dark hole (a dark square on a mid plate is a window into the wall, the opposite of a fixing),
+  and a loaded projectile sits **inside** the bore rather than filling it, or the aperture stops reading
+  as one.
+- **A muzzle flash in this room is COOL.** The only warm thing on The Engine Room is the ANSR mark, and
+  an orange flash puts a second one on the frame on the exact frame the first one appears.
+- **The board is measured against the ball, not against the run.** `PADDLE.SKATE_SPEED_MULT` is 2.0 (520
+  px/s) because the mark's own horizontal pace at the 620 cap off a 55-degree edge hit is 508: a paddle
+  that cannot match the fastest sideways the ball can travel makes the rally a chase the player is
+  structurally losing (owner call: "it's too slow to catch up"). The multiplier scales `GROUND_ACCEL`
+  too, so the answer off a standing start comes with it.
+- **The beat that introduces a room is measured against a READER, not against the previous beat.** Every
+  other number in this stage is spaced off its neighbour; `BEAT.SERVE_AT` is 3.3s after the wall finishes
+  building because the player has just fallen through a hole in a pavement and the fifteen phrases on
+  that wall are the point of the stage. 4.8s was enough to see it go up and not enough to read it. Only
+  the *first* serve pays this: the room is learned once.
+- **The act button is three keys, and one of them is `ArrowDown`.** Nothing in this game crouches, so
+  the down arrow had no other job, and it was already in `PREVENT_DEFAULT` (the other half of not
+  scrolling the host page with it). It is what the secret hatch's prompt cap shows, because that is the
+  one place the act button's job has a *direction* in it. The font needed a `\u2193` glyph for that cap —
+  authored under the code point and **not** under a letter, because `drawText` upper-cases everything it
+  is handed and a lower-case stand-in folds into a word.

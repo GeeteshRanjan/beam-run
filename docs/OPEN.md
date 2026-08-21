@@ -4,6 +4,9 @@ This was §7 and §8 of `HANDOFF.md`. Nothing here is a bug to go and fix unprom
 either a decision the owner owes, or a thing only a hand on a real device can answer. When one is
 resolved, delete it from here and record the resolution in `docs/JOURNAL.md`.
 
+**New this pass:** §26 (the Head Office name is on the frame twice) · §27 (the code says badge, the
+player reads powerup).
+
 **Top three:** §18 screen 1's badge is no longer a pass-jump (new, and it pairs with §9) ·
 §1 the budget gate's measurement · §2 the placeholder `navigatorUrl`. Then §9, screen 1 unassisted
 played by hand.
@@ -129,10 +132,110 @@ played by hand.
    for a beat each cycle, which keeps "middle, up, then down" and gives the pass a window back;
    **(c) go back to starting at the bottom** (one character in `badgeFloatOffset`).
 
+19. **The two averages are gone from the screens but are still in the funnel, and one route was
+   removed with no replacement.** This pass took the 24-month going-alone average and the 11-month
+   ANSR benchmark out of every player-facing surface (owner call), and with them the win screen's
+   absolute month total, its two attributed reference lines, its three comparison bars and the
+   per-row "saves 4 months". Two consequences to confirm:
+   **(a) `br_months` still carries the run's total into the Navigator link**
+   (`buildNavigatorPayload`), and `gameCompleted` / `gameOver` still report it. Nothing shows it to the
+   player now, so it is purely a lead-quality signal — defensible, but it is a figure derived from a
+   benchmark the game no longer stands behind on screen. Say if the funnel should score the delays
+   instead.
+   **(b) the out-of-lives screen has no Navigator route at all.** Asked for and implemented; worth
+   knowing that an attempt ending there can now only replay or leave, and that screen was the one
+   conversion surface a player who never reaches the Tech Park was given. The mid-run summary (pause →
+   "Skip to the Navigator") still carries it, so the route exists — it is one press further away.
+20. **The Workplace pickup lost its plaque — should the pickup TOAST lose the words too?** "Remove the
+   text from the powerup that says 500 leaders" was read as the persistent label hanging over the mark
+   (deleted — `docs/SCREENS.md` §4.10). Two other places still print the product on that screen: the
+   burst at the moment of collection (`Game.spawnPopup` → "ANSR ENGAGED" plus the capability tag, ~1s,
+   on every screen) and the HUD chip that stays up for the rest of the stage. Both are *feedback on a
+   choice the player just made* rather than signage on an object, which is why they were left — but if
+   "no text on the powerup" meant no text at all, the toast's second line is the one to cut, and it
+   would have to go on all four screens or none.
+21. **The title screen's key-cap legend is device-specific and has not been held in a hand.** Desktop
+   draws `<` `>` · SPACE · F; touch draws the pads (two arrows, a big disc, a smaller act disc). Two
+   things an owner may want to call: **(a)** the row shows the **act** button on a screen where no badge
+   has armed it yet — the touch button itself only appears once one has, so the legend is a promise the
+   first two screens do not keep (the alternative is not teaching the control at all, which is what the
+   game did until now); and **(b)** it no longer says that a touch player *runs automatically*. That was
+   in the written line it replaced, and the caps have no way to say it. If a phone player looks lost, the
+   answer is one short line under the row, not a longer sentence — that sentence is what out-measured the
+   headline (`docs/INVARIANTS.md`).
+
+22. **The secret stage has never been played, and three of its numbers want a hand rather than a probe.**
+   THE ENGINE ROOM is proved *finishable* (27 policies, no stalls) and proved *free* (no months, no
+   lives), but nobody has held it. The three: **(a) the ball's speed** - 470 rising to 620, which a probe
+   clears in 25-40s and a react-only policy in 50-130s; **(b) the tray's width** - 132px against a 40px
+   mark, chosen to be forgiving because this is a bonus in a game about being helped; **(c) whether the
+   hatch is findable at all on a phone.** The marker is deliberately subtle (a slot, a lit near lip, two
+   ladder rungs, three chevrons) and it was judged on a 1280 raster; subtle at 1280 can be invisible at
+   390. If it needs help, the cheap answer is bigger chevrons, not words.
+23. **An idle player still clears the bonus wall - should a miss cost something?** The owner's own rule is
+   that a missed mark vanishes and "a new logo shows up continuing the game from where it was", so misses
+   are free. Two passes have moved this number without settling it. It was **132s over 33 serves** when the
+   serve dropped out of the ceiling and chewed the wall on its own; **58s** when the mark was fired up off
+   the floor and rattled along the underside of the wall; and it is now **163s** with the throw aimed at
+   the tray, against **~35s** for somebody playing (27 policies: 33.5 / 41.6 / 60.8, zero misses). So skill
+   is worth 4-5x again, which is the healthiest that ratio has been.
+   **What is worth knowing is how it got there.** Aiming the throw at the tray made the wall *unclearable*
+   for a player who never moves - a parked tray only returns the mark up its own end, so the far columns
+   stood after ten minutes - and "a room whose only exit is an empty wall must be provably clearable" is an
+   invariant, not a preference. So `CANNON.RESCUE_AFTER` (5) now has the machine throw **at the wall**
+   after five misses with no block down. That is a deliberate design decision taken to keep a guarantee,
+   and it is the thing to overrule if the owner would rather a bored player were simply stuck: the honest
+   alternative is a **cap on marks** plus a way out of the room without finishing (the shaft would have to
+   open), i.e. "you may leave the bonus without clearing it". As it stands the stage still cannot be lost,
+   which is consistent with a secret that carries no stakes.
+24. **The bonus fires no analytics, and that is a deliberate gap.** `analytics-events.json` is the
+   authoritative event list and nothing in it describes a secret stage, so nothing is sent - not the entry,
+   not the clear, not the time spent. It is arguably the most interesting engagement signal in the game (a
+   player who finds it *and* finishes it is a player enjoying themselves), and adding it is one new event in
+   that file plus a line in `Analytics`. Owner call, because it is a spec change.
+25. **The act button is three keys now, and only one surface names any of them.** `ArrowDown` was added
+   alongside F and J so the secret hatch opens on the down arrow (owner call), and the hatch's own key cap
+   shows **↓**. Everything else still says F and only F: the title screen's legend cap, `COPY.start.controlsKeys`
+   ("Arrow keys move. Space jumps. F fires an ANSR tool.") and the canvas `aria-label`. That is defensible -
+   F is the act key game-wide and the down arrow is the one place the action has a *direction* in it - but it
+   means a player who learned the game from the title screen will not know the arrow works, and a player who
+   learned it from the hatch will not know F does. Three options: leave it, name both in the sentences and
+   keep one cap, or make the legend cap a pair. It is a copy call, not a code one; the keys already work.
+   (Related: §21, which is the same legend's other unanswered question.)
+26. **The Head Office name is now on the frame twice, and that was accepted rather than solved.** The wall
+   sign says HEAD OFFICE (owner call, replacing "MARKET ENTRY: ON PAPER") and the HUD's stage plaque says
+   Head Office over it for as long as the screen is playing. Every other duplication of this kind in the
+   build was treated as a defect — COMPLIANCE over "compliance does not run in a straight line", CONTINUE
+   under a cap labelled Continue — and the argument for leaving this one is that a directory board is an
+   *object in a room* rather than chrome, it is 100px up a back wall behind the play, and a lobby whose sign
+   named anything else would be a lobby in someone else's building. If the owner reads it as a repeat, the
+   cheap answers in order: drop the sign entirely (the three step plaques already carry the room), or let it
+   name the floor rather than the company ("RECEPTION", "LEVEL 1"), which puts a word on the wall that is
+   *about* the room without competing with the HUD. Head Office is also the only screen where this can
+   happen, because it is the only one whose sign is its own name.
+27. **Two words in the internal vocabulary now disagree with the player's, on purpose.** Every surface a
+   player reads says **powerup**; every identifier, module and comment says **badge** (`docs/INVARIANTS.md`
+   has the rule). That is a deliberate, cheap decision and it is also the kind that costs a session an hour
+   in six months, when somebody greps for "powerup" and finds three strings. Options: leave it and rely on
+   the invariant, or spend one mechanical pass renaming `Badge*` → `Powerup*` across ~40 files with no
+   behaviour change. Worth doing only if the owner expects to read the code, or if a second word (mark? the
+   raster comments call it "the ANSR mark" in a third register) ever reaches a player-facing string.
+28. **How fast the powerup should turn, and how much brighter it should be, are two judgements nobody has
+   seen in motion.** The owner asked for a rotating, brighter mark and both are built — 0.3 rev/s as a
+   pickup, 1.2 in the Engine Room, in `#ff7a45`/`#ff9570` against the old `#f05722`. What a raster cannot
+   show is *motion*: the sunburst repeats every 11.25 degrees, so at the pickup's rate the eye may read a
+   slow shimmer rather than a turning object, and the honest answer might be to take the pickups nearer the
+   room's rate. The hard ceiling is ~1.9 rev/s (a ray-pitch per frame, above which it strobes) and the two
+   numbers are constants with the arithmetic written beside them, so it is a one-line change either way — it
+   just needs somebody to watch it. Same for the tone: it is deliberately a *lift* of the brand orange
+   rather than a new colour, and if the mark is still not catching the eye the next move is the **staging**
+   (the shaft, the chevron, the plinth) rather than a lighter orange, because the step after this one is
+   cream.
+
 ---
 
 ## Deliberately left in web type
 
-The two attributed reference lines' *supporting* prose, the assist dialog's intro and checkbox
-labels (real form controls, real sentences), the 404 page's body paragraph, and the brand wordmark.
-Everything else on the start, HUD, pause, win and summary screens is bitmap.
+The assist dialog's intro and checkbox labels (real form controls, real sentences), the 404 page's
+body paragraph, and the brand wordmark. Everything else on the start, HUD, pause, win and summary
+screens is bitmap. (The two attributed reference lines that used to head this list are deleted — §19.)

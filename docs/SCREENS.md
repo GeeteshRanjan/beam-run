@@ -18,7 +18,8 @@ Hire Under Fire (4) · Tech Park (5).
 | §4.9 | Compliance (2) — staircase maze, 5 monsters | `Hazards/ComplianceMaze.ts` | `CLEAR_PATH` (GCC-BOT) |
 | §4.10 | Workplace (3) — taped colleague, broken floor | `Hazards/Workplace.ts` | `UNWRAP` (500Leaders) |
 | §4.11 §4.12 | Hire Under Fire (4) — grounded Godzilla | `Hazards/Dragon.ts` | `EXTINGUISH` (Talent500) |
-| — | Tech Park (5) — finale plaza | — | `SAFE_PASSAGE` (no effect, by design) |
+| — | Tech Park (5) — finale plaza, **and the secret tunnel in its pavement** | — | none |
+| §4.15 | **The Engine Room** — the secret brick breaker under the Tech Park (not a screen) | `world/BrickBreaker.ts` | none, and no stakes either |
 
 **Every screen is introduced by a briefing card that waits for a press** (owner call). One line per
 screen in `COPY.titleCard.brief`, keyed by screen id, and each line names the **real programme risk** in
@@ -34,7 +35,7 @@ balanced bitmap lines instead of stranding one word over the button. The current
 | Head Office (0) | Every plan looks clean from the lobby. | the business case before contact with reality |
 | Setup Delays (1) | Nothing here is approved the first time. | resubmission loops |
 | Compliance (2) | Nothing is filed in a straight line. | the filing chain, and that it doubles back |
-| Workplace (3) | The team is ready. The floor is not. | the enablement gap — hired, and nowhere to sit |
+| Workplace (3) | The lease is signed. Nothing works yet. | the enablement gap — the site is committed and none of it works |
 | Hire Under Fire (4) | Talent never waits, and it never plays fair. | a contested market moving faster than the plan |
 | Tech Park (5) | Doors open, and a year still in hand. | the whole argument, with no figure in it |
 
@@ -221,7 +222,12 @@ should wait at all).
    blink through `WARN_TIME`, then is gone for `GAP` 2.4s and returns. Row 12 is the proven row: underside
    36px over a standing head, so holding right walks under it, and the top is 120px up — the button held
    ~20 frames. It is the only pickup in the game that is *visible before it is takeable*, which is the
-   whole point of it ·
+   whole point of it. **It carries no capability plaque** (owner call: "remove the text from the powerup
+   that says 500 leaders, for now do not keep any text") — the only one of the four deliveries with none.
+   The label rode 52px over the mark, which on this screen is the spotlight's own canopy and the two
+   cables it hangs from, and over the countdown pips once it is on the cabinet; rasterised, it was words
+   painted on the fitting that explains the pickup, next to the whiteboard's own signage. `500Leaders` is
+   still named on the pickup toast and the HUD chip ·
    · **the partition moved to gx 7 and the corridor to gx 10.** Not tidying: the cabinet ends at x 240, so
    at gx 6 a player pinned against the wall stood underneath it with their jump capped at 36px against the
    80px the wall needs — the screen was sealed. `FIRING_COLUMN` in the tests is 9 for the same reason ·
@@ -242,12 +248,27 @@ should wait at all).
 11. **Hire Under Fire (4) is a boss fight, and the boss is a Godzilla** (owner call, three times).
    Five fire lanes on a shared cycle went first; then a *flying* dragon in a suit that poured a column
    of fire and rolled labelled fireballs down the screen. Both are gone. What stands there now
-   **stands there**: a **200×190** upright beast with **two feet on the ground, no wings and no horns**,
-   authored as **one 46×38 grid at scale 5** (1,748 cells). It was 260×240 at scale 10 and the owner
-   asked for it *smaller and more refined* — which is one change, because a 10px cell cannot describe an
-   animal ("blocks of red colour"): halving the cell while shrinking the body bought a blocky skull with
-   a short muzzle, a neck that is narrower than both skull and shoulders, four separated dorsal plates,
-   a tail that lies flat for its last third, hide bands and a plated belly. It opens every attempt
+   **stands there**: an upright beast with **two feet on the ground, no wings and no horns**, authored as
+   **one 48×38 grid at scale 5** (900 cells, drawn 240×190 around the 200×190 body box, so 20px of tail
+   and muzzle hang outside a box that is a water *target* and not a hitbox). It was 260×240 at scale 10
+   and the owner asked for it *smaller and more refined* — which is one change, because a 10px cell
+   cannot describe an animal ("blocks of red colour"). **Rebuilt a fourth time against two owner
+   reference rasters** ("very badly shaped"), because the version that replaced it was a featureless oval
+   torso with plates pinned beside the spine, a tail merged into the legs and a pale strip down the front
+   edge that read as a sash. What it has now: a deep skull with a **brow shelf** over an amber eye set
+   *back* from the muzzle, teeth on both lips, a short thick neck narrower than both skull and shoulders,
+   three big dorsal plates on the back continuing as **six triangles down the tail**, two legs with the
+   room showing through, a tail that lies flat for its last third, hide bands, and a plated **abdomen**
+   held inside the front edge. The grid ships as a literal — it was authored and iterated in a throwaway
+   generator against a PNG (`docs/INVARIANTS.md`), and nothing generated runs at load time.
+   **Its ending is rebuilt with it:** the fall is a real **pivot** about a point between the feet, eased,
+   with a compression, ground shadow and dust kicks over its last fifth (all on sim time, so they survive
+   reduced motion); the costume opens as a **side hatch at the hazard's own `door`** — a tapered cavity
+   with two peeled lips, one lit and one shaded, and the zip pull travelling down the seam — rather than a
+   black rectangle cut through the suit; and the five hires are **five distinct sprites** (10×15 at scale
+   4 → 40×60) in five palettes, cheering with **alternating** high and side arms and a hand at each wrist.
+   The flame keeps its shared geometry and gains a wandering mid body, a **broken** cream core and a lick
+   of air between lobes every eleventh column, so a 500px jet stops reading as a hose with a ruler in it. It opens every attempt
    with a roar it cannot move or attack during (`ROAR_TIME` 1.8s) — the only scripted opening in the
    game, and a **guaranteed safe beat** so the screen can be read before it is played. Then it holds
    its patch of floor, shifting inside `ROOST_DRIFT`, and attacks with **one straight, growing,
@@ -320,6 +341,18 @@ should wait at all).
    ("Every plan looks clean from the lobby.") — a head office has a lobby, and the line still names
    the real thing rather than echoing a word from the cap above it.
 
+   **The wall sign says HEAD OFFICE too** (owner call, later pass). It read
+   "MARKET ENTRY: ON PAPER" — the verdict on the stage, written on the one piece of furniture in the
+   game whose job is to say where you are. A directory board in a lobby names the building; it does
+   not editorialise about the plan inside it, and that verdict is already made twice on this screen
+   (the briefing card's "every plan looks clean from the lobby", and the three labelled steps
+   themselves). Known consequence, accepted: the HUD's stage plaque also reads "Head Office" while
+   the screen is playing, so the name is on the frame twice — which is the one place this build's
+   "do not print the same word twice" rule is deliberately broken, because a real lobby sign and a
+   HUD label are different objects and the sign is 100px up a back wall (`docs/OPEN.md` §26).
+   Rasterised at 1280: the plaque auto-sizes from the string, so the shorter text is a smaller sign,
+   still centred under the soffit and still clear of the feature bay.
+
    The art is unchanged by the rename (owner call, earlier pass): it is the second of two indoor screens, and
    the most finished-looking screen in the game, because that is the joke it makes ("on paper, this all
    looks fine"). Coffered soffit with recessed downlights, full-height entrance glazing on the left
@@ -362,6 +395,114 @@ should wait at all).
    back to it) and take it when it drops, ~3.6s in. Both halves are pinned in `badgeReach.test.ts`;
    the trade is `docs/OPEN.md` §18 and the arithmetic is in `docs/INVARIANTS.md`.
 
+15. **THE ENGINE ROOM is a secret stage under the Tech Park, and it is the only place the game says
+   what happens AFTER go-live** (owner call: "add a secret tunnel in which the user can go in and this
+   will be another level… basically this level is something where we can show how we can help them
+   after they have setup a GCC").
+
+   **It is not a screen.** It is not in `levels.json`, it books no months, it cannot cost a life, it
+   carries no badge, and the run stays `PLAYING` on screen 5 the whole time it is up. That is the deal
+   that lets a secret exist at all — the rules and the four traps it walked into are in
+   `docs/INVARIANTS.md`, the reasoning in `docs/JOURNAL.md`. Level data owns exactly one thing about it:
+   the **mouth** in the plaza's pavement (`screens[5].tunnel`, gx 18, two tiles — clear of the finale's
+   lamps at x 398/642/820 and its planters at 250/478/700, and short of the win trigger at gx 26).
+   Everything else is `BONUS` in `tuning.config.ts`.
+
+   **Getting in.** The hatch is quiet paving furniture until it is stood on: a slot with its far wall in
+   near-black, its **near lip lit**, side cheeks, two ladder rungs going down out of sight, and three
+   chevrons cut into the slab. Stand on it and the shaft lights, the chevrons pulse and a prompt comes
+   up — an 8-bit key cap plus **DROP IN** (no cap on touch, where the act pad appears instead and
+   carries the words). It is opened with the **act button**, never by walking over it: this is the
+   payoff screen and every one-tap player crosses that column. The cap shows the **down arrow** (owner
+   call), which is mapped to the act button alongside F: this is the one place the act button's job has a
+   direction in it, and nothing in this game crouches, so the key was free. F still opens it and nothing
+   here says so.
+
+   **The room.** A plant room, 1280×720: 40px walls, a 40px ceiling slab with the 80px shaft cut through
+   it, a floor at y 640. Own palette — **indigo**, because the four block hues have to separate from each
+   other and from the ANSR mark, and because the only warm thing on the frame should be the thing the
+   player is hitting the wall with. Two equipment racks with mint LEDs are the only thing in the room that
+   says *why* it is there: the centre is downstairs, and it is running.
+
+   **The sequence** (the owner's, and the order is the design): he falls in at the top centre and lands on
+   the bottom centre · at 1.5s a **tray on a skateboard** drops down the same shaft over his own column,
+   lands, slides to him and is equipped — 1.2s before anything else happens · at 3.6s the **wall builds
+   itself, row by row from the top** · at 6.7s **the cannon on the far side wall lays its barrel and
+   charges** · at 7.6s it **throws** the first **ANSR mark**, which is the ball, onto the tray.
+   The 3.3s between the finished wall and the first shot is deliberate and it is the only beat in the room
+   measured against a *reader* (owner call: "the first time the ball should come a bit late so the actual
+   person has some time to see the screen and understand") — the fifteen phrases on that wall are the point
+   of the stage, and at 4.8s nobody had read one. Every later serve comes on `BALL.RESPAWN_GAP`.
+   The tray is carried **above his head** (a paddle at foot level puts his body in the ball's lane); the
+   skateboard is `SKATE_SPEED_MULT` **2.0** — 520 px/s, twice the run and the only place in the game he is
+   quicker than it (owner call), set to match the mark's own fastest sideways pace of 508 so the rally is
+   not a chase he loses by arithmetic; jump is masked, because there is nothing to jump onto and a jump
+   would take the bounce line with it.
+
+   **The wall.** 24 blocks, 6 × 4, 176×40, **colour-coded by row**, read bottom-up in the order the ball
+   takes them: footprint (cyan — add centres, add locations, workspace expansion) · people (mint —
+   scaling teams, leadership hiring, talent retention, operations support) · capability (violet — adding
+   capabilities, AI adoption, digital transformation, capability roadmap) · run it better (magenta —
+   governance, compliance, benchmarking, cost optimization). Fifteen carry the owner's words, staggered so
+   the wall is not a table. The block's size is set by the type on it at one end and by the room at the
+   other (`docs/INVARIANTS.md`).
+
+   **The cannons** (owner call over two passes, and both of them fixed something rather than adding a
+   prop). Two machines **bracketed to the side walls and hanging over the room** at `MOUNT_Y` 356: a plate
+   with four bolts, a strut and a gusset, a yoke with a hub, a 56px barrel and a magazine on top. Nothing
+   is solid — the hero walks under them.
+
+   **The far one throws, and it throws to the tray.** It reads the tray at the start of the wind-up, aims
+   at its middle plus a seeded offset (`ON_TRAY` 0.68 of throws land inside ±44, which is a catch without
+   moving; the rest inside ±118, which is a step), lays the barrel **on that exact line** for 0.9s with a
+   charge gauge filling and the mark showing in the bore, and then throws. So the wind-up *is* the
+   trajectory: the one piece of information the room gives the player before it asks them to move.
+
+   Two defects are buried in those numbers. The serve used to drop out of the ceiling mouth at x 640,
+   which is *inside the wall's own footprint*, so the room opened its own wall from the middle — the wrong
+   end of a wall authored to be read bottom-up. And 356 is the only height that works: the throw has to
+   reach the tray without meeting a block, and the band between the bottom course (322) and the bounce
+   line (540) is the only place that is true.
+
+   **`RESCUE_AFTER` (5) is the valve that keeps the room finishable.** A throw aimed at the tray is a gift
+   and a gift can be ignored: a parked tray only ever returns the mark up its own end, so the far columns
+   would stand for ever. After five marks lost with no block down, the machine stops passing and throws at
+   the brickwork instead — visibly, with the barrel swinging up off the tray line. It cannot fire in real
+   play (27 policies clear the wall with zero misses), and an idle player now finishes in 163s against
+   ~35s for one who plays.
+
+   **The mark.** A breakout ball, not a falling body: constant speed (470, rising 6 a block to a 620 cap),
+   pure reflection. It bounces off the tray, the walls, the ceiling and the blocks, and **a miss costs
+   nothing but time** — it lies on the floor, fades, and whichever machine is now the far one throws
+   another, with the wall exactly as the last one left it. The tray is deliberately forgiving. The one hard
+   rule is that it is **never returned straight up**, which is a soft lock rather than a matter of feel,
+   and the number is 20 degrees for a measured reason (`docs/INVARIANTS.md` — and note that the *other*
+   floor, the vertical one, deliberately does not apply to a throw). Measured over 27 policies:
+   **33.5s min, 41.6 median, 60.8 max, and zero misses**.
+
+   **Getting out.** With the wall down the shaft starts to **draw, in a straight line the width of the
+   mouth** — the same 80px number at both ends, so the shaft he fell down is the shaft that takes him back
+   up. It never expires and it only has hold of him while he is standing in the column; then it lifts him
+   out and the plaza gives him back the ground he left, at the column he left it from, with the run intact.
+
+   **The HUD is off in here** (`Hud.setBare`), because nothing in the room can cost a life or a month and a
+   delay log would be furniture that lies — but the wrapper and its live region stay, so the stage can still
+   announce itself. It says its name big for three seconds and then keeps it **stencilled on the floor**.
+
+   **Its NAME, which the owner rejected once.** It was *The Growth Floor* and it is **THE ENGINE ROOM**
+   now, with **LIVE IS DAY ONE, NOT THE FINISH** as the line under it (was "LIVE IS WHERE THE WORK
+   STARTS"). "Growth" is the word every consultancy applies to everything, so it named nothing and
+   pictured nothing, and "floor" borrowed *office* vocabulary for a room that is visibly plant: services
+   overhead, two racks of equipment, masonry. The engine room is what the art already draws and what the
+   fifteen phrases already argue — the machinery under the building, and the thing a GCC becomes once it
+   stops being a project. Considered and dropped: "The Scale-Up Floor" (same register, hyphenated),
+   "Day Two" (true, and not a place), "Sub-Level 1" (a place that says nothing). The name lives in **two**
+   places on purpose — `COPY.bonus.name` for the HUD plaque and `STAGE_NAME` in `render/brickBreaker.ts`
+   for the frame — and `brickBreaker.test.ts` holds them equal, measures both drawn lines against the
+   frame and enforces the no-echo rule the six briefing cards follow. The module's own symbols went with
+   it (`drawEngineRoom`, `drawEngineRoomProps`, `EngineRoomView`): the old name was *in* the identifier,
+   which is what makes this different from the badge/powerup split.
+
 ---
 
 ## What each screen sounds like
@@ -378,11 +519,13 @@ callback — the rules and traps are in `docs/INVARIANTS.md`, the reasoning in `
 | Workplace (3) | `mummy` | the **wind-up** of a throw (`windUps`) — 0.55s before the roll, so it is a tell rather than a report |
 | Workplace (3) | `hush` | the roll leaving his hand (`throws`) |
 | Workplace (3) | `typing` | rising edge of `isWorking` — seven unevenly spaced keystrokes |
-| Workplace (3) | `spark` | the unfixed terminal, every `SPARK_INTERVAL` (1.7s) while `isSparking`. Host-paced, because the sparks themselves have no sim clock |
+| Workplace (3) | `spark` | the unfixed terminal, every `SPARK_INTERVAL` (**1.5s**) while `isSparking`. Host-paced, because the sparks themselves have no sim clock. **Rebuilt to be audible** (owner call): it was a 120 Hz square at 0.08 plus three 35ms Q-4 cracks at 3–4.8 kHz — both ends of that are where a laptop or phone speaker gives you nothing, so the cue measured as present and played as silence. Now a snap-plus-tail three times: 120 + 240 Hz buzz, wide bursts (Q 1.1) falling 5200 → 900 over 70ms, a square tick under each |
 | Workplace (3) | `chime` | `restore` crossing **0.5** — the same threshold `drawTerminal` prints OK at |
 | Hire Under Fire (4) | `roar` / `water` / `steam` / `strip` | the opening beat · each jet · each quench · each layer |
 | Hire Under Fire (4) | `topple` | rising edge of `Dragon.isToppling`. A 1.05s descending groan and rumble, then a floor impact 0.58s in. Played **instead of** the fourth `strip`, not over it |
 | Hire Under Fire (4) | `hired` | rising edge of `isBeaten` |
+
+| The Engine Room | `hush` · `land` · `stampDud` (0.35) · `pickup` · `steam` · `screenClear` · `badge` | the shaft breathing · the mark on the tray · a knock off the masonry · a block going · a miss evaporating · the wall down · the shaft carrying him home. **Six edges off `BrickBreaker`'s counters and not one new cue** — a bonus stage is not worth a byte of the audio budget, and the repeated one is level-scaled because a knock several times a second at full level is a drum machine |
 
 Compliance (2), Head Office (0) and the Tech Park (5) carry no screen-specific cues: they run on the
 global set (jump · land · badge · setback · screenClear · win).

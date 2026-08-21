@@ -1,8 +1,8 @@
 /**
  * NotFoundPage — the custom 404 screen for the standalone deployment.
  *
- * Why this exists: the two Navigator routes (the title screen's "Skip to the
- * Navigator", and every capability row on the closing receipt) deep-link
+ * Why this exists: the Navigator routes (the pause menu's "Skip to the
+ * Navigator", the mid-run summary, and every capability row on the closing receipt) deep-link
  * `/gcc-opportunity-navigator`, which the static host does not serve. The last
  * thing a prospect saw after the single most valuable click in the game was the
  * host's raw error page. This replaces it with the game's own screen.

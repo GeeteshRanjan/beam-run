@@ -323,6 +323,20 @@ export class Hud {
     this.root.classList.toggle('beam-run__hud--visible', visible);
   }
 
+  /**
+   * Show the wrapper but hide both plaque stacks — the secret stage's arrangement.
+   *
+   * It exists because `setVisible(false)` sets `display: none` on the wrapper, and the
+   * `aria-live` region lives inside it: hiding the HUD outright takes that region out of
+   * the accessibility tree, so every announcement the bonus stage makes (what the room
+   * is, the wall coming down, the way out) would be dropped for exactly the players who
+   * need them most. The stage wants no plaques — nothing down there can cost a life or a
+   * month — but it still has things to say.
+   */
+  setBare(bare: boolean): void {
+    this.root.classList.toggle('beam-run__hud--bare', bare);
+  }
+
   update(model: HudModel): void {
     if (model.levelLabel !== this.drawn.level) {
       this.drawn.level = model.levelLabel;
