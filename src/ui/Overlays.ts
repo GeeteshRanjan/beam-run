@@ -115,6 +115,8 @@ export interface OverlayCallbacks {
   onRestart: () => void;
   /** Leave the out-of-lives screen: back to the title with a clean slate. */
   onContinue: () => void;
+  /** Leave the briefing card and start the stage it describes. */
+  onAdvance: () => void;
   /** `topic` is set when the click came from a capability row. */
   onCta: (context: CtaContext, topic?: string) => void;
   onToggleMute: () => void;
@@ -150,6 +152,12 @@ export interface LifeLostModel {
 
 export interface OverlayData {
   levelLabel?: string;
+  /**
+   * The briefing card's one line about the stage ahead — what the place is and
+   * what is in it. Absent only if a screen has no brief authored for it, in which
+   * case the card is the stage name alone.
+   */
+  brief?: string;
   /**
    * One line under the title card. Present only on a retry, where it carries the
    * instruction the deleted life-lost screen used to: take the ANSR badge.
@@ -208,7 +216,10 @@ export class Overlays {
   private titleCardLabel!: HTMLElement;
   private titleCardSr!: HTMLElement;
   private titleCardArt!: SVGSVGElement;
+  private titleCardBrief!: HTMLElement;
   private titleCardHint!: HTMLElement;
+  /** Last painted (label|brief|hint), so the card is not repainted every frame. */
+  private titleCardKey = '';
   private winMonths!: HTMLElement;
   private winMonthsSr!: HTMLElement;
   private winMonthsArt!: SVGSVGElement;
@@ -252,19 +263,49 @@ export class Overlays {
   }
 
   show(name: OverlayName | null, data: OverlayData = {}): void {
-    // Title-card label may change every time it is (re)shown per screen.
+    // The briefing card's three variable lines: the stage name, the brief, and the
+    // retry hint. Painted before the no-change bail-out, because the card is
+    // re-shown per screen — but only when one of them has actually changed: the
+    // host calls `show()` every rendered frame, and repainting three bitmap SVGs at
+    // 60Hz is a lot of DOM for a screen that is standing still.
     if (name === 'titlecard' && data.levelLabel) {
-      this.titleCardSr.textContent = data.levelLabel;
-      paintPixelSvg(this.titleCardArt, [data.levelLabel], {
-        ...PX_TYPE.title,
-        ...TITLE_INK,
-      });
-      // The retry hint. Painted here rather than once at build time because the
-      // same card is shown for a first attempt (no hint) and a retry (hint), and
-      // the two must not be able to disagree.
-      this.titleCardHint.hidden = !data.hint;
-      if (data.hint) {
-        setPixelText(this.titleCardHint, data.hint, { ...PX_TYPE.caption, ...VALUE_INK });
+      const key = `${data.levelLabel}|${data.brief ?? ''}|${data.hint ?? ''}`;
+      if (key !== this.titleCardKey) {
+        this.titleCardKey = key;
+        this.titleCardSr.textContent = data.levelLabel;
+        // The card's accessible name is the stage it introduces, so it changes with
+        // the stage (there is nothing static to label it with).
+        this.entries
+          .get('titlecard')
+          ?.el.setAttribute(
+            'aria-label',
+            data.brief ? `${data.levelLabel}. ${data.brief}` : data.levelLabel,
+          );
+        paintPixelSvg(this.titleCardArt, [data.levelLabel], {
+          ...PX_TYPE.title,
+          ...TITLE_INK,
+        });
+        // What the stage ahead is, in one line. Hidden rather than blank when a
+        // screen has none, so the card composes as three elements or as two.
+        this.titleCardBrief.hidden = !data.brief;
+        if (data.brief) {
+          // 26 characters rather than `body`'s own 34: the brief is the only prose on
+          // the card, so it is set as a short measure on two balanced lines. At 34 the
+          // greedy wrap fills the first line and leaves two words on the second, which
+          // reads as an accident above a centred button.
+          setPixelText(this.titleCardBrief, data.brief, {
+            ...PX_TYPE.body,
+            ...MUTED_INK,
+            maxChars: 26,
+          });
+        }
+        // The retry hint. Painted here rather than once at build time because the
+        // same card is shown for a first attempt (no hint) and a retry (hint), and
+        // the two must not be able to disagree.
+        this.titleCardHint.hidden = !data.hint;
+        if (data.hint) {
+          setPixelText(this.titleCardHint, data.hint, { ...PX_TYPE.caption, ...VALUE_INK });
+        }
       }
     }
     // Painted before the no-change bail-out, like the title card: the figures
@@ -287,10 +328,11 @@ export class Overlays {
     const entry = this.entries.get(name);
     if (!entry) return;
     entry.el.classList.add('beam-run__overlay--visible');
-    // Move focus to the primary control (title card is transient → skip focus).
-    if (name !== 'titlecard') {
-      entry.focusTarget.focus?.();
-    }
+    // Move focus to the primary control. The briefing card is included now: it
+    // waits for the player, so it is a thing to be acted on rather than a caption
+    // that goes past, and the control that acts on it has to be reachable by
+    // keyboard and announced.
+    entry.focusTarget.focus?.();
   }
 
   /** Begin the months count-up from 0 → target (instant if reduced-motion). */
@@ -474,7 +516,10 @@ export class Overlays {
     const el = this.doc.createElement('div');
     el.className =
       'beam-run__overlay' + modifiers.map((m) => ` beam-run__overlay--${m}`).join('');
-    el.setAttribute('role', modifiers.includes('titlecard') ? 'status' : 'dialog');
+    // Every overlay is a dialog now, the briefing card included: it stops the run
+    // and waits for a press, which is not what `role="status"` describes. Its own
+    // accessible name is the stage it introduces, so it is set in `show()`.
+    el.setAttribute('role', 'dialog');
     if (label) el.setAttribute('aria-label', label);
     return el;
   }
@@ -718,15 +763,27 @@ export class Overlays {
   }
 
   /**
-   * The title card, plus the one line that replaced the life-lost screen.
+   * The card between two screens — a **briefing**, and the one screen in the middle
+   * of a run that waits for the player (owner call).
    *
-   * On a retry the card carries the instruction under the stage name, in the value
-   * orange: the player has just lost a life, the stage is starting again, and this
-   * is the only place left that says why the badge is there. It is hidden on a
-   * first attempt, so a clean run never sees an instruction it does not need.
+   * Four things, top to bottom: the stage name, one line saying what the stage is,
+   * the retry instruction when there is one, and the button that starts it. It used
+   * to be the stage name alone, on a 1.2s timer — so the run walked into five
+   * screens it had never explained, and the one line it did carry (the badge
+   * instruction on a retry) had a second and a half to be read in. Nothing here
+   * times out now: the brief is read at whatever pace it is read at, and the stage
+   * begins on a press.
+   *
+   * `role="dialog"` rather than the old `status`: it is a stop, not a caption going
+   * past, and focus goes to its button (see `show`), so Space and Enter activate it
+   * without the card having to say so. **It does not say so**: a keyboard prompt line
+   * under the cap was tried twice and cut both times — "Press SPACE to continue"
+   * printed CONTINUE twice in a column, and "Or press SPACE" read as a second,
+   * quieter button drawn on top of the first. See `COPY.titleCard.begin`.
    */
   private buildTitleCard(): OverlayEntry {
     const el = this.overlayShell(['titlecard']);
+    const stack = this.stack('titlecard');
     // Rebuilt per screen (the label changes), so it keeps its own sr + art nodes.
     this.titleCardLabel = this.h('h2', 'beam-run__title');
     this.titleCardSr = this.h('span', 'beam-run__sr');
@@ -735,10 +792,18 @@ export class Overlays {
       ...TITLE_INK,
     });
     this.titleCardLabel.append(this.titleCardSr, this.titleCardArt);
+    this.titleCardBrief = this.h('p', 'beam-run__brief');
+    this.titleCardBrief.hidden = true;
     this.titleCardHint = this.h('p', 'beam-run__advice');
     this.titleCardHint.hidden = true;
-    el.append(this.titleCardLabel, this.titleCardHint);
-    return { el, focusTarget: el };
+
+    const actions = this.h('div', 'beam-run__actions');
+    const begin = this.btn(COPY.titleCard.begin, 'primary', () => this.cb.onAdvance());
+    actions.appendChild(begin);
+
+    stack.append(this.titleCardLabel, this.titleCardBrief, this.titleCardHint, actions);
+    el.appendChild(stack);
+    return { el, focusTarget: begin };
   }
 
   private buildPause(): OverlayEntry {

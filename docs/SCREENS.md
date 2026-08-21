@@ -20,6 +20,28 @@ Hire Under Fire (4) · Tech Park (5).
 | §4.11 §4.12 | Hire Under Fire (4) — grounded Godzilla | `Hazards/Dragon.ts` | `EXTINGUISH` (Talent500) |
 | — | Tech Park (5) — finale plaza | — | `SAFE_PASSAGE` (no effect, by design) |
 
+**Every screen is introduced by a briefing card that waits for a press** (owner call). One line per
+screen in `COPY.titleCard.brief`, keyed by screen id, and each line names the **real programme risk** in
+the language of the room — the buyer recognises their own project in it with no B2B vocabulary anywhere.
+Three rules, all tested: no product name (the receipt is where ANSR answers), no instruction (how to beat
+the screen is the screen's job), and **no word echoed from the stage name printed above it**. Deliberately
+**not** authored in `levels.json` (prose there ships to the host unless the stripper is taught about it),
+and deliberately short: the card sets it at a 26-character measure, so ≤50 characters keeps it on two
+balanced bitmap lines instead of stranding one word over the button. The current six:
+
+| Screen | Brief | The real thing it says |
+|---|---|---|
+| Reception (0) | Every plan looks clean from the lobby. | the business case before contact with reality |
+| Setup Delays (1) | Nothing here is approved the first time. | resubmission loops |
+| Compliance (2) | Nothing is filed in a straight line. | the filing chain, and that it doubles back |
+| Workplace (3) | The team is ready. The floor is not. | the enablement gap — hired, and nowhere to sit |
+| Hire Under Fire (4) | Talent never waits, and it never plays fair. | a contested market moving faster than the plan |
+| Tech Park (5) | Doors open, and a year still in hand. | the whole argument, with no figure in it |
+
+The card is the same on a retry, with the orange "TAKE THE ANSR BADGE" line added — which is the first
+time that line has had long enough to be read (`docs/OPEN.md` §10 is the owner's call on whether a retry
+should wait at all).
+
 ---
 
 9. **Compliance (2) is a staircase maze with no ground route** (owner call, from their sketch):
@@ -306,6 +328,18 @@ Hire Under Fire (4) · Tech Park (5).
    per-brick tones and a course bevel; and the backdrop is down to **two props and one sign** — the
    PERMITS board, its caption and the ink pads' scale-1 ghost word are deleted, and the clock was
    rebuilt at 80px in whole pixels.
+
+   **Its badge starts in the MIDDLE of the rail, rises, and then falls** (owner call) — and that is
+   the whole of the pickup's difficulty, because this is the last rail badge in the game (Reception's
+   and the Tech Park's are deleted; the other three screens deliver theirs by perch, ceiling and
+   air-drop). The band is untouched (±155px around gy 8, 6.4s), so the mark still tops out just under
+   the HUD and bottoms out 41px over a standing head. What moved is the **phase**, and it moved the
+   fairness with it: the mark is climbing away when the player arrives (right edge at gx 4 at t=0.40s,
+   box 255px up against a 140px jump) and the band's bottom does not come round until 4.80s. So screen
+   1's rail is no longer a pass-jump — **0 of 60 tap frames** take it on a forward-only run — and it
+   is now the same *kind* of pickup as the Compliance perch: you stop under it (or hold BACK to come
+   back to it) and take it when it drops, ~3.6s in. Both halves are pinned in `badgeReach.test.ts`;
+   the trade is `docs/OPEN.md` §18 and the arithmetic is in `docs/INVARIANTS.md`.
 
 ---
 

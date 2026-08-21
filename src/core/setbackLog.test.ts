@@ -102,15 +102,22 @@ describe('badge float', () => {
       6,
     );
     /*
-     * It starts at the BOTTOM of the band and goes UP (owner call: "the powerup goes
-     * first up then comes down"). That is a cosine, not a sine, and it is the reason
-     * the change did not cost the one-tap window: the badge is at its most reachable
-     * on the frame the screen starts rather than three quarters of a cycle later.
+     * It starts in the MIDDLE of the rail, goes UP, and then comes down (owner call).
+     * Three statements about the *shape* of the motion — on the anchor at t=0, at the
+     * top a quarter of a period later, at the bottom of the band at three quarters —
+     * which is what was specified, rather than one about the sign of a trig call.
+     *
+     * The phase is fairness, not decoration: mid-rail-and-rising is why a forward-only
+     * pass can no longer take the mark (`badgeReach.test.ts`).
      */
-    expect(badgeFloatOffset(0)).toBeCloseTo(POWERUPS.FLOAT_AMPLITUDE, 10);
+    expect(badgeFloatOffset(0)).toBeCloseTo(0, 10);
     expect(badgeCenter(badge, 0.4).y).toBeLessThan(badgeCenter(badge, 0).y);
-    expect(badgeCenter(badge, POWERUPS.FLOAT_PERIOD / 2).y).toBeCloseTo(
+    expect(badgeCenter(badge, POWERUPS.FLOAT_PERIOD / 4).y).toBeCloseTo(
       anchorY - POWERUPS.FLOAT_AMPLITUDE,
+      6,
+    );
+    expect(badgeCenter(badge, (3 * POWERUPS.FLOAT_PERIOD) / 4).y).toBeCloseTo(
+      anchorY + POWERUPS.FLOAT_AMPLITUDE,
       6,
     );
   });

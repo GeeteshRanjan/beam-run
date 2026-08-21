@@ -1,7 +1,7 @@
 /**
  * The top-level game states and their legal transitions (Tech Architecture §4):
  *
- *   BOOT ──assets──▶ START ──start──▶ TITLE_CARD ──hold/skip──▶ PLAYING
+ *   BOOT ──assets──▶ START ──start──▶ TITLE_CARD ──press──▶ PLAYING
  *   PLAYING ──reach exit──▶ TITLE_CARD (screens 0..4)
  *   PLAYING ──hazard──▶ LIFE_LOST ──lives remain──▶ TITLE_CARD (same screen)
  *   LIFE_LOST ──last life──▶ START
@@ -19,6 +19,13 @@
  * Note what this is NOT: there is still no state in which the player is walled
  * off from the hand-off. A run that ends out of lives ends on a conversion
  * surface, exactly like a run that reaches the Tech Park.
+ */
+/**
+ * `TITLE_CARD` is the **briefing between two screens** (owner call), and it is the
+ * one state in the middle of a run that cannot time out: it names the stage the
+ * player is about to enter, says in one line what is in it, and waits for a
+ * deliberate press (`Simulation.requestAdvance`). Nothing is simulated while it is
+ * up, so a stage never starts while somebody is still reading about it.
  */
 export type GameState = 'BOOT' | 'START' | 'TITLE_CARD' | 'PLAYING' | 'LIFE_LOST' | 'WIN';
 

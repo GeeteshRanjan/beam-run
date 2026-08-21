@@ -4,8 +4,9 @@ This was §7 and §8 of `HANDOFF.md`. Nothing here is a bug to go and fix unprom
 either a decision the owner owes, or a thing only a hand on a real device can answer. When one is
 resolved, delete it from here and record the resolution in `docs/JOURNAL.md`.
 
-**Top three:** §1 the budget gate's measurement · §2 the placeholder `navigatorUrl` ·
-§9 screen 1 unassisted, played by hand.
+**Top three:** §18 screen 1's badge is no longer a pass-jump (new, and it pairs with §9) ·
+§1 the budget gate's measurement · §2 the placeholder `navigatorUrl`. Then §9, screen 1 unassisted
+played by hand.
 
 ---
 
@@ -74,16 +75,25 @@ resolved, delete it from here and record the resolution in `docs/JOURNAL.md`.
    toward 1.5** (safe 0.70s, same 18% on the probe), then delete the gx 10 hurdle and keep gx 23 (the
    second pair is the one the player meets with 1Wrk in hand). **Never** cut `WARN_TIME`, and never
    widen the gaps between columns — the geometry is the argument and the telegraph is the fairness.
-10. Are these four pains the ones the pipeline actually voices, or the four service lines? Swapping
+10. **Does the briefing card apply to a RETRY too?** It does today, because it is the same card: the
+   stage briefing now waits for a press (owner call), so losing a life restarts the stage on a card that
+   waits rather than dropping back in after 1.2s. Two arguments for leaving it: one surface with one
+   rule, and the retry line ("TAKE THE ANSR BADGE") finally has time to be read — which is the only
+   reason that line exists. One against: it is an extra press after every death, and §4.2's "a lost life
+   SHOWS NO SCREEN" was written when the card behind it was a 1.2s flash. If the owner wants a retry to
+   resume immediately, the change is one condition in `Simulation.step`'s `TITLE_CARD` case (advance
+   without a press while `retrying`) — but then the badge line goes back to being unreadable, and it
+   should be moved somewhere else rather than left on a card nobody can read.
+11. Are these four pains the ones the pipeline actually voices, or the four service lines? Swapping
    a pain is cheap now (level data + re-skin), expensive after launch.
-11. Mobile traffic share, to confirm the auto-run default.
-12. Portrait play area: the camera is one fixed 1280×720 screen per level, so there is nothing to
+12. Mobile traffic share, to confirm the auto-run default.
+13. Portrait play area: the camera is one fixed 1280×720 screen per level, so there is nothing to
    crop. A bigger portrait frame means either a rotate-to-landscape hint or a portrait-specific
    camera — both product decisions.
-13. Brand typography: the lockup's "ANSRcade" and the 404 body copy are still web type by choice.
-14. The prose specs (doc 01 §2/§6/§7, doc 07) still describe the pre-lives model and the quicksand
+14. Brand typography: the lockup's "ANSRcade" and the 404 body copy are still web type by choice.
+15. The prose specs (doc 01 §2/§6/§7, doc 07) still describe the pre-lives model and the quicksand
    screen, so they now disagree with the build. §4 and `analytics-events.json` are current.
-15. **Two things want a hand, not a probe** (they would sit higher than 14 if the list
+16. **Two things want a hand, not a probe** (they would sit higher than 15 if the list
    were renumbered). **(a) `LIVES.LOST_HOLD` is 0.9s** and it is the whole of what a lost life now
    shows: long enough to read the impact pose, or a stutter before the title card? Nobody has played
    it. If it reads as a stutter the fix is the number, not the screen coming back. **(b) With
@@ -92,13 +102,32 @@ resolved, delete it from here and record the resolution in `docs/JOURNAL.md`.
    which is exactly why the badge was removed (the old lesson was "taking one changes nothing"), but it
    does mean screen 1 is the first *and* the sharpest lesson. Watch for attempts ending there; the
    cheapest answer would be a badge on Reception with a real effect rather than a no-op one.
-16. **`DELAY_LOG_ANCHOR` is an approximation of a DOM position, and it has only been checked at 1280.**
+17. **`DELAY_LOG_ANCHOR` is an approximation of a DOM position, and it has only been checked at 1280.**
    The `+2 MONTHS` label flies to a fixed point in the internal 1280×720 space (`x = W − 160, y = 120`)
    because the delay log itself is CSS-laid DOM in the HUD's right stack. That is deliberate — the label
    fades as it arrives rather than snapping into the row — but the HUD's inset is a `clamp()` and its
    plaques shrink-wrap their art, so on a narrow portrait frame the row may sit a little away from where
    the label lands. Worth one look on a phone; if it is off, the fix is to measure the log element and
    convert through `Renderer`'s viewport rather than to hand-tune the constant.
+18. **Screen 1's badge is no longer takeable on the way past, and that is the direct cost of the phase
+   you asked for — confirm it is the trade you want.** Owner call, this pass: the mark "starts from the
+   middle of the rail and then goes up and then down". Implemented exactly (`badgeFloatOffset` is a
+   `-sin`), band untouched. The consequence is not a feel, it is arithmetic: a forward-only auto-runner
+   is under the column at **t=0.40s**, when the mark is **255px over his head against a 140px jump**,
+   and the band's bottom does not come round until **4.80s** — he is at the exit by then. Measured:
+   **0 of 60 tap frames** collect it on the pass, where the previous phase gave a 0.35s window. It is
+   still takeable — stand under the rail (or hold BACK) and jump when it drops, ~3.6s in — so the
+   pickup has become a **decision**, like the Compliance perch, rather than a timed hop.
+   Why there is no third option: to be low again at 0.40s from a mid-rail start the mark would have to
+   travel >300 px/s, which is faster than the 129 px/s you already asked to slow down. So it is one or
+   the other. **This matters more than it looks**, because 1Wrk is what makes screen 1 survivable and
+   §9 says screen 1 unassisted has never been played by hand: a phone player who does not work out
+   that he has to stop for the badge meets the stamps unassisted. Three ways forward:
+   **(a) keep it** — the pickup is a decision, and the retry card's "TAKE THE ANSR BADGE" line is
+   already the coaching for it (recommended only if §9 gets played first);
+   **(b) keep the motion and make the wait visible** — e.g. hold the mark at the bottom of the band
+   for a beat each cycle, which keeps "middle, up, then down" and gives the pass a window back;
+   **(c) go back to starting at the bottom** (one character in `badgeFloatOffset`).
 
 ---
 

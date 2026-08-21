@@ -17,6 +17,26 @@ export function stepN(sim: Simulation, n: number): void {
 }
 
 /**
+ * The input a headless driver has to feed to get *through* a screen boundary.
+ *
+ * The briefing card between two screens does not time out (owner call): it waits
+ * for a press. So anything that walks the run has to press on those frames, or it
+ * sits on the card until its guard runs out — which is exactly what every helper
+ * and probe in this repo did the moment the timeout was removed. `anyPressed` is
+ * ignored while PLAYING, so this is safe to feed on every frame of a drive.
+ */
+export function driveInput(sim: Simulation): ReturnType<typeof makeInput> {
+  return makeInput({ anyPressed: sim.state === 'TITLE_CARD' });
+}
+
+/** Step until the sim is PLAYING, dismissing any briefing card on the way. */
+export function stepToPlaying(sim: Simulation, maxSteps = 200): void {
+  for (let i = 0; i < maxSteps && sim.state !== 'PLAYING'; i += 1) {
+    sim.step(DT, driveInput(sim));
+  }
+}
+
+/**
  * Drive a fresh sim until it is PLAYING on `target`, teleporting to each exit.
  * Exits sit clear of every hazard, so this never accrues setbacks.
  */
@@ -29,7 +49,7 @@ export function driveToScreen(target: number): Simulation {
     if (sim.state === 'PLAYING' && sim.screenId < target) {
       sim.player.box.x = sim.screen.exitX!;
     }
-    sim.step(DT, makeInput());
+    sim.step(DT, driveInput(sim));
   }
   return sim;
 }
@@ -66,7 +86,7 @@ export function engageBadge(sim: Simulation): void {
  */
 export function recoverFromLifeLost(sim: Simulation): void {
   sim.continueAfterLifeLost(); // no-op in any other state
-  for (let i = 0; i < 200 && sim.state !== 'PLAYING'; i += 1) sim.step(DT, makeInput());
+  stepToPlaying(sim);
 }
 
 /** Park the player standing on the ground at a grid column. */

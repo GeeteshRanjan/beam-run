@@ -134,14 +134,53 @@ describe('badge reachability', () => {
         expect(waitAndJump(sim, badgeLowestBox(badge).x + 20)).toBe(true);
       });
 
-      it('is collected by a one-tap auto-run player, with a fair tap window', () => {
-        const hits: number[] = [];
-        for (let tap = 0; tap < 50; tap += 1) if (oneTapRun(screen.id, tap)) hits.push(tap);
-        expect(hits.length, 'no single tap takes the badge on a one-tap pass').toBeGreaterThan(0);
-        // ≥0.3s of taps land it, and they are one contiguous window (a scattered
-        // set of working taps would mean the arc is only just grazing the box).
-        expect(hits.length / 60).toBeGreaterThanOrEqual(0.3);
-        expect(hits[hits.length - 1]! - hits[0]! + 1).toBe(hits.length);
+      /*
+       * THE RAIL IS NO LONGER A PASS-JUMP, AND THAT IS THE PHASE CALL (owner: the mark
+       * starts in the middle of the rail, goes up, then comes down).
+       *
+       * Starting mid-band means the mark is *climbing away* on the frame an auto-runner
+       * reaches the column — at gx 4 he is under it ~0.6s in, when the box hangs ~200px
+       * over his head — and the band's bottom does not come back round until three
+       * quarters of a cycle later. So a single forward tap cannot take it at any timing,
+       * which is the same shape the Compliance perch has: the pickup costs a decision
+       * (stop, or come back) rather than a well-timed hop on the way past.
+       *
+       * Both halves are asserted, because either one alone is half the fairness story:
+       * the pass misses it, and a player with a one-thumb player's inputs still gets it.
+       */
+      it('cannot be taken by a single forward tap, however it is timed', () => {
+        for (let tap = 0; tap < 60; tap += 1) {
+          expect(oneTapRun(screen.id, tap), `tap ${tap} takes it on the pass`).toBe(false);
+        }
+      });
+
+      it('IS taken by a player who holds under the column and waits for it to come down', () => {
+        // The inputs a one-thumb touch player has: forward, BACK (`TouchControls.setAutoRun`
+        // keeps it in the auto-run layout for exactly this) and one jump. Arrive, hold
+        // yourself under the rail, and tap every time you are on the ground.
+        const sim = driveToScreen(screen.id);
+        const cx = badgeLowestBox(badge).x + RESOLUTION.TILE / 2;
+        let took = false;
+        for (let f = 0; f < 600 && sim.state === 'PLAYING'; f += 1) {
+          const pcx = sim.player.box.x + sim.player.box.w / 2;
+          const grounded = sim.player.onGround;
+          sim.step(
+            DT,
+            makeInput({
+              right: pcx < cx - 6,
+              left: pcx > cx + 6,
+              jumpPressed: grounded,
+              jumpHeld: true,
+            }),
+          );
+          if (sim.powerups.collected) {
+            took = true;
+            break;
+          }
+        }
+        expect(took, 'the badge is unreachable by waiting under it').toBe(true);
+        // And it is a wait, not an instant: the mark has to climb and come back.
+        expect(sim.clock).toBeGreaterThan(POWERUPS.FLOAT_PERIOD / 2);
       });
     });
   }

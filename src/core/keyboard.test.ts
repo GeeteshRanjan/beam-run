@@ -22,9 +22,15 @@ describe('Keyboard-only operability', () => {
     input.releaseAction('jump');
     expect(sim.state).toBe('TITLE_CARD');
 
-    // Let the title card auto-advance to PLAYING.
+    // The briefing card waits for a press, so a keyboard-only player has to be able
+    // to get off it with a key — which is what this asserts: no pointer anywhere.
     let guard = 0;
-    while (sim.state !== 'PLAYING' && guard++ < 200) sim.step(DT, makeInput());
+    while (sim.state === 'TITLE_CARD' && guard++ < 200) {
+      input.pressAction('jump');
+      sim.step(DT, input.getState());
+      input.endFrame();
+      input.releaseAction('jump');
+    }
     expect(sim.state).toBe('PLAYING');
 
     // Hold Right for a while → Beam accelerates rightward across the Lobby floor.

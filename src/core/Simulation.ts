@@ -226,8 +226,21 @@ export class Simulation {
   get screenId(): number {
     return this._screenId;
   }
+  /**
+   * 0..1 through the briefing card's reveal. Presentation only — the card does
+   * **not** advance when this reaches 1 (it waits for a press), so nothing about
+   * the flow may be derived from it.
+   */
   get titleCardProgress(): number {
-    return Math.min(1, this.titleCardT / TRANSITION.TITLE_CARD_HOLD);
+    return Math.min(1, this.titleCardT / TRANSITION.TITLE_CARD_REVEAL);
+  }
+  /**
+   * True once a press on the briefing card would be taken. The host shows the
+   * card's button from the first frame regardless — a control that appears late
+   * reads as a slow page — and this is simply the grace being over.
+   */
+  get titleCardReady(): boolean {
+    return this.titleCardT >= TRANSITION.TITLE_CARD_SKIP_AFTER;
   }
   /** True when the current stage is a retry after a lost life (see `_retry`). */
   get retrying(): boolean {
@@ -479,6 +492,21 @@ export class Simulation {
     if (this.sm.state === 'START') this.startRun();
   }
 
+  /**
+   * Public: leave the briefing card and start the stage.
+   *
+   * The one way out of `TITLE_CARD`, and it is deliberately a *request*: it is
+   * called both by `step()` (a mapped key went down) and by the card's own button
+   * (pointer or touch), and either may arrive during the grace, in which case
+   * nothing happens and the card stays up. No-op in every other state, so the
+   * host can wire the button once and never check.
+   */
+  requestAdvance(): void {
+    if (this.sm.state !== 'TITLE_CARD') return;
+    if (!this.titleCardReady) return;
+    this.sm.transitionTo('PLAYING');
+  }
+
   /** Public: restart from the win screen. */
   requestRestart(): void {
     if (this.sm.state === 'WIN') this.sm.transitionTo('START');
@@ -622,13 +650,17 @@ export class Simulation {
         if (input.anyPressed) this.startRun();
         break;
 
+      /*
+       * The briefing card. It **waits** (owner call): the stage is described in one
+       * line and nothing starts until the player says so, so there is no timeout
+       * here and no way for a screen to begin while somebody is still reading about
+       * it. The only guard is `TITLE_CARD_SKIP_AFTER`, which stops the press that
+       * opened the card (the Start button, or a fast second click) from also
+       * dismissing it.
+       */
       case 'TITLE_CARD': {
         this.titleCardT += dt;
-        const canSkip =
-          this.titleCardT >= TRANSITION.TITLE_CARD_SKIP_AFTER && input.anyPressed;
-        if (canSkip || this.titleCardT >= TRANSITION.TITLE_CARD_HOLD) {
-          this.sm.transitionTo('PLAYING');
-        }
+        if (input.anyPressed) this.requestAdvance();
         break;
       }
 

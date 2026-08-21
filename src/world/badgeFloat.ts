@@ -40,21 +40,29 @@ export function badgeAnchor(badge: BadgeSpec): Point {
 /**
  * Vertical offset from the anchor at simulation time `t` (s).
  *
- * **Cosine, not sine, and that is the owner's "it goes up first" (do not flip it
- * back).** A sine started the badge at the *middle* of the band moving DOWN, so
- * the first thing the mark did on entering a screen was sink — and it only
- * reached the bottom of the swing three quarters of a cycle later, which on a
- * one-tap auto-run pass is long after the player has walked past the column.
+ * **It starts in the MIDDLE of the rail, rises, and then falls** (owner call,
+ * Setup Delays — the only rail screen left). That is `-sin`: offset 0 at t=0,
+ * `-FLOAT_AMPLITUDE` (the top) a quarter of a period later, the bottom of the
+ * band at three quarters. Not a plain `+sin` — that also starts mid-rail but
+ * sinks first, which is the one thing the owner has ruled out twice.
  *
- * Cosine starts it at `+FLOAT_AMPLITUDE`, i.e. at the **bottom** of the band, and
- * sends it up. So the badge rises first, comes back down, and — the part that
- * matters for fairness — it is at its most reachable on the frame the screen
- * starts, which is the generous end of the change rather than the harsh one
- * (`badgeReach.test.ts` re-proves the one-tap window either way).
+ * **This phase is a fairness change, not a look.** The two earlier shapes and what
+ * each one costs, so nobody re-litigates it from the code alone:
+ *  - `+cos` (the previous shape) put the badge at the *bottom* of the band on the
+ *    frame the screen started, so a forward-only auto-runner took it on the way
+ *    past with a 0.35s tap window.
+ *  - `-sin` (now) has the mark climbing away as he arrives: his right edge reaches
+ *    the column at t=0.40s with the box 255px over his head against a 140px jump,
+ *    and the band's bottom does not come back until t=4.80s — by which time a
+ *    forward-only run is at the exit. So **no single forward tap can take it**, and
+ *    the pickup becomes a decision: stop under the rail (or hold BACK to come back
+ *    to it) and jump when it drops — ~3.6s in, measured.
+ * Both halves are pinned in `badgeReach.test.ts`. If the owner wants the pass-jump
+ * back, the phase is the lever, not the band.
  */
 export function badgeFloatOffset(t: number): number {
   const phase = (2 * Math.PI * t) / POWERUPS.FLOAT_PERIOD;
-  return POWERUPS.FLOAT_AMPLITUDE * Math.cos(phase);
+  return -POWERUPS.FLOAT_AMPLITUDE * Math.sin(phase);
 }
 
 /** The badge's centre at simulation time `t` (s). */

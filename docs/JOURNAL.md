@@ -2648,3 +2648,307 @@ reading the file; it is exactly the audio version of the occluded sun.
   ~2 KB is eleven cue bodies and the noise plumbing. The gate's own measurement question is unchanged
   (`docs/OPEN.md` §1).
 - Typecheck, lint, build, build:site and validator all green.
+
+---
+
+## Pass: the card between two screens becomes a briefing, and the run stops for it
+
+**Owner note (verbatim in substance):** *"After every screen gets played, before the next screen we need
+to stop and display a screen which will tell in brief what the next screen is — it need not be too long,
+just apt — and only when the player presses a button the next screen would show up."*
+
+Two changes in one note, and only one of them was missing.
+
+### What was already there, and why it did not count
+There has been a `TITLE_CARD` state between every pair of screens since the first session. It printed the
+stage name, held for `TRANSITION.TITLE_CARD_HOLD` (1.2s) and then dropped into `PLAYING` on its own; a
+press could cut it short after 0.4s. So the *place* in the flow the owner is asking for existed — what it
+did there was almost nothing:
+
+- **It said nothing about the screen.** A stage name is a label, not a briefing. The run walked into five
+  screens it had never explained: a staircase with no ground route, a man who throws his own tape, a
+  Godzilla that opens with a roar. Each of those is readable *once you are standing in it and have died
+  in it*, which is a poor way to introduce a mechanic to an executive on a phone with three lives.
+- **It timed out.** 1.2s is under the time it takes to read a stage name and look up, let alone a
+  sentence. Worse, the one line the card *did* sometimes carry — `COPY.lifeLost.retryHint`, "TAKE THE
+  ANSR BADGE", which is all that survives of the deleted life-lost overlay — had 1.2 seconds to be read
+  in, on the very frame the player is still processing having died. The copy comment on that string
+  admitted it ("read in the second and a half a title card is on screen"). A coaching line on a timer
+  the coach chose is not coaching.
+
+So the pass is: keep the state, give it something to say, and take the clock off it.
+
+### The model change
+`TITLE_CARD` is now the one mid-run state that **cannot time out**. `step()`'s case for it advances only
+on `input.anyPressed`, through the new public `Simulation.requestAdvance()` — which is also what the
+card's own button calls, so the keyboard route and the pointer route are the same code path and cannot
+drift. The only guard left is `TITLE_CARD_SKIP_AFTER` (0.4s), and it earns its keep: the Start button
+both begins the run and opens the first card, and on touch a double-tap arrives as two presses a frame
+apart, so without the grace one gesture would blow straight through the briefing it had just opened.
+`Simulation.titleCardReady` exposes that grace, because the card's button is drawn from frame one (a
+control that appears late reads as a slow page) and the sim, not the host, decides when a press counts.
+
+`TRANSITION.TITLE_CARD_HOLD` is **gone**, renamed `TITLE_CARD_REVEAL` in both copies of
+`tuning.config.ts`. It still feeds `titleCardProgress`, which is presentation only. Leaving a constant
+called HOLD in a file whose comment said "s auto-advance" next to code that no longer auto-advances is
+exactly the drift `docs/INVARIANTS.md` is full of.
+
+### The copy — six briefs, and why they are short
+`COPY.titleCard.brief` is keyed by screen id, like `onClear`. **Not** authored in `levels.json`: every
+word in that file ships to the host unless `strip-level-notes.ts` is taught to remove it, and this is
+prose about the design (the dragon's 700-character note shipping to every host is in this journal
+already).
+
+Each brief says what the place is and what the obstacle *does* — never how to beat it, which is the
+screen's own job:
+
+| Screen | Brief |
+|---|---|
+| Reception (0) | On paper it all looks fine. Find the exit. |
+| Setup Delays (1) | Setup approvals slam DENIED, on a timer. |
+| Compliance (2) | A staircase of queries. No route on the ground. |
+| Workplace (3) | A workplace taped shut. He throws his tape. |
+| Hire Under Fire (4) | Hiring holds the lane and breathes fire. |
+| Tech Park (5) | The ANSR Tech Park. Walk in and take the receipt. |
+
+The length is a **measurement, not taste**, and the first draft got it wrong. Written at ~60 characters
+each and set at `PX_TYPE.body`'s own 34-character measure, every one of them wrapped to three bitmap
+lines whose third line was the last word on its own — `["ON PAPER IT ALL LOOKS FINE. FIND", "THE
+EXIT."]`, `[..., "THEM."]`, `[..., "GROUND."]` — i.e. a one-word widow directly over a centred button, on
+six screens out of six. Two fixes together: the card sets the brief at a **26-character** measure (the
+default), and the copy came down to ≤50 characters, which lands every brief on two *balanced* lines
+(21/20, 20/19, 26/20, 26/16, 25/14, 24/24). `ui.test.ts` now fails a brief that needs a third line **or**
+whose two lines are more than 2:1 apart, so the next person to write one cannot reintroduce the widow by
+being slightly more descriptive.
+
+### The card itself
+`buildTitleCard` went from two elements appended straight to the overlay shell to a real
+`.beam-run__stack--titlecard`: stage name (+ its orange value rule) · the brief · the retry hint when
+there is one · the primary **Continue** cap · the keyboard prompt. Three things about it that are not
+cosmetic:
+
+- **`role="dialog"`, not `role="status"`.** The special case in `overlayShell` is deleted. A surface that
+  stops the run and waits for a press is not a status message going past, and it now takes focus like
+  every other overlay — the `name !== 'titlecard'` exception in `show()` is gone too, since "transient →
+  skip focus" was only true while it had a timer. Its accessible name is the stage plus the brief, set
+  per screen because there is nothing static to label it with.
+- **The prompt is `Or press SPACE`, and both halves of that string are the result of a raster.** It was
+  "Press SPACE to continue", which put the word CONTINUE on the cap and again on the line directly under
+  it — visible immediately in the PNG and invisible in the code. And it names SPACE rather than promising
+  "any button" (the arcade phrasing everyone reaches for) because the card focuses its own button and
+  `Input.onKeyDown` deliberately ignores mapped keys while a form control has focus: Space and Enter
+  activate the cap, an arrow key does nothing. "Press any button" would have been a promise the DOM
+  breaks.
+- **The wash went from 55% to 86%.** At 1.2s it was a caption over the stage and a light wash was right;
+  it is a reading surface now. It stays short of the scene overlays' 92% because the screen behind it is
+  the thing being described.
+
+The prompt also got the smallest type role on the card (`rowText`, not `caption`): measured at `caption`
+it rendered **353px wide against the brief's 326**, i.e. the footnote was the biggest line on a screen
+whose subject is the stage ahead. That came out of the numeric layout pass, not the picture.
+
+### What the raster and the measurements found
+Two throwaway scripts, both against the real generators (`wrapPixelLabel`, `normalizeForPixels`, `FONT`,
+`PIXEL_TITLE`):
+
+1. **A layout budget** at frames 1280 / 900 / 560 / 390 / 320: every element's rendered width and height
+   from PixelType's own `min(cap, clamp(floor, ideal, ceil))` formula, summed against the frame with the
+   overlay's padding. It fits everywhere down to 390. At a **320px landscape** frame the stack is 184px
+   against a 162px budget — accepted: the overlay is `overflow-y: auto`, and in portrait the stage is not
+   16:9 at all (`56.25vw` + a 360px control band), so a 320-wide *phone* has ~500px of frame. Written down
+   here so it is a known limit rather than a surprise.
+2. **A 1280×720 PNG** of the card in both variants (first attempt and retry) over a stand-in level. That
+   is what caught the doubled CONTINUE. The hierarchy reads as intended: 43px title, the orange rule, two
+   39px brief lines, the orange retry line where there is one, the cap, and a 16px prompt.
+
+### The cost everywhere else: every headless driver had to learn to press
+This is the part worth remembering. **Removing the timeout broke nothing in the engine and every driver
+in the repo** — because the pattern for "get to PLAYING" everywhere was `while (state !== 'PLAYING')
+step(neutral)`, which now sits on the card until its guard expires and then asserts against a sim that
+never started. `src/test/helpers.ts` gained `driveInput(sim)` (`anyPressed` when and only when the state
+is `TITLE_CARD`; ignored while PLAYING, so it is safe to feed on every frame of a drive) and
+`stepToPlaying(sim)`, and `driveToScreen`, `recoverFromLifeLost`, `golden.test`'s `playToWin`,
+`Simulation.flow.test`'s `driveToEnd` and both `toPlaying` helpers now go through them. Anything that
+walks the run from now on has to use them.
+
+Three tests changed meaning rather than mechanics:
+
+- `Simulation.test.ts`'s **"auto-advances from the title card to PLAYING" is now "starts the stage on a
+  press, and never on its own"** — ten seconds of neutral frames, still `TITLE_CARD`, then one press.
+  That inversion is the regression guard for the whole pass.
+- Two new ones beside it: the grace (a press on the opening frame does nothing; a press after
+  `TITLE_CARD_SKIP_AFTER` starts the stage) and `requestAdvance` being a no-op in every other state.
+- `keyboard.test.ts` — the keyboard-only proof — used to *wait out* the card with `makeInput()`. It
+  presses through it with the real `Input` now, which is the honest version of "fully playable with the
+  keyboard alone": a card that waits for a press is a wall for a keyboard user if a key cannot dismiss it.
+
+### One thing the owner should confirm
+The briefing applies to **retries too**, because it is the same card: lose a life and the stage restarts
+from a card that now waits for a press instead of dropping you back in after 1.2s. Two arguments for it —
+one surface with one rule, and the retry hint finally has time to be read — and one against: it is an
+extra press after every death, and §4.2's "a lost life SHOWS NO SCREEN" was written when the card behind
+it was a 1.2s flash. Logged in `docs/OPEN.md`.
+
+### Numbers
+- **565 tests** (45 files), up from 560: three on the sim's new flow, two on the card's DOM, and one
+  completeness check that every screen in `SCREENS` has a brief that fits.
+- **IIFE 71.31 KB gzip** (was 70.90), site payload **73.85 KB** (was 73.44) — 79% of the 90 KB budget.
+  The ~0.4 KB is six briefs, the card's extra nodes and the prompt.
+- Typecheck, lint, build, build:site and validator all green.
+
+---
+
+## Pass: the briefs say the real thing, and the card loses its footnote
+
+Follow-up to the pass above, same conversation. Two owner notes: **"improve the copywriting — it needs to
+give the basic real life idea without saying so"**, and **"the 'or press SPACE' is overlapping a bit with
+the Continue button."**
+
+### The copy: a brief is the reason the screen exists, not a description of it
+The first six briefs described **mechanics**: "a staircase of queries", "he throws his tape", "hiring
+holds the lane and breathes fire". Every one of them was accurate, and that was the problem — they told
+the player what they were about to watch for themselves ten seconds later, and they said nothing to the
+person we are actually talking to. The rewrite names the real programme risk in the language of the room,
+with no B2B vocabulary anywhere:
+
+| Screen | Was | Is | What it actually says |
+|---|---|---|---|
+| Reception (0) | On paper it all looks fine. Find the exit. | **Every plan looks clean from the lobby.** | the business case before contact with reality |
+| Setup Delays (1) | Setup approvals slam DENIED, on a timer. | **Nothing here is approved the first time.** | resubmission loops |
+| Compliance (2) | A staircase of queries. No route on the ground. | **Nothing is filed in a straight line.** | the filing chain, and that it doubles back |
+| Workplace (3) | A workplace taped shut. He throws his tape. | **The team is ready. The floor is not.** | the enablement gap — hired, and nowhere to sit |
+| Hire Under Fire (4) | Hiring holds the lane and breathes fire. | **Talent never waits, and it never plays fair.** | a contested market that moves faster than the plan |
+| Tech Park (5) | The ANSR Tech Park. Walk in and take the receipt. | **Doors open, and a year still in hand.** | the whole argument, with no figure in it |
+
+Every one is 36–44 characters, two balanced lines at the card's 26-char measure. Three rules came out of
+writing them, all now tested: **no product name** (the receipt is where ANSR answers; a pitch on the way
+into a stage is an advert), **no instruction** (how to beat the screen is the screen's job), and **no word
+echoed from the stage name printed directly above it.**
+
+That last rule is the pass's find, and the **raster** produced it, not the code. The first rewrite had
+COMPLIANCE over "compliance does not run in a straight line" and WORKPLACE over "your team is ready, the
+workplace is not" — the heading and the line under it saying the same word, 40px apart. It is the same
+defect as CONTINUE printed twice on the previous pass, and it is invisible in the source because the two
+strings live in different objects. "Nothing is filed in a straight line" and "the team is ready, the floor
+is not" are the fixes, and both are *better* copy for it: `filed` is the compliance verb and `floor` is
+what a workplace actually is on day one. `ui.test.ts` now walks `SCREENS`, takes each label's words over
+three characters and asserts the brief does not contain any of them.
+
+### The card: the footnote is gone
+"Or press SPACE" sat under the Continue cap, and the owner is right that it *overlaps* — not in pixels
+(there was a −4px margin, now deleted) but in reading: two centred lines of chrome under a button read as
+one control that has been drawn wrong, so the eye keeps going back to check which one is the button. This
+is the second version of that line to be cut; the previous pass had already removed "Press SPACE to
+continue" for printing CONTINUE twice. The lesson is the one the start screen learned when its control
+legend came out ("stating them made the title screen read as a manual"): **the card focuses its own
+button, so Space and Enter already work — the line was explaining something the browser does.**
+
+`COPY.titleCard.prompt` is deleted, and the test asserts the card carries exactly one control with nothing
+under it and never mentions SPACE, so a third version cannot quietly come back.
+
+### Numbers
+- **565 tests** (45 files) — unchanged in count; two of them are stricter (no prompt, no echo, no product
+  name in a brief).
+- **IIFE 71.26 KB gzip**, site payload **73.80 KB** — 79% of the 90 KB budget, marginally down on the
+  previous pass (a deleted string and a deleted DOM node).
+- Typecheck, lint, build, build:site and validator all green.
+
+---
+
+## Pass — the last rail badge starts mid-rail, and that one character turns a pass-jump into a wait
+
+**Owner note (verbatim):** "In the setup delays page make the ansr powerup start from the middle of the
+rail and then go up and then down."
+
+### What it is, in one line of trig, and why the line has now been written three ways
+
+`badgeFloatOffset` is the whole of the change: `+A·cos` → `−A·sin`. The band did not move (±155px
+around gy 8, 6.4s, `badgeLowestBox` untouched), so nothing measured in `POWERUPS` had to be
+re-derived. The **phase** moved, and that is the entire story of this pass, because on this pickup the
+phase is a rules change.
+
+The three shapes, and what each says on the frame the screen starts:
+
+| shape | t=0 | first move | bottom of the band at |
+|---|---|---|---|
+| `+sin` (original) | middle | **down** | 0.75P |
+| `+cos` (previous, owner call "it goes up first") | bottom | up | 0 (and 1.0P) |
+| `−sin` (**now**, owner call "start from the middle, then up then down") | middle | **up** | 0.75P = 4.80s |
+
+`−sin` is the only shape that satisfies the note as written: `+sin` also starts mid-rail but sinks
+first, which is the shape the owner has now ruled out twice. So the implementation was one character
+and there was nothing to choose.
+
+### The consequence is not a feel, and it was measured before anything was written down
+
+`badgeReach.test.ts` failed immediately, in the one place that matters: **no single tap takes the badge
+on a one-tap pass — 0 of 50 tap frames**, where the previous phase gave a contiguous 0.35s window. A
+probe run against the real sim gives the arithmetic:
+
+- a forward-only auto-runner's right edge reaches the badge column (gx 4) at **t=0.40s**;
+- at 0.40s the mark's centre is at y 281, i.e. the box hangs **255px over a standing head**, against a
+  jump that rises **140px**;
+- the band's bottom does not come round until **t=4.80s**, by which time a forward-only run is at the
+  exit (260 px/s × 4.8s ≈ 1,290px, and the exit is at 1,240).
+
+So screen 1's rail is no longer a pass-jump. It is still takeable, and that was measured too: standing
+under the column and tapping whenever grounded collects it at **t=3.65s** — it is caught on the way
+down, a little before the true bottom.
+
+**There is no third option, and this is worth having written down.** For the mark to be low again at
+0.40s from a mid-rail start it has to cover 155px in 0.4s ≈ **390 px/s**; the band already ran at
+129 px/s and the owner asked for it *slower* (hence 6.4s). Lowering or shrinking the band instead runs
+into the other wall: to be reachable at 0.4s the band's middle would have to sit at y ≥ 614, which is
+below the floor, and any band whose middle is inside jump range is most of the way back to the
+walk-through the raised band was introduced to kill. It is genuinely one or the other — a pass-jump or
+a mid-rail start — which is why it went to `docs/OPEN.md` §18 as a decision rather than being
+"balanced".
+
+### What the tests say now
+
+The old test asserted a property that the owner's note deletes, so it was replaced by the two halves
+of the new truth — the same pair the Compliance perch already has, which is the honest signal that
+screen 1's rail has become the *same kind of pickup* as the perch:
+
+1. **`cannot be taken by a single forward tap, however it is timed`** — 60 tap frames swept, all miss.
+   Asserting the miss is deliberate: it is the owner's phase call, and without it a future pass would
+   "fix" the window by flipping the phase back and think it was tuning.
+2. **`IS taken by a player who holds under the column and waits for it to come down`** — driven with
+   the inputs a one-thumb touch player actually has (forward, BACK, one jump: `TouchControls`
+   keeps BACK in the auto-run layout), plus an assertion that the wait is real (`sim.clock >` half a
+   period), so a future change that made it instant would not pass by accident.
+
+`setbackLog.test.ts`'s float-shape test moved with it, and it is a better test for it: **on the anchor
+at t=0, at the top at a quarter period, at the bottom of the band at three quarters** — three
+statements about the shape the owner specified, rather than one about the sign of a trig call.
+
+### Rasterised, because the phase is visible and only the picture proves the rail reads right
+
+Four frames at 0 / P⁄4 / P⁄2 / 3P⁄4 (`/tmp/brrender/s1rail.mts`), each with a standing hero drawn under
+the column for scale: centre **340 → 185 → 340 → 495**, i.e. mid-rail, top, mid-rail, bottom, and the
+`rising` flag the wake is drawn from flips true → false → false → true. The image also confirms the
+thing the code cannot: at t=0 the mark sits visibly **halfway up its dotted rail**, which is what the
+note asks for, and at the bottom of the band it is still clearly above the hero's head.
+
+### Files
+
+Changed: `src/world/badgeFloat.ts` (the offset + the phase rationale rewritten with the measured
+figures), `src/data/tuning.config.ts` + root mirror (the `POWERUPS` note),
+`src/data/levels.json` + root mirror (the `badge` convention and screen 1's badge note — a rail badge is
+now documented as a stop, not a hop), `src/core/badgeReach.test.ts`, `src/core/setbackLog.test.ts`,
+`docs/{INVARIANTS,ARCHITECTURE,SCREENS,OPEN}.md`.
+
+**Scope worth knowing:** `badgeFloatOffset` is global to rail badges, but **Setup Delays is the only
+rail badge left in the game** — Reception's and the Tech Park's were deleted, and the other three
+screens deliver by perch, ceiling and air-drop. So "in the setup delays page" needed no per-screen
+switch, and no other screen's reachability arithmetic was touched.
+
+**Not verified:** whether a phone player works out that he has to stop for the badge. That is the
+question in `docs/OPEN.md` §18, and it compounds §9 (screen 1 unassisted has never been played by
+hand), because 1Wrk is what makes the stamps survivable.
+
+### Numbers
+- **566 tests** (45 files), +1: one test replaced by two.
+- **IIFE 71.26 KB gzip**, site payload **73.79 KB** — 79% of the 90 KB budget, unchanged (a sign and a
+  function name).
+- Typecheck, lint, build, build:site and validator all green.

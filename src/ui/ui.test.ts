@@ -297,6 +297,7 @@ describe('Overlays', () => {
     onResume: vi.fn(),
     onRestart: vi.fn(),
     onContinue: vi.fn(),
+    onAdvance: vi.fn(),
     onCta: vi.fn(),
     onToggleMute: vi.fn(),
     onOpenAssist: vi.fn(),
@@ -538,6 +539,8 @@ describe('Overlays', () => {
       COPY.start.stakeLead,
       COPY.start.stakeTail,
       COPY.lifeLost.retryHint,
+      COPY.titleCard.begin,
+      ...Object.values(COPY.titleCard.brief),
       COPY.gameOver.title,
       COPY.gameOver.cost(3, 6),
       COPY.gameOver.advice,
@@ -572,6 +575,81 @@ describe('Overlays', () => {
     overlays.show('titlecard', { levelLabel: 'Compliance', hint: COPY.lifeLost.retryHint });
     expect(hint.hidden).toBe(false);
     expect(hint.textContent).toBe(COPY.lifeLost.retryHint);
+  });
+
+  it('briefs the stage ahead and waits for a press', () => {
+    // Owner call: stop before every screen, say in brief what it is, and go on only
+    // when the player presses. So the card carries a line about the stage and a
+    // control that starts it — it is not a caption on a timer any more.
+    const brief = COPY.titleCard.brief[2]!;
+    overlays.show('titlecard', { levelLabel: 'Compliance', brief });
+    const card = visible(parent);
+    // A stop, not a status message going past.
+    expect(card.getAttribute('role')).toBe('dialog');
+    expect(card.getAttribute('aria-label')).toContain(brief);
+    // The brief is bitmap art plus the real sentence, like every other line.
+    const line = card.querySelector('.beam-run__brief') as HTMLElement;
+    expect(line.hidden).toBe(false);
+    expect(line.textContent).toBe(brief);
+    expect(line.querySelector('svg.beam-run__pixels')!.getAttribute('aria-hidden')).toBe('true');
+    // Exactly one control, and nothing under it. A keyboard prompt line was tried
+    // twice ("Press SPACE to continue", then "Or press SPACE") and cut both times:
+    // the first printed CONTINUE twice in a column, the second read as a second
+    // quieter button drawn on the first. The card focuses the cap, so Space and
+    // Enter already work without being told.
+    const btns = buttons(parent);
+    expect(btns).toHaveLength(1);
+    expect(btns[0]!.textContent).toBe(COPY.titleCard.begin);
+    expect(card.querySelector('.beam-run__hint')).toBeNull();
+    expect(card.textContent).not.toMatch(/SPACE/i);
+    btns[0]!.click();
+    expect(cb.onAdvance).toHaveBeenCalled();
+    // The button takes focus: the card is waiting on it, so a keyboard player must
+    // land there without hunting for it.
+    expect(parent.ownerDocument.activeElement).toBe(btns[0]);
+  });
+
+  it('hides the brief line on a screen that has none, rather than printing a blank', () => {
+    overlays.show('titlecard', { levelLabel: 'Compliance' });
+    const line = visible(parent).querySelector('.beam-run__brief') as HTMLElement;
+    expect(line.hidden).toBe(true);
+    expect(line.textContent).toBe('');
+  });
+
+  it('briefs every screen in the game, in type the 5x7 font can draw', () => {
+    // A card with no line on it is the old title card back again, so this is a
+    // completeness check rather than a copy check: every screen gets a brief, and
+    // each one fits the card at body size.
+    for (const screen of SCREENS) {
+      const brief = COPY.titleCard.brief[screen.id];
+      expect(brief, `screen ${screen.id}`).toBeTruthy();
+      expect(brief!, `screen ${screen.id}`).not.toMatch(/['\u2018\u2019]/);
+      // A brief names the problem, never the product: the receipt is where ANSR
+      // gets to answer, and a pitch on the way into a stage is an advert.
+      for (const cap of CAPABILITIES) {
+        expect(brief!.toLowerCase(), `screen ${screen.id}`).not.toContain(
+          cap.product.toLowerCase(),
+        );
+      }
+      // …and it never echoes a word from the stage name printed directly above it.
+      // The raster caught this twice: COMPLIANCE over "compliance does not run in a
+      // straight line", WORKPLACE over "the workplace is not".
+      const label = (screen.copy?.titleCard ?? screen.name).toUpperCase();
+      for (const word of label.replace(/[^A-Z ]/g, ' ').split(/\s+/)) {
+        if (word.length <= 3) continue; // THE, AND, a dash
+        expect(brief!.toUpperCase(), `screen ${screen.id} echoes "${word}"`).not.toContain(word);
+      }
+      // Two bitmap lines at the card's 26-character measure, and balanced ones: a
+      // third line is always a one-word widow over the button, and the point of a
+      // brief is that it is brief.
+      const lines = wrapPixelLabel(brief!, 26);
+      expect(lines.length, `screen ${screen.id}`).toBeLessThanOrEqual(2);
+      if (lines.length === 2) {
+        // No line shorter than half the other, or the centred pair reads as a slip.
+        const [a, b] = [lines[0]!.length, lines[1]!.length];
+        expect(Math.min(a, b) * 2, `screen ${screen.id}`).toBeGreaterThanOrEqual(Math.max(a, b));
+      }
+    }
   });
 
   it('ends an attempt on four things and two routes, not a ledger', () => {

@@ -96,10 +96,20 @@ export const LIVES = {
   LOG_VISIBLE_ROWS: 4,
 } as const;
 
-/** Screen transitions. */
+/**
+ * Screen transitions.
+ *
+ * **The card between two screens does NOT time out any more** (owner call): every
+ * stage is introduced by a briefing the player dismisses themselves, so there is
+ * no auto-advance number here at all. What is left is the reveal (how long the
+ * card takes to compose itself, which `Simulation.titleCardProgress` reports for
+ * presentation) and the grace before a press counts — the same guard the
+ * life-lost beat has, so the click that started the run cannot also skip the
+ * briefing it opened.
+ */
 export const TRANSITION = {
-  TITLE_CARD_HOLD: 1.2,     // s auto-advance
-  TITLE_CARD_SKIP_AFTER: 0.4, // s before input may skip (prevents accidental skip)
+  TITLE_CARD_REVEAL: 1.2,   // s for the card to settle (presentation only)
+  TITLE_CARD_SKIP_AFTER: 0.4, // s before a press advances (prevents accidental skip)
   FADE: 0.18,               // s cut-to-black on transition
 } as const;
 
@@ -136,9 +146,14 @@ export const POWERUPS = {
    * shrinking the band turns the pickup into a target you have to chase; it was
    * 4.8s (~129 px/s) and the owner asked for it slower.
    *
-   * The badge **rises first** and then falls (owner call) — see
-   * `badgeFloatOffset`, which is a cosine for exactly that reason. The band is
-   * unchanged by both of those, so nothing below has to be re-measured.
+   * The badge starts in the **middle of the rail**, rises to the top and then
+   * comes down (owner call) — see `badgeFloatOffset`, which is a `-sin` for
+   * exactly that reason. The band is unchanged by all of those, so nothing above
+   * has to be re-measured; the *phase* is what changed, and it changed the
+   * fairness with it — a forward-only pass can no longer take the mark, because it
+   * is climbing away when the player arrives and does not return to the bottom of
+   * the band until 4.8s. Taking it means stopping under the rail. That trade is
+   * written up in `badgeFloatOffset` and pinned in `badgeReach.test.ts`.
    *
    * This motion is GAMEPLAY, not juice: the hitbox moves with it, so the sim and
    * the renderer must derive the position from the same function of sim time

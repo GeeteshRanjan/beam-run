@@ -4,7 +4,7 @@ import { makeInput } from './Input';
 import { JOURNEY } from '../data/tuning.config';
 import { SCREEN_COUNT } from '../data/levels';
 import { CAPABILITIES } from '../data/copy';
-import { DT } from '../test/helpers';
+import { DT, driveInput } from '../test/helpers';
 
 /**
  * Golden full playthrough: start → traverse all six screens → WIN.
@@ -48,7 +48,9 @@ function playToWin(opts: { engage?: boolean } = {}): Simulation {
       const target = sim.screen.winTriggerX ?? sim.screen.exitX;
       if (target !== undefined) sim.player.box.x = target;
     }
-    sim.step(DT, makeInput());
+    // …and press through the briefing card between screens, which waits for the
+    // player rather than timing out (see `driveInput`).
+    sim.step(DT, driveInput(sim));
   }
   return sim;
 }

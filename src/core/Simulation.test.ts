@@ -3,15 +3,14 @@ import { Simulation } from './Simulation';
 import { Game } from './Game';
 import { makeInput } from './Input';
 import { JOURNEY, RESOLUTION, LIVES } from '../data/tuning.config';
-import { DT, stepN, recoverFromLifeLost, driveToScreen } from '../test/helpers';
+import { DT, stepN, recoverFromLifeLost, driveToScreen, stepToPlaying } from '../test/helpers';
+import { TRANSITION } from '../data/tuning.config';
 
-/** Drive a fresh sim to PLAYING on Reception. */
+/** Drive a fresh sim to PLAYING on Reception, through the briefing card. */
 function toPlaying(): Simulation {
   const sim = new Simulation();
   sim.step(DT, makeInput({ anyPressed: true })); // START → begin run → TITLE_CARD
-  for (let i = 0; i < 120 && sim.state !== 'PLAYING'; i += 1) {
-    sim.step(DT, makeInput());
-  }
+  stepToPlaying(sim);
   return sim;
 }
 
@@ -28,8 +27,46 @@ describe('Simulation lifecycle', () => {
     expect(sim.log).toHaveLength(0);
   });
 
-  it('auto-advances from the title card to PLAYING', () => {
-    expect(toPlaying().state).toBe('PLAYING');
+  it('starts the stage on a press, and never on its own', () => {
+    // Owner call: every screen is introduced by a briefing card, and the run waits
+    // there. This is the *only* mid-run state that does not time out, so the test
+    // that used to assert the opposite ("auto-advances from the title card") is now
+    // the regression guard for it.
+    const sim = new Simulation();
+    sim.step(DT, makeInput({ anyPressed: true }));
+    expect(sim.state).toBe('TITLE_CARD');
+    stepN(sim, 600); // ten seconds of nothing at all
+    expect(sim.state).toBe('TITLE_CARD');
+
+    sim.step(DT, makeInput({ anyPressed: true }));
+    expect(sim.state).toBe('PLAYING');
+  });
+
+  it('ignores a press inside the opening grace, so one click cannot skip the brief', () => {
+    // The Start button both begins the run and opens the card, and on touch a
+    // double-tap arrives as two presses a frame apart.
+    const sim = new Simulation();
+    sim.step(DT, makeInput({ anyPressed: true }));
+    expect(sim.titleCardReady).toBe(false);
+    sim.step(DT, makeInput({ anyPressed: true }));
+    expect(sim.state).toBe('TITLE_CARD');
+
+    stepN(sim, Math.ceil(TRANSITION.TITLE_CARD_SKIP_AFTER / DT) + 1);
+    expect(sim.titleCardReady).toBe(true);
+    sim.step(DT, makeInput({ anyPressed: true }));
+    expect(sim.state).toBe('PLAYING');
+  });
+
+  it('requestAdvance is the button, and it is a no-op anywhere else', () => {
+    const sim = new Simulation();
+    sim.requestAdvance(); // START: nothing to advance
+    expect(sim.state).toBe('START');
+    sim.step(DT, makeInput({ anyPressed: true }));
+    stepN(sim, Math.ceil(TRANSITION.TITLE_CARD_SKIP_AFTER / DT) + 1);
+    sim.requestAdvance();
+    expect(sim.state).toBe('PLAYING');
+    sim.requestAdvance(); // and again mid-stage: still nothing
+    expect(sim.state).toBe('PLAYING');
   });
 });
 
@@ -235,7 +272,7 @@ describe('Simulation setbacks: months, a life and a log line', () => {
   it('the "no setbacks" assist explores freely without booking months', () => {
     const sim = new Simulation({ assist: { noSetbacks: true } });
     sim.step(DT, makeInput({ anyPressed: true }));
-    for (let i = 0; i < 120 && sim.state !== 'PLAYING'; i += 1) sim.step(DT, makeInput());
+    stepToPlaying(sim);
     stepN(sim, 60);
     sim.player.box.y = RESOLUTION.HEIGHT + 200;
     sim.step(DT, makeInput());
@@ -251,7 +288,14 @@ describe('Simulation setbacks: months, a life and a log line', () => {
 
 describe('Game.simulate (headless)', () => {
   it('runs a scripted sequence and returns the resulting sim', () => {
-    const script = [{ anyPressed: true }, ...Array.from({ length: 120 }, () => ({}))];
+    // Two presses: one to begin the run, one to dismiss the stage briefing (which
+    // waits, so a script of empty frames now goes nowhere on its own).
+    const script = [
+      { anyPressed: true },
+      ...Array.from({ length: 30 }, () => ({})),
+      { anyPressed: true },
+      ...Array.from({ length: 90 }, () => ({})),
+    ];
     const sim = Game.simulate(script);
     expect(sim.state).toBe('PLAYING');
     expect(sim.screenId).toBe(0);

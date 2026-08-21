@@ -271,6 +271,12 @@ export class Game {
       onResume: () => this.closeSummaryAndResume(),
       onRestart: () => this.handleRestart(),
       onContinue: () => this.sim.continueAfterLifeLost(),
+      // The briefing card's button. The sim decides whether the press counts (it
+      // ignores one inside the opening grace), so there is nothing to check here.
+      onAdvance: () => {
+        void this.audio.unlock(); // also a gesture, on a touch device it may be the first
+        this.sim.requestAdvance();
+      },
       onCta: (ctx, topic) => this.handleCta(ctx, topic),
       onToggleMute: () => {
         this.audio.toggleMuteAll();
@@ -699,6 +705,10 @@ export class Game {
 
     this.overlays.show(overlay, {
       levelLabel: this.sim.screenLabel,
+      // What the stage ahead is, in one line. Keyed by screen id in `COPY` rather
+      // than authored in `levels.json`: it is prose about the design, and every word
+      // in that file ships to the host unless the stripper is taught to remove it.
+      brief: COPY.titleCard.brief[this.sim.screenId],
       // The retry hint, and the only surviving trace of the life-lost screen.
       hint: this.sim.retrying ? COPY.lifeLost.retryHint : undefined,
       receipt: this.sim.receipt,

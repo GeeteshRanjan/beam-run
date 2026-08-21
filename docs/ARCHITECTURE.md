@@ -23,6 +23,11 @@ need all of it. The rules that constrain these modules are in `docs/INVARIANTS.m
   `LIFE_LOST` cannot reach PLAYING directly — every retry goes via the stage's title card. With lives
   left **nothing is drawn over the frame** during it (§4.2); `Simulation.retrying` tells the host to
   print the badge line on the title card that follows.
+  **`TITLE_CARD` is the briefing between two screens and it waits for a press** — the one mid-run state
+  with no timeout (owner call). `Simulation.requestAdvance()` is the only way out of it and is called by
+  both `step()` (a mapped key) and the card's own button; `titleCardReady` reports the 0.4s grace,
+  `titleCardProgress` is presentation only. Every headless driver therefore has to press: see
+  `driveInput`/`stepToPlaying` in `src/test/helpers.ts`.
 - `Renderer.ts` — `computeViewport()` + `clampPixelRatio()` (both pure; DPR capped at 2), HiDPI,
   teal letterbox, internal 1280×720 transform + clip, shake offsets.
 - `Input.ts` — edge-detected `InputState`, arrows/WASD/Space/Esc/P/M, `setVirtual()`, `setAutoRun()`,
@@ -71,7 +76,8 @@ need all of it. The rules that constrain these modules are in `docs/INVARIANTS.m
   no expiry, read by the sim, the renderer and the validator so the one rectangle has one author),
   `badgeFloat.ts` (**pure**
   `badgeCenter`/`badgeBoxAt`/`badgeLowestBox` — the one source of the badge's position, read by the
-  sim *and* the renderer with the same clock; **cosine, so the mark rises first**), `types.ts`
+  sim *and* the renderer with the same clock; **`-sin`, so the mark starts mid-rail, rises, then
+  falls**), `types.ts`
   (`Hazard {solids, speedMultAt, shieldsPlayer?, update, reset}`,
   `HazardContext {assisted, extraTelegraph}`).
 - `Hazards/` — `Stamps.ts` (screen 1's slamming DENIED stamps; replaced `Quicksand.ts`),
@@ -166,6 +172,12 @@ it, the exact counterpart of `drawWeatherWash`),
 resolves to null without `Path2D`, draw is a no-op).
 
 **UI (`src/ui/`, DOM)** — `styles.ts` (scoped CSS in a TS template literal, minified by a Vite plugin),
+`Overlays.ts`'s `titlecard` is a **briefing** now, not a caption: stage name · one line about the stage
+(`COPY.titleCard.brief[screenId]`, at a 26-char measure) · the retry hint · a primary **Continue** cap
+wired to `onAdvance`, and **nothing under it** (two keyboard-prompt lines were tried and cut — see
+`docs/INVARIANTS.md`). `role="dialog"` and it takes focus like every other overlay —
+the two `titlecard` special cases (`role="status"`, "transient → skip focus") are deleted. Its three
+variable lines are repainted only when one of them changes, because the host calls `show()` every frame.
 `Hud.ts` (two absolutely-positioned flex **columns**: left = stage · engaged capability,
 right = **lives · delay log**. There is **no TIME TO MARKET plaque** — owner call, §4; the months live
 on the receipt. `pixelArtWidthPx` is the numeric twin of the CSS sizing formula, taking cells so it

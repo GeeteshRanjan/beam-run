@@ -191,6 +191,65 @@ export const COPY = {
      */
   } as Record<string, string>,
 
+  /**
+   * The card between two screens — a **briefing**, and it waits for the player
+   * (owner call: stop before every stage, say in brief what the next one is, and
+   * move on only when a button is pressed).
+   *
+   * Each line names the **real-world** problem in the language of the room the
+   * player is walking into, so the buyer recognises their own programme in it with no
+   * B2B vocabulary anywhere: "nothing here is approved the first time" is
+   * resubmission loops · "nothing is filed in a straight line" is the filing chain ·
+   * "the team is ready, the floor is not" is the enablement gap · "talent never
+   * waits, and it never plays fair" is a contested market · "doors open, and a year
+   * still in hand" is the entire argument with no figure in it.
+   *
+   * The first draft described the *mechanics* ("a staircase of queries", "he throws
+   * his tape"): accurate, and it told the player nothing they would not see for
+   * themselves ten seconds later. **A brief is the reason the screen exists, not a
+   * description of it.**
+   *
+   * Three things it never does: name a product (the receipt is where ANSR answers —
+   * tested), say how to beat the screen (that is the screen's job), or **echo a word
+   * from the stage name printed directly above it.** The raster caught the last one
+   * twice: COMPLIANCE over "compliance does not run in a straight line", and
+   * WORKPLACE over "the workplace is not". Same defect as printing CONTINUE twice —
+   * invisible in the source, obvious in the picture.
+   *
+   * **Two balanced bitmap lines, and that is a measurement, not a feel.** The card
+   * sets these at a 26-character measure, so ~50 characters is the ceiling: at 60
+   * the wrap needs a third line and the third line is always the last word on its
+   * own — a widow sitting over the button. Check any change with `wrapPixelLabel`
+   * (`ui.test.ts` fails a brief that needs three lines, or whose two lines are
+   * lopsided). The 5×7 font has no apostrophe, so none of these carry one.
+   *
+   * The stage's *name* is not repeated here — the card already prints it, from
+   * `Simulation.screenLabel`.
+   */
+  titleCard: {
+    brief: {
+      0: 'Every plan looks clean from the lobby.',
+      1: 'Nothing here is approved the first time.',
+      2: 'Nothing is filed in a straight line.',
+      3: 'The team is ready. The floor is not.',
+      4: 'Talent never waits, and it never plays fair.',
+      5: 'Doors open, and a year still in hand.',
+    } as Record<number, string>,
+    /**
+     * The card advances on a press, and this cap is the whole of how it says so.
+     *
+     * **There is no keyboard prompt line, and two were tried.** "Press SPACE to
+     * continue" printed CONTINUE twice, once on the cap and once directly under it;
+     * "Or press SPACE" then read as a second, quieter button sitting on the first —
+     * the eye takes two centred lines of chrome under a cap as one control that has
+     * been drawn wrong. The card focuses this button, so Space and Enter already
+     * activate it: the instruction was explaining something the browser does. Same
+     * call the start screen made when its control legend came out ("stating them made
+     * the title screen read as a manual"). Do not add a third one.
+     */
+    begin: 'Continue',
+  },
+
   /** Per-screen "on clear" lines (mirrored in levels.json, centralised here). */
   onClear: {
     0: 'Approved on paper.',

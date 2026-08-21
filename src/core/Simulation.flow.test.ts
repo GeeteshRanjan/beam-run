@@ -3,14 +3,19 @@ import { Simulation } from './Simulation';
 import { makeInput } from './Input';
 import { JOURNEY, RESOLUTION, LIVES } from '../data/tuning.config';
 import { TOTAL_MONTHS_BASE } from '../data/levels';
-import { DT, stepN, recoverFromLifeLost } from '../test/helpers';
+import { DT, stepN, recoverFromLifeLost, stepToPlaying, driveInput } from '../test/helpers';
 
 function toPlaying(sim: Simulation): void {
   sim.step(DT, makeInput({ anyPressed: true }));
-  for (let i = 0; i < 120 && sim.state !== 'PLAYING'; i += 1) sim.step(DT, makeInput());
+  stepToPlaying(sim);
 }
 
-/** Advance through every screen by teleporting Beam to each exit / win trigger. */
+/**
+ * Advance through every screen by teleporting Beam to each exit / win trigger.
+ *
+ * `driveInput` presses on every briefing card: six screens now means six cards
+ * that wait for the player, and a driver feeding neutral frames stops on the first.
+ */
 function driveToEnd(sim: Simulation): void {
   sim.step(DT, makeInput({ anyPressed: true }));
   for (let guard = 0; guard < 4000 && sim.state !== 'WIN'; guard += 1) {
@@ -19,7 +24,7 @@ function driveToEnd(sim: Simulation): void {
       if (s.winTriggerX !== undefined) sim.player.box.x = s.winTriggerX;
       else if (s.exitX !== undefined) sim.player.box.x = s.exitX;
     }
-    sim.step(DT, makeInput());
+    sim.step(DT, driveInput(sim));
   }
 }
 

@@ -30,9 +30,9 @@ since then has been post-launch passes: a meaning-model rebuild (§4), layout an
 mobile adaptivity, an 8-bit conversion of every remaining web-native surface, the
 finale rebuild, a custom 404 page and the badge work.
 
-- **Tests:** 560 passing (45 files)
-- **Bundle:** ESM 70.4 KB / IIFE 70.9 KB gzip — **the real download is 70.9 KB, 79% of the
-  90 KB budget.** The deployed site payload is **73.4 KB**. The `analyze` gate reads **~138 KB of 90 and
+- **Tests:** 566 passing (45 files)
+- **Bundle:** ESM 70.8 KB / IIFE 71.3 KB gzip — **the real download is 71.3 KB, 79% of the
+  90 KB budget.** The deployed site payload is **73.8 KB**. The `analyze` gate reads **~138 KB of 90 and
   fails**, because it sums *every* `.js` in `dist/` and so adds the two alternative output formats
   together. **This is an open owner decision, not a regression — see `docs/OPEN.md` §1.**
   Everything else is green.
@@ -47,7 +47,9 @@ finale rebuild, a custom 404 page and the badge work.
   cell, with a narrower jet, **one** badge brick, a slower drone and an ending its costume opens; the Workplace
   figure **throws his bandages** and that screen's badge **falls out of a ceiling spotlight** onto a floating
   cabinet on the safe side of its partition wall. Detail for all of these: `docs/SCREENS.md`.
-- **Next:** resolve `docs/OPEN.md` §1 (the budget measurement), then no queued task. **All four
+- **Next:** `docs/OPEN.md` **§18 — an owner decision this pass created**: Setup Delays' badge starts
+  mid-rail now (owner call), so it can no longer be taken on the way past; confirm that trade, since
+  1Wrk is what makes screen 1 survivable. Then §1 (the budget measurement). **All four
   capability effects are owner-specified and built**; the Tech Park's `SAFE_PASSAGE` badge is the
   only one still deliberately unassigned (Reception's was deleted with its badge).
 
@@ -120,6 +122,14 @@ section wins** — they predate every one of those revisions and still describe 
 **§4.1–§4.8 below are the model proper. The per-screen calls (§4.9–§4.14) are in
 `docs/SCREENS.md`** — read the one screen you are touching from there.
 
+**Every screen is introduced by a briefing card, and the run stops for it** (owner call — the one model
+change that touches the flow rather than a screen). `TITLE_CARD` prints the stage name plus **one line**
+saying what the stage is (`COPY.titleCard.brief`; the six are in `docs/SCREENS.md`) and **does not time
+out** — the only exit is `Simulation.requestAdvance()`, from a mapped key or the card's Continue button.
+Consequence before you write anything: **every headless driver has to press** (`driveInput` /
+`stepToPlaying` in `src/test/helpers.ts`). Rules in `docs/INVARIANTS.md`; the retry card waits too, which
+is `docs/OPEN.md` §10.
+
 1. **Two stakes, one measure: months and three lives.** Clearing a screen books its `monthsBase`;
    the six sum to `ANSR_BENCHMARK_MONTHS` (11), so a clean run lands exactly on the benchmark. An
    obstacle books `SETBACK_MONTHS` (2), writes a **delay log** line and costs one of `LIVES.TOTAL`
@@ -127,7 +137,8 @@ section wins** — they predate every one of those revisions and still describe 
 2. **A lost life restarts the SAME stage and SHOWS NO SCREEN** (owner call). `LIFE_LOST` still books
    the delay, but with lives left the host paints **no overlay**: the state is the beat the impact is
    drawn on (`LIVES.LOST_HOLD` 0.9s — the hero flat under the stamp, or wrapped in the tape), the HUD
-   stays up so the heart going out is visible, and then the stage restarts from its own title card,
+   stays up so the heart going out is visible, and then the stage restarts from its own title card —
+   which is now a **briefing that waits for a press** (see above; `docs/OPEN.md` §10),
    never the next screen and never screen 0. The card carries **one orange line, "TAKE THE ANSR
    BADGE"** (`Simulation.retrying` → `COPY.lifeLost.retryHint`), which is all that survives of the
    deleted coaching overlay; the delay itself is still announced through the HUD's live region.
@@ -146,20 +157,23 @@ section wins** — they predate every one of those revisions and still describe 
 4. **Every screen WITH AN OBSTACLE carries an ANSR badge, ahead of the obstacles it answers, and it is
    always a jump.** **Reception carries none** (owner call): its badge was a `SAFE_PASSAGE` mark with
    no effect, which taught the player that taking an ANSR badge changes nothing one screen before the
-   one that saves them. Its three labelled steps are the tutorial. On three screens the badge
+   one that saves them. Its three labelled steps are the tutorial. On **one** screen the badge
    levitates: a straight vertical line, ±`POWERUPS.FLOAT_AMPLITUDE` around `gy 8`,
    one cycle per `FLOAT_PERIOD` (**6.4s** — owner call, slower than the old 4.8) — topping out just
    under the HUD and bottoming out **41px above a standing head**, so it is a timed jump and never a
-   walk-through (owner call). It **rises first and then falls**, which is why `badgeFloatOffset` is a
-   cosine: it starts at the bottom of the band, i.e. at its most reachable on the frame the screen
-   starts (owner call — do not flip it back to a sine, see `docs/INVARIANTS.md`). On Hire Under Fire it
+   walk-through (owner call). It **starts in the middle of the rail, rises, then falls** (owner call),
+   which is why `badgeFloatOffset` is a `-sin` — never a `+sin`, which starts mid-rail but sinks first.
+   That phase is fairness, not decoration: mid-rail-and-rising means the mark is out of reach when a
+   running player passes the column, so **the last rail badge is a pickup you stop for, not a hop on
+   the way past** (`docs/INVARIANTS.md` for the arithmetic, `docs/OPEN.md` §18 for the trade). On Hire Under Fire it
    is **delivered onto a floating brick** instead (`docs/SCREENS.md` §4.12) and on Compliance it
    **stands on a floating brick deck** the player can walk under (owner call — `delivery: "perch"`,
    `world/badgePerch.ts`,
    `docs/SCREENS.md` §4.9), and on the Workplace it **falls out of a ceiling spotlight** onto a floating
    cabinet and expires (owner call — `delivery: "ceiling"`, `world/badgeCeiling.ts`; the only pickup in
    the game that is *visible before it is takeable*): **four** delivery models, one rule.
-   (Rail screens: 1 and the Tech Park.) Missable on purpose: that is what the
+   (**Rail: Setup Delays only** — Reception's badge and the Tech Park's were both deleted.)
+   Missable on purpose: that is what the
    retry title card's line is for. `POWERUPS` derives both ends of the band;
    the validator fails the build if the band dips into a standing player, if a drop or a perch has
    nothing under it, if a perch is inside standing reach, **if a perch's structure reaches the floor**
@@ -206,8 +220,9 @@ the document that is meant to grow.**
 
 ## 7. Open for the owner — moved to `docs/OPEN.md`
 
-Sixteen items in priority order, plus §8 (what stays in web type). Top three: the budget gate's
-measurement · the placeholder `navigatorUrl` · screen 1 unassisted, played by hand.
+Eighteen items in priority order, plus §8 (what stays in web type). Top three: **§18 Setup Delays'
+badge is no longer takeable on the way past** (new this pass, and it pairs with §9 screen 1
+unassisted) · the budget gate's measurement · the placeholder `navigatorUrl`.
 
 ---
 
@@ -232,6 +247,40 @@ measurement · the placeholder `navigatorUrl` · screen 1 unassisted, played by 
 Three only, one short paragraph each. The findings live in the journal; anything permanent is
 already in `docs/INVARIANTS.md`.
 
+- **The last rail badge starts mid-rail, and that one character turns a pass-jump into a wait.**
+  Owner: Setup Delays' powerup should "start from the middle of the rail and then go up and then down".
+  `badgeFloatOffset` went `+A·cos` → `−A·sin` (not `+sin` — that also starts mid-rail but *sinks* first,
+  the shape ruled out twice); the band is untouched, and this is the only rail badge left in the game,
+  so no per-screen switch was needed. The cost is arithmetic, not feel, and the suite found it on the
+  first run: a forward-only auto-runner is under gx 4 at **t=0.40s**, when the mark hangs **255px over
+  his head against a 140px jump**, and the band's bottom does not return until **4.80s** — he is at the
+  exit. **0 of 60 tap frames** take it now, where there was a contiguous 0.35s window; standing under
+  the column and tapping collects it at **3.65s**. No third option exists (a mid-rail start that is low
+  again by 0.40s needs ~390 px/s, and the owner asked for *slower*), so screen 1's rail is now the same
+  *kind* of pickup as the Compliance perch and the two tests say exactly that. Rasterised at
+  0/P⁄4/P⁄2/3P⁄4: 340 → 185 → 340 → 495. **566 tests.** The trade is `docs/OPEN.md` §18 and it
+  compounds §9. Full entry: `docs/JOURNAL.md`.
+- **The card between two screens becomes a briefing, and the run stops for it.**
+  Half of the owner's note already existed: `TITLE_CARD` has sat between every pair of screens since the first
+  session, but it printed a *stage name*, held 1.2s and advanced itself — so the run walked into five screens it
+  had never explained, and the one coaching line it sometimes carried ("TAKE THE ANSR BADGE", all that survives of
+  the deleted life-lost overlay) had a second and a half on the frame after a death. It **waits** now: one line
+  per screen, a Continue cap, `role="dialog"` with focus like every other overlay, and no timeout —
+  `requestAdvance()` is the single exit, keeping only the 0.4s grace, because the press that opens the card must
+  not also skip it. **The briefs were then rewritten** (owner: "give the basic real life idea without saying
+  so"): the first set described mechanics — "a staircase of queries", "he throws his tape" — i.e. told the player
+  what they were about to see for themselves. They name the real programme risk now, in the language of the room
+  ("nothing here is approved the first time" · "the team is ready, the floor is not" · "doors open, and a year
+  still in hand"), under three tested rules: no product name, no instruction, no word echoed from the stage name
+  above. Length is measured, not felt: at ~60 characters all six wrapped to a third line holding their own last
+  word over a centred button, hence a 26-char measure and ≤50 chars of copy. **Everything else was caught by the
+  raster and could not have been caught in the code** — CONTINUE printed on the cap and again under it, then
+  COMPLIANCE over "compliance does not…" and WORKPLACE over "the workplace is not". The card's keyboard prompt is
+  **gone**, in two versions: the second read as a quieter second button drawn on the first, and a focused cap
+  already answers Space. The real cost landed in the **drivers**: every
+  `while (state !== 'PLAYING') step(neutral)` loop now sits on the card and asserts against a run that never
+  started, so `helpers.ts` gained `driveInput`/`stepToPlaying` and six were converted. **565 tests.** Owner call
+  outstanding: whether a *retry* should wait too (`docs/OPEN.md` §10).
 - **The game learns to make a noise that is not a beep: filtered noise, eleven cues, and the four screens that had nothing to say.**
   Four owner notes with one defect under all of them — **this engine had no noise source**, so every cue was
   oscillators, and a thud, a jet of water, an electrical arc and cloth through air *have no pitch*. `AudioEngine`
@@ -246,32 +295,3 @@ already in `docs/INVARIANTS.md`.
   `node-web-audio-api` offline, peak/RMS/Goertzel per cue, which found the noise layers 2–3× too quiet and cost
   two dead runs to an offline context that reports `suspended` forever and a `resume()` that never settles.
   **560 tests.** Detail: `docs/SCREENS.md` (what each screen sounds like) and `docs/INVARIANTS.md`.
-- **Hire Under Fire, rebuilt: a Godzilla out of smaller cells, a jet instead of a girder, one brick, and an ending you can walk out of.**
-  Eight owner notes, and two pairs of them were single decisions. **"Smaller" and "more refined" are the same
-  change**: 300×240 at a 10px cell → **230×190 at a 5px cell** (720 cells → 1,748), because at 20 cells across an
-  animal a leg is two cells and every curve is a stair — which is what "blocks of red colour" describes. That
-  bought a blocky skull, a real neck, four *separated* dorsal plates (merged they read as fur, stood off the back
-  as flags), a tail that lies flat instead of tapering to a blade, and hide bands instead of polka dots.
-  **"One brick" and "a slower drone" are also one change**: a slower drone releases later, so the surviving column
-  has to be one an auto-runner has not passed — **gx 16 at a 3.4s crossing** keeps the full 0.40s one-tap window
-  where the old gx 13 falls off the cliff, and `FALL_TIME` went 0.55 → 0.35 because the fall spends exactly the
-  lead the crossing buys. The fire is **70→120px** instead of 120→190, which *lengthened* `CONE_REACH` to 620 (a
-  thinner cone meets a standing head later along its own axis), and it is painted **per column from the hitbox's
-  own arithmetic** rather than from its bounding boxes — the distinction that turned an orange girder into a jet.
-  Cannon and jets rebuilt for the same note: a flared bell to a dark aperture, a stream of cells rather than five
-  squares. The ending is a **sequence** now — topple, a costume that **unzips**, five hires walking out one at a
-  time, then the suit vanishing — because a creature that dissolves leaves nothing that can be opened. The screen
-  comes good on `Dragon.relief`, and the hero **burns**: the fourth death pose and the first that is a *process*,
-  hence `Simulation.lifeLostProgress`. **544 tests**; the raster found a blindfold, a girder, a white flag on a
-  stick, polka dots and an orange box with a head on top. Detail: `docs/SCREENS.md` §4.11–§4.12.
-- **The Workplace, third look: he throws, the badge falls out of a spotlight, and the room came off the teal axis.**
-  Six owner notes, four jobs. The figure **throws his bandages** (0.55s wind-up, one roll in the air, at shin
-  height so the answer is a jump) and the **partition wall is cover** — a roll dies against a solid and he will
-  not even wind up at somebody behind one, which is what makes the badge's side of that wall safe (winnability
-  re-measured: best 9/12, every win clean, and the dodge is *late*). The **rail is gone**: the mark hangs in a
-  ceiling **spotlight** for 3.2s, visible and untakeable, then drops onto a **floating cabinet** and expires — a
-  fourth delivery model, and the fourth time a rule phrased in terms of the rail had to name the deliveries it
-  applies to. That cabinet moved the **partition to gx 7**, because at gx 6 a pinned player stood under it with
-  36px of jump against the 80 he needed, i.e. the screen was sealed. The room lost a work pod and went **off the
-  teal axis** (warm plaster and furniture, a cool ceiling so it is not a sepia filter). The raster found five
-  defects the code could not, including a spotlight that was a box and a mark hanging from nothing. **530 tests.**

@@ -291,7 +291,14 @@ export const CSS = `
   backdrop-filter: blur(2px);
 }
 .beam-run__overlay--visible { display: flex; animation: beam-run-overlay-in 0.22s ease-out both; }
-.beam-run__overlay--titlecard { background: rgba(0, 36, 46, 0.55); }
+/*
+ * The briefing card. It used to be a 1.2s caption over the stage, so a light 55%
+ * wash was right; it is a reading surface now (a stage name, a line about what is
+ * in the stage, and a button that starts it), and it waits. Denser wash so the
+ * type carries, but still short of the scene overlays' 92% — the screen behind it
+ * is the thing being described, and a glimpse of it is part of the briefing.
+ */
+.beam-run__overlay--titlecard { background: rgba(0, 33, 42, 0.86); }
 @keyframes beam-run-overlay-in {
   from { opacity: 0; transform: translateY(8px) scale(0.99); }
   to { opacity: 1; transform: none; }
@@ -652,6 +659,21 @@ export const CSS = `
 .beam-run__stack--gameover .beam-run__actions { margin-top: clamp(6px, 1.6%, 16px); }
 /* The retry hint sits with the stage name, not under it as a second heading. */
 .beam-run__overlay--titlecard .beam-run__advice { margin-top: clamp(8px, 1.8%, 18px); }
+/*
+ * The briefing card: stage name, the line about the stage, the retry hint when
+ * there is one, then the button and its keyboard prompt. A narrower measure than
+ * the end screens because the brief is one sentence — at 660px it set as a single
+ * wide line and read as a caption rather than as a paragraph to stop for.
+ */
+.beam-run__stack--titlecard { width: min(100%, 560px); gap: clamp(10px, 2.2%, 22px); }
+/* One line of prose about the stage, in bitmap type like everything else here. */
+.beam-run__brief {
+  margin: 0; width: 100%;
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+}
+/* The button opens its own step: it is the last thing on the card and the only
+   control on it, so it gets the biggest gap and nothing sits under it. */
+.beam-run__stack--titlecard .beam-run__actions { margin-top: clamp(6px, 1.6%, 16px); }
 
 .beam-run__actions {
   display: flex; flex-wrap: wrap; justify-content: center; align-items: center;

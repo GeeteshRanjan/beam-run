@@ -157,6 +157,29 @@ into `docs/INVARIANTS-<screen>.md` and leave the cross-screen rules here.
   apostrophes (there is a test guarding this). Unsupported chars fold (em dash → hyphen, → → >).
 - Every pixel heading must ship a `.beam-run__sr` span with the real prose, and the artwork must
   be decorative, so `textContent` and screen readers are unchanged.
+- **A wrapped bitmap line whose last line is one word is a widow, and `wrapPixelLabel` is greedy, so
+  the copy has to be written for the measure.** All six stage briefs were authored at ~60 characters
+  and set at `body`'s own 34-char measure: every one of them wrapped to three lines with the final word
+  alone, directly over a centred button. The fix is both ends — a 26-char measure on the card and copy
+  at ≤50 characters — and it is now *tested* (`ui.test.ts` fails a brief needing three lines, or whose
+  two lines are more than 2:1 apart), because "slightly more descriptive" is how it comes back.
+  Balance is not decoration when the lines are centred: 33/9 reads as a mistake.
+- **Measure a new line against the lines around it, not just against the frame.** The briefing card's
+  keyboard prompt was authored at `caption` and rendered **353px wide against the brief's 326** — the
+  footnote was the biggest thing on the screen. Do the arithmetic (`unit × cols` against the caps) for
+  every role you add to a surface, or one clamp quietly inverts the hierarchy.
+- **Do not print the same word twice in a column, and that includes a heading and the line under it.**
+  Three of these have shipped and all three were invisible in the source (the strings live in different
+  objects) and obvious in the raster: "Press SPACE to continue" under a cap labelled **Continue** ·
+  **COMPLIANCE** over "compliance does not run in a straight line" · **WORKPLACE** over "the workplace is
+  not". Read a screen's strings *in the order they are painted*, then look at the picture. `ui.test.ts`
+  now enforces it for the briefs (no word over three characters from the stage label may appear in the
+  brief) — the general rule still needs a human eye.
+- **Do not caption a button.** Two versions of "press SPACE" under the briefing card's cap were cut: the
+  first repeated the verb, the second read as a *second, quieter button drawn on the first*, so the eye
+  kept going back to check which one was the control. A focused button already answers Space and Enter —
+  a line saying so is documentation of the browser. Same call the start screen made when its control
+  legend came out ("stating them made the title screen read as a manual").
 
 **Layout**
 - The stage clamps on **both** axes (`max-width` derived from `--beam-run-max-height`), with a
@@ -169,6 +192,20 @@ into `docs/INVARIANTS-<screen>.md` and leave the cross-screen rules here.
 **Gameplay**
 - Level data drives everything; the engine hardcodes no gameplay number. Mirror any change to
   `src/data/{tuning.config.ts,levels.json}` into the root copies.
+- **`TITLE_CARD` is a briefing and it WAITS. Never give it a timeout again** (owner call). It is the one
+  mid-run state that does not advance by itself: `step()` leaves it only on `input.anyPressed`, through
+  the public `requestAdvance()` — which is also what the card's button calls, so the pointer and the
+  keyboard are one code path. `TRANSITION.TITLE_CARD_HOLD` is gone (renamed `TITLE_CARD_REVEAL`, and it
+  is presentation only); the surviving `TITLE_CARD_SKIP_AFTER` is not a nicety — the Start button both
+  begins the run and opens the first card, and a touch double-tap is two presses a frame apart, so
+  without the grace one gesture skips the briefing it just opened. Corollary for **every** headless
+  driver, probe and helper: a loop that feeds neutral frames until `PLAYING` now sits on the card until
+  its guard expires and then asserts against a run that never started. Use
+  `src/test/helpers.ts`'s `driveInput(sim)` / `stepToPlaying(sim)`.
+- **A coaching line on a timer somebody else chose is not coaching.** The retry hint ("TAKE THE ANSR
+  BADGE") had 1.2s on the frame after a death — its own copy comment admitted it. Anything the player is
+  *meant to read* has to sit on a surface they dismiss; anything on a timer is a flourish, and should be
+  written as one.
 - **40px of headroom is not headroom: leave three empty rows (120px) over any tread.** A standing
   player is 44px and has to *jump* 40px to reach the next tread, so an overhead needs to clear 84px.
   Two empty rows (80px) looks generous on paper and is a wall in practice — the flood search stops
@@ -946,6 +983,16 @@ into `docs/INVARIANTS-<screen>.md` and leave the cross-screen rules here.
   `sim.badgeBox`, never the anchor cell), `standAtColumn`, `forceSetbackAt` and
   **`recoverFromLifeLost`** — almost every hazard test needs the last one now, because a delay
   leaves the sim in `LIFE_LOST` and the stage restarts from its title card.
+- **Anything that walks the run has to press through the briefing card**, which waits for the player.
+  `driveInput(sim)` returns `anyPressed` when and only when the state is `TITLE_CARD` (ignored while
+  PLAYING, so it is safe on every frame of a drive) and `stepToPlaying(sim)` wraps the common loop.
+  Every driver in the repo had to be converted the day the timeout was removed —
+  `driveToScreen`, `recoverFromLifeLost`, `golden.test`'s `playToWin`, `driveToEnd` and both `toPlaying`
+  helpers — and none of them *failed loudly*: they timed out on a guard and then asserted against a sim
+  still sitting on a card. Write new probes against the helpers, not against `makeInput()`.
+- **A "keyboard-only" test that waits out a screen is not testing keyboard operability.**
+  `keyboard.test.ts` used to sit through the title card with neutral frames; a card that needs a press
+  is a wall for a keyboard user, so the proof has to *press* with the real `Input`.
 
 - **A backdrop can be lighter than the hazard in front of it, and then the hazard is invisible.**
   Screen 1's stamps were painted in the same dark blue-greys as the sky (`#33505C` body against a
@@ -978,12 +1025,23 @@ into `docs/INVARIANTS-<screen>.md` and leave the cross-screen rules here.
   midpoint, because gx 22 would have pinned the player at 852–880 against the gx 20 stamp's 772–868.
   Measure the pinned box against every neighbouring hazard box before choosing the column.
 - **Changing the PHASE of a pickup's motion changes its fairness even when the band does not move.**
-  `badgeFloatOffset` is a **cosine** (owner call: the badge goes up first), so the mark starts at the
-  bottom of its band and rises. As a sine it entered every screen at the middle of the band heading
-  *down* and only reached the bottom three quarters of a cycle later — long after a one-tap auto-run
-  player has walked past the column. Same 310px band, same `badgeLowestBox`, completely different
-  window. Do not flip it back, and re-run `badgeReach.test.ts` after touching the phase *or* the
-  period, not just the amplitude.
+  The rule, three owner calls deep on the same one line of trig. `badgeFloatOffset` is now **`-sin`**
+  (owner: "start from the middle of the rail, then go up and then down"): offset 0 at t=0, the top at
+  a quarter period, the **bottom at three quarters** (4.8s). Before it was `+cos` — the bottom of the
+  band on the frame the screen started — and before that `+sin`, which starts mid-rail but **sinks
+  first** and is the shape ruled out twice. Same 310px band, same `badgeLowestBox`, and yet:
+  - `+cos` made screen 1's rail a **pass-jump**: a forward-only auto-runner took it on the way past,
+    0.35s of tap frames wide.
+  - `-sin` makes it a **wait**. His right edge reaches gx 4 at **t=0.40s** with the box **255px over
+    his head against a 140px jump**, and the band does not come back down until 4.80s — a forward-only
+    run is at the exit by then. Measured: **0 of 60 tap frames** take it, and the badge is takeable
+    ~3.6s in by standing under the rail.
+  So the arithmetic to do before touching this is not "is it inside the band" but **"where is the mark
+  on the frame the player is under the column"** — the pass is 0.3s wide and the cycle is 6.4s. There
+  is no phase that starts mid-rail *and* keeps the pass-jump: to be low at 0.4s from a mid-rail start
+  the mark has to move >300 px/s, which is the speed the owner already rejected. It is one or the
+  other, which is why it is `docs/OPEN.md` §18 rather than a tuning number. Re-run
+  `badgeReach.test.ts` after touching the phase *or* the period, not just the amplitude.
 - **Feedback belongs on the thing that changed — and it has to get there from where it happened.**
   The delay log is in the top-right; the player's eyes are on the hero. So a booked delay now writes
   the obstacle's name and `+2 MONTHS` over the body, holds for 30% of the flight so it can be read,
