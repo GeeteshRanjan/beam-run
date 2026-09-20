@@ -821,6 +821,60 @@ function drawClock(ctx: CanvasRenderingContext2D, cx: number, cy: number, t: num
   pxRect(ctx, '#8A2A18', cx - 4, cy - 4, 8, 8, 4); // spindle
 }
 
+/**
+ * The permits file, hanging under the clock on Setup Delays — **back, by owner call**
+ * ("show a file saying PERMITS just below the clock, the file can be grey and with
+ * lines"), after a pass deleted the old framed PERMITS board for saying the same thing
+ * as the stamps.
+ *
+ * What makes it a different object from the board that was cut: it is a **file**, not a
+ * sign. A wall board saying PERMITS behind four stamps saying DENIED was one sentence
+ * twice. A folder of paperwork under a clock is the *other* half of that sentence — here
+ * is the application, here is how long it has been sitting there — which is why it hangs
+ * off the clock's own column rather than standing on its own somewhere else on the frame.
+ *
+ * Three things the raster forces:
+ *
+ *  - **It is grey, and grey is a range.** A `LIGHT_GREY` folder would be the lightest
+ *    thing on the upper frame and would compete with the stamps, which are deliberately
+ *    the lightest objects on this screen. So it sits a value *below* them: a mid grey
+ *    manila body, a lighter tab, near-black ruling.
+ *  - **The word sets the width.** PERMITS is 7 characters, i.e. 82px at scale 2, so the
+ *    body cannot be narrower than ~100px whatever it looks like on paper. At scale 1 it
+ *    would be 7px tall, which is below the size anything in this game is legible at.
+ *  - **It must not be parked behind a stamp.** A stamp's body occupies y 202–330 at rest
+ *    across 96px of its column, and this file sits at 246–318 — right inside that band —
+ *    so the only thing that keeps it visible is the column it is given. See the caller
+ *    for the one gap in the sky that is wide enough.
+ */
+function drawPermitFile(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  topY: number,
+  w: number,
+  h: number,
+): void {
+  const x = Math.round(cx - w / 2);
+  // A strap up to the clock's bracket, so the file hangs off something.
+  pxRect(ctx, '#0A3A47', cx - 4, topY - 16, 8, 16, 4);
+  // Folder: a raised tab on the left, then the body, with a dark keyline round it so it
+  // holds its silhouette against both the sky and a stamp passing in front of it.
+  pxRect(ctx, '#05222A', x - 4, topY - 12, w + 8, h + 16, 4);
+  pxRect(ctx, '#8C9AA0', x + 8, topY - 8, 40, 12, 4); // tab
+  pxRect(ctx, '#A8B6BB', x + 8, topY - 8, 40, 4, 4); // lit top of the tab
+  pxRect(ctx, '#7C8A90', x, topY, w, h, 4); // manila body
+  pxRect(ctx, '#95A3A8', x, topY, w, 4, 4); // lit top edge
+  // The word, and then the ruling under it: an application with lines on it.
+  drawText(ctx, 'PERMITS', cx, topY + 10, { scale: 2, color: '#16232A', align: 'center' });
+  for (let ly = topY + 30; ly < topY + h - 6; ly += 10) {
+    pxRect(ctx, '#4E5F66', x + 8, ly, w - 16, 4, 4);
+  }
+  // A dog-eared corner, bottom right: the one cue that says this is paper and that it
+  // has been handled. Without it a ruled grey rectangle reads as a second window.
+  pxRect(ctx, '#5E6C72', x + w - 16, topY + h - 16, 16, 16, 4);
+  pxRect(ctx, '#05222A', x + w - 16, topY + h - 16, 16, 4, 4);
+}
+
 /* ---------------------------------------------------------------------------
  * The Workplace floor (screen 3), seen from inside.
  *
@@ -2058,11 +2112,29 @@ export function drawSceneBackground(
        *
        * So: the skyline's windows drop two values and its towers go darker
        * (`drawSkyline` is shared, so this is done per call and nothing else moves);
-       * the PERMITS board and its label are **deleted** — a form saying PERMITS
+       * the PERMITS board and its label were deleted — a form saying PERMITS
        * behind four stamps saying DENIED is the same sentence twice, and the duller
        * copy of it; and the clock is rebuilt at twice the size in whole pixels,
        * because "the setup is taking months" is the one thing on this backdrop
        * worth reading. Two props, one sign.
+       *
+       * **The permits file is back, hanging under the clock** (owner call). It is not
+       * the board that was cut: a wall sign saying PERMITS was a label, a *file* under a
+       * clock is the application and the wait in one object — and it is now the stamps
+       * that carry the four subjects (ENTITY, BANKING, TAX IDS, DIR KYC) while DENIED
+       * has moved onto their dies, so the old "same sentence twice" objection is gone
+       * with it.
+       *
+       * **Where the pair hangs is arithmetic, and the arithmetic is easy to get wrong.**
+       * A parked stamp's body covers y 202–330 across 96px of its column, and the file
+       * sits at y 246–318, i.e. squarely inside that band — so a column shared with a
+       * stamp hides the prop completely. The four stamps are at `gx` 7/12/20/25 and the
+       * tile is **40px**, not 32, so they occupy 252–348, 452–548, 772–868 and 972–1068,
+       * which leaves three gaps in the sky: 348–452, **548–772** and 868–972. Only the
+       * middle one is wide enough for a 104px file, and its centre is `W*0.5 + 20` —
+       * which is where the clock already was. A first cut moved the pair left to 540 on
+       * 32px-tile arithmetic and put both props behind the second stamp; the raster
+       * showed PERMITS reading as "ITS".
        */
       drawSky(ctx, '#05303a');
       drawSkyline(ctx, 23, '#032027', '#3E7280', t, reduced);
@@ -2070,6 +2142,7 @@ export function drawSceneBackground(
       drawStalledStacks(ctx, 60, GROUND_TOP);
       drawStalledStacks(ctx, W - 150, GROUND_TOP);
       drawClock(ctx, W * 0.5 + 20, 190, t, reduced);
+      drawPermitFile(ctx, W * 0.5 + 20, 246, 104, 72);
       // The floor label used to name a sludge wade at col 8. That is now a stamp
       // column, and the stamps say DENIED loudly enough on their own — a label
       // under a slamming block is a label nobody reads.

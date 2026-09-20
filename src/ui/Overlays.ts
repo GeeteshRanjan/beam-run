@@ -133,7 +133,37 @@ const VALUE_INK = { color: '#FF5400', shadow: 'rgba(0,16,22,0.9)' } as const;
 /** Captions and other secondary lines — cool grey, one step down from body. */
 const DIM_INK = { color: '#9FC8D2', shadow: 'rgba(0,16,22,0.85)' } as const;
 
-export type OverlayName = 'start' | 'titlecard' | 'pause' | 'gameover' | 'summary' | 'win';
+/**
+ * Eight surfaces. Three of them are the run's own punctuation and they are built from
+ * the same parts — a headline, a line under it, a cap — because they are read in
+ * immediate succession and a player should not have to work out which kind of card they
+ * are looking at:
+ *
+ *  - `clearcard` — you cleared THAT stage (the first half of every transition)
+ *  - `titlecard` — here is THIS one (the second half, and the only one that ever
+ *     carries the control legend)
+ *  - `deathcard` — what just happened to you, and the powerup that answers it
+ */
+export type OverlayName =
+  | 'start'
+  | 'clearcard'
+  | 'titlecard'
+  | 'deathcard'
+  | 'pause'
+  | 'gameover'
+  | 'summary'
+  | 'win';
+
+/**
+ * Which control legend a briefing card carries, if any (owner call: the controls copy
+ * moved off the opening screen and onto the cards, "like a play through", with fire
+ * introduced where it becomes relevant).
+ *
+ * Two showings in the whole run — `moveJump` on level 0 and `fire` on level 3 — so this
+ * is a small closed set rather than a list of caps: the host says which lesson the card
+ * is teaching and the legend is built here.
+ */
+export type LegendKind = 'moveJump' | 'fire';
 export type CtaContext = 'win' | 'summary' | 'skip';
 
 export interface OverlayCallbacks {
@@ -178,8 +208,19 @@ export interface LifeLostModel {
   delayMonths: number;
 }
 
+/** A headline plus one line under it — the clear card and the death card. */
+export interface CardModel {
+  title: string;
+  line: string;
+}
+
 export interface OverlayData {
   levelLabel?: string;
+  /**
+   * "Level 3" — the eyebrow over the stage name on a briefing card (owner call: call
+   * out the levels). Absent on the Tech Park, which is the arrival rather than a level.
+   */
+  levelTag?: string;
   /**
    * The briefing card's one line about the stage ahead — what the place is and
    * what is in it. Absent only if a screen has no brief authored for it, in which
@@ -187,10 +228,14 @@ export interface OverlayData {
    */
   brief?: string;
   /**
-   * One line under the title card. Present only on a retry, where it carries the
-   * instruction the deleted life-lost screen used to: take the ANSR badge.
+   * The control legend on a briefing card, on the two cards that teach one. Absent on
+   * the other four, where a row of caps would be furniture.
    */
-  hint?: string;
+  legend?: LegendKind;
+  /** The congratulations card: what the player just cleared. */
+  clear?: CardModel;
+  /** The death card: what just happened, and the powerup that answers it. */
+  death?: CardModel;
   receipt?: ReceiptModel;
   lifeLost?: LifeLostModel;
 }
@@ -243,10 +288,19 @@ export class Overlays {
   private titleCardLabel!: HTMLElement;
   private titleCardSr!: HTMLElement;
   private titleCardArt!: SVGSVGElement;
+  private titleCardTag!: HTMLElement;
   private titleCardBrief!: HTMLElement;
-  private titleCardHint!: HTMLElement;
-  /** Last painted (label|brief|hint), so the card is not repainted every frame. */
+  /** The briefing card's control legend: one row, filled per card (see `fillLegend`). */
+  private titleCardKeys!: HTMLElement;
+  /** Last painted (tag|label|brief|legend), so the card is not repainted every frame. */
   private titleCardKey = '';
+  /** The congratulations card and the death card: headline + one line each. */
+  private clearCardTitle!: HTMLElement;
+  private clearCardLine!: HTMLElement;
+  private clearCardKey = '';
+  private deathCardTitle!: HTMLElement;
+  private deathCardLine!: HTMLElement;
+  private deathCardKey = '';
   private winMonths!: HTMLElement;
   private winMonthsSr!: HTMLElement;
   private winMonthsArt!: SVGSVGElement;
@@ -285,7 +339,9 @@ export class Overlays {
     this.reducedMotion = opts.reducedMotion ?? false;
     this.isTouch = opts.touch ?? false;
     this.entries.set('start', this.buildStart());
+    this.entries.set('clearcard', this.buildClearCard());
     this.entries.set('titlecard', this.buildTitleCard());
+    this.entries.set('deathcard', this.buildDeathCard());
     this.entries.set('pause', this.buildPause());
     this.entries.set('gameover', this.buildGameOver());
     this.entries.set('summary', this.buildSummary());
@@ -304,22 +360,36 @@ export class Overlays {
     // host calls `show()` every rendered frame, and repainting three bitmap SVGs at
     // 60Hz is a lot of DOM for a screen that is standing still.
     if (name === 'titlecard' && data.levelLabel) {
-      const key = `${data.levelLabel}|${data.brief ?? ''}|${data.hint ?? ''}`;
+      const key = `${data.levelTag ?? ''}|${data.levelLabel}|${data.brief ?? ''}|${data.legend ?? ''}`;
       if (key !== this.titleCardKey) {
         this.titleCardKey = key;
         this.titleCardSr.textContent = data.levelLabel;
         // The card's accessible name is the stage it introduces, so it changes with
         // the stage (there is nothing static to label it with).
+        const named = data.levelTag ? `${data.levelTag}: ${data.levelLabel}` : data.levelLabel;
         this.entries
           .get('titlecard')
-          ?.el.setAttribute(
-            'aria-label',
-            data.brief ? `${data.levelLabel}. ${data.brief}` : data.levelLabel,
-          );
+          ?.el.setAttribute('aria-label', data.brief ? `${named}. ${data.brief}` : named);
         paintPixelSvg(this.titleCardArt, [data.levelLabel], {
           ...PX_TYPE.title,
           ...TITLE_INK,
         });
+        /*
+         * "LEVEL 3", over the name. A separate line rather than part of the title
+         * because the title is painted as ONE unwrapped bitmap line — fold the number
+         * in and "LEVEL 2: THE COMPLIANCE MAZE" either overflows its share of the frame
+         * or shrinks every other stage name in the game to match the longest one.
+         *
+         * Hidden *and emptied* when there is none (the Tech Park), like every other
+         * conditional line on these cards: a hidden element holding its last text is one
+         * cascade mistake away from printing it again, which is a bill this build has
+         * already paid once.
+         */
+        this.titleCardTag.hidden = !data.levelTag;
+        if (!data.levelTag) this.titleCardTag.textContent = '';
+        if (data.levelTag) {
+          setPixelText(this.titleCardTag, data.levelTag, { ...PX_TYPE.caption, ...DIM_INK });
+        }
         // What the stage ahead is, in one line. Hidden rather than blank when a
         // screen has none, so the card composes as three elements or as two.
         this.titleCardBrief.hidden = !data.brief;
@@ -338,14 +408,57 @@ export class Overlays {
             maxChars: 26,
           });
         }
-        // The retry hint. Painted here rather than once at build time because the
-        // same card is shown for a first attempt (no hint) and a retry (hint), and
-        // the two must not be able to disagree.
-        this.titleCardHint.hidden = !data.hint;
-        if (!data.hint) this.titleCardHint.textContent = '';
-        if (data.hint) {
-          setPixelText(this.titleCardHint, data.hint, { ...PX_TYPE.caption, ...VALUE_INK });
-        }
+        /*
+         * The control legend, on the two cards that teach one. Emptied and hidden when
+         * there is none: `display: none` does not take text out of `textContent`, so a
+         * pre-built row left in place would put the whole control guide on every card in
+         * the game as far as anything reading the DOM is concerned.
+         */
+        this.titleCardKeys.hidden = !data.legend;
+        this.titleCardKeys.replaceChildren();
+        if (data.legend) this.fillLegend(this.titleCardKeys, data.legend);
+      }
+    }
+    if (name === 'clearcard' && data.clear) {
+      const key = `${data.clear.title}|${data.clear.line}`;
+      if (key !== this.clearCardKey) {
+        this.clearCardKey = key;
+        this.entries
+          .get('clearcard')
+          ?.el.setAttribute('aria-label', `${data.clear.title} ${data.clear.line}`);
+        // The headline is set at the title measure the start screen uses (20), so a
+        // two-word credit never widows; the line under it at the card measure (26).
+        setPixelText(this.clearCardTitle, data.clear.title, {
+          ...PX_TYPE.title,
+          ...TITLE_INK,
+          maxChars: 20,
+        });
+        setPixelText(this.clearCardLine, data.clear.line, {
+          ...PX_TYPE.body,
+          ...MUTED_INK,
+          maxChars: 26,
+        });
+      }
+    }
+    if (name === 'deathcard' && data.death) {
+      const key = `${data.death.title}|${data.death.line}`;
+      if (key !== this.deathCardKey) {
+        this.deathCardKey = key;
+        this.entries
+          .get('deathcard')
+          ?.el.setAttribute('aria-label', `${data.death.title} ${data.death.line}`);
+        setPixelText(this.deathCardTitle, data.death.title, {
+          ...PX_TYPE.title,
+          ...TITLE_INK,
+          maxChars: 20,
+        });
+        // The one instruction this game has, in the value orange, on the one surface
+        // where the player has just been shown why they need it.
+        setPixelText(this.deathCardLine, data.death.line, {
+          ...PX_TYPE.body,
+          ...VALUE_INK,
+          maxChars: 26,
+        });
       }
     }
     // Painted before the no-change bail-out, like the title card: the figures
@@ -765,7 +878,9 @@ export class Overlays {
     const brand = createBrandLockup(this.doc, { compact: true });
     const stack = this.stack('gameover');
 
-    const title = this.pixelTitle(COPY.gameOver.title, ['OUT OF', 'RUNWAY']);
+    // Hand-split, because the comma in "Business Case, Closed" is the break: a greedy
+    // wrap at the title measure would put CLOSED on the first line with it.
+    const title = this.pixelTitle(COPY.gameOver.title, ['BUSINESS CASE,', 'CLOSED']);
 
     /*
      * THE ONE FIGURE, DRAWN AS A FIGURE (owner: this screen is not well designed and
@@ -824,32 +939,44 @@ export class Overlays {
 
   /**
    * The control legend: the actual **buttons**, drawn as 8-bit key caps, with a short
-   * label beside each pair (owner call — "show the buttons instead of text", and the
-   * fire button was missing).
+   * label beside each (owner call — "show the buttons instead of text").
    *
-   * It replaced a written sentence, which is what this screen has now tried twice: a
-   * legend was cut once for reading as a manual, and the sentence that came back read
-   * as a footnote — and at 33 characters it rendered *wider than the headline above it*
-   * on a phone. Caps solve both, because a cap is the size of its glyph rather than the
-   * size of its explanation.
+   * **It is not on the title screen any anymore** (owner call: move the controls copy to
+   * the game screen rather than the opening screen, like a play through). It sits on the
+   * briefing cards now, which is the one place in the run that stops and waits to be
+   * read, and it is *split*: move + jump on level 0's card, and the fire cap alone on
+   * level 3's, which is the first stage whose powerup puts a tool in the player's hands.
    *
-   * Three groups, in the order the player needs them: move, jump, fire. The act button
-   * is real and reachable from the first screen a badge arms it on, and leaving it out
-   * meant the one control nobody can guess was the one nobody was told about.
+   * That split is the whole point of the move. On the title screen the row had to teach
+   * three controls at once, one of which does nothing for the first three stages — a
+   * legend for a game nobody had played yet. Taught a stage at a time, each cap arrives
+   * on the screen it is needed on and the title screen gets to be an offer instead of a
+   * manual. (A written legend has been cut from that screen twice, for exactly that.)
    *
-   * Accessibility: every cap is decorative artwork, and the whole row carries **one**
-   * hidden sentence (`controlsKeys` / `controlsTap`). Per-cap labels would read out as
-   * "left right move space jump f fire", which is not a sentence.
+   * Accessibility: every cap is decorative artwork, and the row carries **one** hidden
+   * sentence (`COPY.legend`). Per-cap labels would read out as "left right move space
+   * jump", which is not a sentence.
+   *
+   * It **fills** an existing row rather than returning a new one, and the row is emptied
+   * whenever no legend is shown. Two pre-built rows toggled by `hidden` were the obvious
+   * shape and the wrong one: `display: none` keeps text in `textContent`, so every
+   * briefing card in the game would have read "…Arrow keys move. Space jumps. F fires an
+   * ANSR tool…" to anything reading the DOM, which is the same class of defect as the
+   * retry hint that stayed on every card with `hidden` set. A card that teaches nothing
+   * now contains nothing about the controls. It is cheap because it sits behind the
+   * card's repaint key: twice per run, not sixty times a second.
    */
-  private buildLegend(): HTMLElement {
-    const row = this.h('div', 'beam-run__keys');
-    row.append(
-      this.h(
-        'span',
-        'beam-run__sr',
-        this.isTouch ? COPY.start.controlsTap : COPY.start.controlsKeys,
-      ),
-    );
+  private fillLegend(row: HTMLElement, kind: LegendKind): void {
+    row.replaceChildren();
+    const sentence =
+      kind === 'fire'
+        ? this.isTouch
+          ? COPY.legend.fireTap
+          : COPY.legend.fireKeys
+        : this.isTouch
+          ? COPY.legend.moveJumpTap
+          : COPY.legend.moveJumpKeys;
+    row.append(this.h('span', 'beam-run__sr', sentence));
     /*
      * Touch shows the pads it will actually draw over the game (see `TouchControls`):
      * two arrows, a big round jump and a **smaller** act button beside it. Keyboard
@@ -861,18 +988,23 @@ export class Overlays {
      * two identical glyphs apart. The real buttons separate on size and shape, so the
      * legend does too.
      */
-    const groups: readonly [readonly (string | readonly string[])[], string, boolean][] =
-      this.isTouch
-        ? [
-            [['<', '>'], COPY.start.legend.move, false],
-            [[DOT_GLYPH], COPY.start.legend.jump, false],
-            [[DOT_GLYPH], COPY.start.legend.fire, true],
-          ]
-        : [
-            [['<', '>'], COPY.start.legend.move, false],
-            [['SPACE'], COPY.start.legend.jump, false],
-            [['F'], COPY.start.legend.fire, false],
-          ];
+    type Group = readonly [readonly (string | readonly string[])[], string, boolean];
+    /*
+     * The fire lesson is **one group, on its own** (owner call: introduce F when it is
+     * relevant). It arrives on level 3, three stages after the player learned to move
+     * and jump, so reprinting those two caps beside it would bury the new control in
+     * two they have been using for a minute — and a legend of three where only one of
+     * them is news reads as the title screen's manual, which is what this move was
+     * meant to get away from.
+     */
+    const move: Group = [['<', '>'], COPY.legend.caps.move, false];
+    const groups: readonly Group[] = this.isTouch
+      ? kind === 'fire'
+        ? [[[DOT_GLYPH], COPY.legend.caps.fire, true]]
+        : [move, [[DOT_GLYPH], COPY.legend.caps.jump, false]]
+      : kind === 'fire'
+        ? [[['F'], COPY.legend.caps.fire, false]]
+        : [move, [['SPACE'], COPY.legend.caps.jump, false]];
     for (const [caps, label, small] of groups) {
       const group = this.h('div', 'beam-run__key-group');
       for (const cap of caps) {
@@ -893,7 +1025,6 @@ export class Overlays {
       group.appendChild(createPixelSvg(this.doc, [label], { ...PX_TYPE.keyLabel, ...DIM_INK }));
       row.appendChild(group);
     }
-    return row;
   }
 
   private buildStart(): OverlayEntry {
@@ -903,23 +1034,38 @@ export class Overlays {
     const stack = this.stack('start');
 
     /*
-     * The offer, and it is the headline now (owner call: the three-line hook — "Any
-     * board can approve a GCC. / BUILDING IT / is the hard part." — is deleted, as the
-     * dare and the 24-month statistic were before it). With nothing above it the
-     * tagline is set as the `title`, which is also what gives it the orange value rule
-     * underneath; at `caption` it was a subtitle to a headline that no longer exists.
+     * **Two lines now, and the headline is the hook rather than the offer** (owner
+     * call): "All of the delays. None of the damage." over "Play through the GCC
+     * journey, before you plan it."
      *
-     * The two visual lines come from `wrapPixelLabel` at a 20-character measure rather
-     * than being hand-split, so a copy change cannot silently produce a widow.
+     * The order matters more than the words. The first line is what the game *is* — a
+     * dry joke with the whole premise in it, and the only promise on this screen a
+     * player has any reason to believe before they have played anything. The second is
+     * the instruction, and it is set at `body`, not as a second title: two headlines is
+     * no headline, and the value rule under the first one only works if there is
+     * exactly one thing above it.
+     *
+     * Both wrap through `wrapPixelLabel` rather than being hand-split, so a copy change
+     * cannot silently produce a widow — the headline at the 20-character measure this
+     * screen has always used (18/19), the offer at the body's own 34 (29/19).
+     *
+     * What used to sit between them is **gone**: the row of key caps is on the briefing
+     * cards now (see `buildLegend`). The screen is down to three things again — the
+     * hook, the offer, one cap.
      */
     const tagline = createPixelHeading(
       this.doc,
       'h2',
       'beam-run__title',
-      COPY.start.tagline,
-      wrapPixelLabel(COPY.start.tagline, 20),
+      COPY.start.headline,
+      wrapPixelLabel(COPY.start.headline, 20),
       { ...PX_TYPE.title, ...TITLE_INK },
     );
+    const offer = this.pixel('p', 'beam-run__brief', COPY.start.tagline, {
+      ...PX_TYPE.body,
+      ...MUTED_INK,
+      maxChars: 34,
+    });
     // One route, and it is into the game (owner call). The "Skip to the Navigator"
     // ghost cap that sat here offered a busy executive a way out of a 90-second game
     // before they had seen a single screen of it; it is still on the pause menu, for
@@ -928,17 +1074,80 @@ export class Overlays {
     const start = this.btn(COPY.start.play, 'primary', () => this.cb.onStart());
     actions.append(start);
 
-    stack.append(tagline, this.buildLegend(), actions);
+    stack.append(tagline, offer, actions);
     el.append(brand, stack);
     return { el, focusTarget: start };
+  }
+
+  /**
+   * The congratulations card — the **first** of the two cards every transition shows
+   * (owner call: "every transition screen needs to be 2 screens instead of just 1, one
+   * congratulations for clearing the level and the second information about the next").
+   *
+   * Two lines and a cap, built from the briefing card's own parts, because the two are
+   * read a press apart and a player should not have to work out which kind of card they
+   * are looking at. What separates them is what each line *does*: here the headline is
+   * the credit and the line under it is the hand-off ("Legal is happy. Facilities has
+   * questions."), so the pair lands as a beat — you won, and it is not over — instead of
+   * as a second briefing.
+   *
+   * It names the stage **behind** the player, which is the trap in this feature: see
+   * `Simulation.clearedScreenId`.
+   */
+  private buildClearCard(): OverlayEntry {
+    const el = this.overlayShell(['titlecard', 'clearcard']);
+    const stack = this.stack('titlecard');
+    this.clearCardTitle = this.h('h2', 'beam-run__title');
+    this.clearCardLine = this.h('p', 'beam-run__brief');
+    const actions = this.h('div', 'beam-run__actions');
+    const next = this.btn(COPY.clearCard.begin, 'primary', () => this.cb.onAdvance());
+    actions.appendChild(next);
+    stack.append(this.clearCardTitle, this.clearCardLine, actions);
+    el.appendChild(stack);
+    return { el, focusTarget: next };
+  }
+
+  /**
+   * The death card — **a lost life shows a screen again** (owner call, reversing the
+   * earlier "a lost life shows no screen at all"), and it is written per stage.
+   *
+   * The beat in front of it is untouched: the impact is painted on the world for
+   * `LIVES.LOST_HOLD` — the hero flat under the stamp, or wrapped in the tape, with the
+   * cost flying up into the delay log — and only then does this come up. So the player
+   * watches what happened before they are told about it, which is the order those two
+   * things have to arrive in.
+   *
+   * `role="alertdialog"`, like the out-of-lives screen: something happened *to* the
+   * player and they have to acknowledge it. The headline is the system's own word
+   * (DENIED!, Declined!) and never the player's fault; the line under it is the one
+   * instruction this game has, in the value orange, aimed at the specific thing this
+   * stage would have done differently. It replaces the generic "TAKE THE ANSR POWERUP"
+   * that used to sit on the briefing card of a retry, in a slot nobody had a reason to
+   * look at.
+   *
+   * Only shown on the four stages that carry a powerup — see `Simulation.deathCardUp`.
+   */
+  private buildDeathCard(): OverlayEntry {
+    const el = this.overlayShell(['titlecard', 'deathcard']);
+    el.setAttribute('role', 'alertdialog');
+    const stack = this.stack('titlecard');
+    this.deathCardTitle = this.h('h2', 'beam-run__title');
+    this.deathCardLine = this.h('p', 'beam-run__advice');
+    const actions = this.h('div', 'beam-run__actions');
+    const retry = this.btn(COPY.deathCard.retry, 'primary', () => this.cb.onAdvance());
+    actions.appendChild(retry);
+    stack.append(this.deathCardTitle, this.deathCardLine, actions);
+    el.appendChild(stack);
+    return { el, focusTarget: retry };
   }
 
   /**
    * The card between two screens — a **briefing**, and the one screen in the middle
    * of a run that waits for the player (owner call).
    *
-   * Four things, top to bottom: the stage name, one line saying what the stage is,
-   * the retry instruction when there is one, and the button that starts it. It used
+   * Four things, top to bottom: the level number, the stage name, one line saying what
+   * the stage is, and the button that starts it — plus, on two of the six cards, the
+   * control legend that used to live on the title screen. It used
    * to be the stage name alone, on a 1.2s timer — so the run walked into five
    * screens it had never explained, and the one line it did carry (the badge
    * instruction on a retry) had a second and a half to be read in. Nothing here
@@ -963,16 +1172,36 @@ export class Overlays {
       ...TITLE_INK,
     });
     this.titleCardLabel.append(this.titleCardSr, this.titleCardArt);
+    // "LEVEL 3", above the name. Its own element, and above the heading rather than
+    // inside it, so the heading's text stays the stage name for assistive tech.
+    this.titleCardTag = this.h('p', 'beam-run__eyebrow');
+    this.titleCardTag.hidden = true;
     this.titleCardBrief = this.h('p', 'beam-run__brief');
     this.titleCardBrief.hidden = true;
-    this.titleCardHint = this.h('p', 'beam-run__advice');
-    this.titleCardHint.hidden = true;
+    /*
+     * The control legend, on the two cards that teach one (level 0: move + jump; level
+     * 3: fire). One row, filled per card and emptied when there is none — see
+     * `fillLegend` for why it is not two pre-built rows toggled by `hidden`.
+     *
+     * It sits UNDER the brief and ABOVE the button, which is the one arrangement that
+     * works: a row of chrome directly under a cap reads as a caption on the cap (the
+     * reason no keyboard prompt has ever survived on this card), and above the brief it
+     * would be the first thing read on a screen whose job is to say where you are.
+     */
+    this.titleCardKeys = this.h('div', 'beam-run__keys');
+    this.titleCardKeys.hidden = true;
 
     const actions = this.h('div', 'beam-run__actions');
     const begin = this.btn(COPY.titleCard.begin, 'primary', () => this.cb.onAdvance());
     actions.appendChild(begin);
 
-    stack.append(this.titleCardLabel, this.titleCardBrief, this.titleCardHint, actions);
+    stack.append(
+      this.titleCardTag,
+      this.titleCardLabel,
+      this.titleCardBrief,
+      this.titleCardKeys,
+      actions,
+    );
     el.appendChild(stack);
     return { el, focusTarget: begin };
   }

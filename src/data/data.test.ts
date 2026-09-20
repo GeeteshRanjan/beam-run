@@ -60,9 +60,12 @@ describe('copy', () => {
      * months" on the receipt, which was the same claim split four ways.
      */
     const player: string[] = [
+      COPY.start.headline,
       COPY.start.tagline,
-      COPY.start.controlsKeys,
-      COPY.start.controlsTap,
+      COPY.legend.moveJumpKeys,
+      COPY.legend.moveJumpTap,
+      COPY.legend.fireKeys,
+      COPY.legend.fireTap,
       COPY.win.title,
       COPY.win.lostLabel,
       COPY.win.verdictClean,
@@ -84,38 +87,64 @@ describe('copy', () => {
     }
   });
 
-  it('leads the title screen with the offer, and nothing else in words', () => {
+  it('leads the title screen with the hook and the offer, and nothing else', () => {
     /*
-     * Four things have now been deleted from this screen by the owner, in order: the
+     * Five things have now been deleted from this screen by the owner, in order: the
      * 24-month average, the dare that pointed at it ("Think you can?"), the arcade
-     * contract ("6 STAGES. 3 LIVES.", drafted and rejected in its own raster), and the
+     * contract ("6 STAGES. 3 LIVES.", drafted and rejected in its own raster), the
      * three-line hook ("Any board can approve a GCC. / BUILDING IT / is the hard
-     * part."). The tagline is the headline, it carries no figure, and the keys under it
-     * are drawn as caps rather than described in a sentence.
+     * part."), and now the row of key caps — the controls are taught on the briefing
+     * cards, a stage at a time (`COPY.legend`).
+     *
+     * What is left is two lines: the hook, then the offer. Neither carries a figure.
      */
-    expect(COPY.start.tagline).toBe('Play the GCC journey before you plan it.');
-    expect(COPY.start.tagline).not.toMatch(/\d/);
+    expect(COPY.start.headline).toBe('All of the delays. None of the damage.');
+    expect(COPY.start.tagline).toBe('Play through the GCC journey, before you plan it.');
+    for (const line of [COPY.start.headline, COPY.start.tagline]) {
+      expect(line, line).not.toMatch(/\d/);
+      expect(line, line).not.toMatch(/['\u2018\u2019]/);
+    }
     expect(COPY.start).not.toHaveProperty('hook');
     expect(COPY.start).not.toHaveProperty('challenge');
-    // Two balanced lines at the measure the screen sets it at (20/19), so the last
-    // line is never a single word standing over the Start cap.
-    const lines = wrapPixelLabel(COPY.start.tagline, 20);
-    expect(lines).toHaveLength(2);
-    expect(Math.abs(lines[0]!.length - lines[1]!.length)).toBeLessThanOrEqual(4);
+    // The controls are gone from this screen's copy as well as from its markup: leaving
+    // the sentences here is how a deleted surface grows back.
+    expect(COPY.start).not.toHaveProperty('controlsKeys');
+    expect(COPY.start).not.toHaveProperty('controlsTap');
+    expect(COPY.start).not.toHaveProperty('legend');
+    // Two balanced lines at the measure the screen sets each of them at — the headline
+    // as the title (20), the offer at the body measure (34) — so the last line is never
+    // a single word standing over the Start cap.
+    const head = wrapPixelLabel(COPY.start.headline, 20);
+    expect(head).toHaveLength(2);
+    expect(Math.abs(head[0]!.length - head[1]!.length)).toBeLessThanOrEqual(4);
+    const offer = wrapPixelLabel(COPY.start.tagline, 34);
+    expect(offer).toHaveLength(2);
+    expect(Math.min(offer[0]!.length, offer[1]!.length) * 2).toBeGreaterThanOrEqual(
+      Math.max(offer[0]!.length, offer[1]!.length),
+    );
+  });
+  it('teaches the controls on the cards, and names fire only where it exists', () => {
     /*
-     * The two control sentences are the legend's *accessible* copy — the visible row is
-     * caps — so they are not measured against the headline any more. What they must do
-     * is name the third button: the act key exists, it is the one control a player
-     * cannot guess, and it was missing from both the legend and this copy.
+     * Owner call: the controls copy moved off the opening screen and onto the briefing
+     * cards, "like a play through", with F introduced "when it is relevant".
+     *
+     * These four sentences are the legend's *accessible* copy — the visible row is caps —
+     * so they are not measured against any headline. What they must do is split the
+     * lesson in two: the move/jump pair may not mention fire (it is shown three stages
+     * before a powerup arms one, so naming it would be a control that does nothing), and
+     * the fire pair must name the key, because it is the one control nobody can guess.
      */
-    expect(COPY.start.controlsKeys).toMatch(/\bF\b/);
-    for (const line of [COPY.start.controlsKeys, COPY.start.controlsTap]) {
-      expect(line.toLowerCase(), line).toContain('fire');
+    for (const line of [COPY.legend.moveJumpKeys, COPY.legend.moveJumpTap]) {
       expect(line.toLowerCase(), line).toContain('jump');
+      expect(line.toLowerCase(), line).not.toContain('fire');
+    }
+    expect(COPY.legend.fireKeys).toMatch(/\bF\b/);
+    for (const line of [COPY.legend.fireKeys, COPY.legend.fireTap]) {
+      expect(line.toLowerCase(), line).toContain('fire');
     }
     // Every cap label sets inside its own cap, which is what keeps the row a row of
     // buttons rather than a row of words.
-    for (const label of Object.values(COPY.start.legend)) {
+    for (const label of Object.values(COPY.legend.caps)) {
       expect(normalizeForPixels(label).length, label).toBeLessThanOrEqual(5);
     }
   });

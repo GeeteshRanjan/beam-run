@@ -91,13 +91,30 @@ describe('Simulation movement & collision', () => {
 });
 
 describe('Simulation progression & the journey clock', () => {
-  it('clearing a screen books its months and advances', () => {
+  it('clearing a screen books its months and stops on the congratulations card', () => {
     const sim = toPlaying();
     const base = sim.screen.data.monthsBase;
     sim.player.box.x = sim.screen.exitX!;
     sim.step(DT, makeInput());
-    expect(sim.screenId).toBe(1);
+    /*
+     * Two cards per transition now (owner call), and the first of them names the stage
+     * just **cleared** — so the months are booked immediately and the screen is
+     * deliberately NOT advanced yet. That ordering is the whole feature: load the next
+     * screen here and the congratulations card congratulates you for a stage nobody has
+     * played.
+     */
+    expect(sim.state).toBe('SCREEN_CLEAR');
+    expect(sim.screenId).toBe(0);
+    expect(sim.clearedScreenId).toBe(0);
+    expect(sim.months).toBe(base);
+    // A press inside the grace does nothing; after it, the next screen loads and its
+    // own briefing card comes up.
+    sim.requestAdvance();
+    expect(sim.state).toBe('SCREEN_CLEAR');
+    stepN(sim, 30);
+    sim.requestAdvance();
     expect(sim.state).toBe('TITLE_CARD');
+    expect(sim.screenId).toBe(1);
     expect(sim.months).toBe(base);
   });
 
@@ -235,21 +252,100 @@ describe('Simulation setbacks: months, a life and a log line', () => {
     expect(sim.powerups.collected).toBe(false);
     expect(sim.badgeBox).not.toBeNull();
 
-    // Clearing the stage moves on with a clean slate.
+    // Clearing the stage moves on with a clean slate — through both transition cards.
     sim.player.box.x = sim.screen.exitX!;
     sim.step(DT, makeInput());
+    stepToPlaying(sim);
     expect(sim.screenId).toBe(2);
     expect(sim.retrying).toBe(false);
   });
 
   it('it auto-advances after the hold, without any input', () => {
+    // Head Office, which carries **no powerup** and therefore no death card: the impact
+    // beat plays and the stage starts again by itself, which is the behaviour the owner
+    // asked for before the per-stage card and the behaviour those two screens keep.
     const sim = toPlaying();
     stepN(sim, 55);
     sim.player.box.y = RESOLUTION.HEIGHT + 200;
     sim.step(DT, makeInput());
     expect(sim.state).toBe('LIFE_LOST');
+    expect(sim.screenHasPowerup).toBe(false);
     stepN(sim, Math.ceil(LIVES.LOST_HOLD / DT) + 2);
     expect(sim.state).not.toBe('LIFE_LOST');
+  });
+
+  it('stops on a death card on every stage that has a powerup, and waits', () => {
+    /*
+     * Owner call, reversing "a lost life shows no screen at all": a lost life shows a
+     * per-stage card again — what just happened, then the powerup that answers it.
+     *
+     * Two things this proves, and the second is the one that could regress quietly:
+     * the card does **not** appear during the impact beat (the player has to see what
+     * happened before being told about it), and once it is up the sim does not advance
+     * on its own no matter how long it is left.
+     */
+    const sim = driveToScreen(1);
+    expect(sim.screenHasPowerup).toBe(true);
+    stepN(sim, 80); // outlast the spawn grace
+    sim.player.box.y = RESOLUTION.HEIGHT + 200;
+    sim.step(DT, makeInput());
+    expect(sim.state).toBe('LIFE_LOST');
+    // The impact beat: the world is showing the hero flat under the stamp, no card.
+    expect(sim.deathCardUp).toBe(false);
+    stepN(sim, Math.ceil(LIVES.LOST_HOLD / DT) + 2);
+    expect(sim.state).toBe('LIFE_LOST');
+    expect(sim.deathCardUp).toBe(true);
+    // …and it never times out. This is where the old model auto-continued.
+    stepN(sim, 600); // ten seconds of nothing at all
+    expect(sim.state).toBe('LIFE_LOST');
+    expect(sim.deathCardReady).toBe(true);
+    // A press hands back to the SAME stage, through its briefing card.
+    sim.requestAdvance();
+    expect(sim.state).toBe('TITLE_CARD');
+    expect(sim.screenId).toBe(1);
+    expect(sim.retrying).toBe(true);
+  });
+
+  it('will not let the press that killed you dismiss the death card', () => {
+    // The player is mid-input when a hazard lands, so a held key is the normal case.
+    // Without the grace the card would be gone on the frame it appeared.
+    const sim = driveToScreen(1);
+    stepN(sim, 80);
+    sim.player.box.y = RESOLUTION.HEIGHT + 200;
+    sim.step(DT, makeInput({ anyPressed: true }));
+    expect(sim.state).toBe('LIFE_LOST');
+    // Hold a key down for the whole impact beat: nothing may happen until the beat is
+    // over AND the card's own grace has run.
+    for (let i = 0; i < Math.ceil(LIVES.LOST_HOLD / DT) + 1; i += 1) {
+      sim.step(DT, makeInput({ anyPressed: true }));
+      expect(sim.state).toBe('LIFE_LOST');
+    }
+    expect(sim.deathCardUp).toBe(true);
+    expect(sim.deathCardReady).toBe(false);
+    stepN(sim, 30);
+    sim.step(DT, makeInput({ anyPressed: true }));
+    expect(sim.state).toBe('TITLE_CARD');
+  });
+
+  it('will not let the press that cleared a stage dismiss its congratulations card', () => {
+    // Same argument, sharper: the player walked into the exit, so they are running.
+    const sim = toPlaying();
+    sim.player.box.x = sim.screen.exitX!;
+    sim.step(DT, makeInput({ right: true, anyPressed: true }));
+    expect(sim.state).toBe('SCREEN_CLEAR');
+    for (let i = 0; i < 20; i += 1) {
+      sim.step(DT, makeInput({ right: true, anyPressed: true }));
+      expect(sim.state).toBe('SCREEN_CLEAR');
+    }
+    expect(sim.clearCardReady).toBe(false);
+    // …and it never times out either: the card is read at whatever pace it is read at.
+    stepN(sim, 600);
+    expect(sim.clearCardReady).toBe(true);
+    expect(sim.state).toBe('SCREEN_CLEAR');
+    expect(sim.screenId).toBe(0);
+    sim.step(DT, makeInput({ anyPressed: true }));
+    expect(sim.state).toBe('TITLE_CARD');
+    expect(sim.screenId).toBe(1);
   });
 
   it('spending the last life ends the attempt back at the title screen', () => {

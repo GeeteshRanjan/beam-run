@@ -101,8 +101,8 @@ const SKY_GRADIENT = `linear-gradient(to bottom, ${SKY_BANDS.map((c, i) => {
 /**
  * Page-level CSS, appended after the game's stylesheet.
  *
- * The stage normally sizes itself to a 16:9 play frame (and, in portrait, to a
- * frame plus a control band). There is no canvas here and no thumb controls, so
+ * The stage normally sizes itself to a 16:9 play frame (and, on a touch device, to
+ * a frame plus a control band). There is no canvas here and no thumb controls, so
  * it takes the whole viewport instead: the `.beam-run--404` ancestor gives these
  * rules a higher specificity than the library's, so they win regardless of
  * source order or media query.

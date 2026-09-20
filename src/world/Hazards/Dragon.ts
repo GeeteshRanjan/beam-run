@@ -246,9 +246,16 @@ const STEAM_LIFE = 0.4;
  * here. Derived twice, they drift, and an earlier pass proved it: a hard-coded 0.38
  * put the flame 30px in front of a snout drawn at 0.23, so the fire left thin air.
  *
- * Both are read off the **drawn grid** rather than chosen: on the 46×38 beast the mouth
- * line is row 5 and the muzzle tip is column 41, which against a 200×190 box centred on a
- * 230px grid is 0.15 of the height down and 0.46 of the width forward of centre. The jaw
+ * Both are read off the **drawn grid** rather than chosen, and the grid has since been
+ * re-authored twice at a finer cell without either number moving — which is the point of
+ * them living here. On today's 80×63 beast at scale 3 the mouth line is row 10 and the
+ * muzzle tip is column 77, i.e. 31px down a 190px box and 22px back from the snout: the
+ * fractions land 0.15 × 190 = 28.5px down and mid-mouth along. **The 3px of daylight
+ * between 28.5 and 31 is deliberately not chased** — the flame is `CONE_NEAR_H` (120px)
+ * thick where it leaves the jaw, so a couple of pixels is inside its own core, and moving
+ * `MOUTH_Y_FRACTION` to close it would put the whole lethal lane out for re-measurement
+ * (below). What must stay true is that the fractions point *into the drawn mouth*; that is
+ * the thing to re-check after any head pass. The jaw
  * is therefore high — 161px off the floor, because the skull is the top of an upright
  * Godzilla's silhouette — and the fire leaves it on a long shallow line down to the ground
  * rather than out of a snout held at knee height. Every `CONE_*` number in
@@ -445,7 +452,7 @@ export class Dragon implements Hazard {
     const centre = (this.minX + this.maxX) / 2;
     this.driftMin = Math.max(this.minX, centre - D.ROOST_DRIFT);
     this.driftMax = Math.min(this.maxX, centre + D.ROOST_DRIFT);
-    this.taunts = spec?.taunts?.length ? spec.taunts : ['CANDIDATE DECLINED'];
+    this.taunts = spec?.taunts?.length ? spec.taunts : ['OFFER DROPOUT'];
     this.rand = mulberry32(spec?.seed ?? 1);
     // Centred on its patch of ground from frame one: it is standing at the end of
     // the screen, not walking on from the wings.

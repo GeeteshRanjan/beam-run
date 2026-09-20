@@ -85,10 +85,11 @@ export function stripLevelNotes(json: string): string {
       if (!KEPT_SOLID_ROLES.some((kept) => solid.role?.includes(kept))) delete solid.role;
     }
     // Of a screen's `copy` block only `titleCard` is read at runtime
-    // (`Simulation.screenLabel`); `hint`, `onClear` and `win` are mirrors of the
-    // real strings in `data/copy.ts`, kept beside the level for the author's
-    // benefit. Two copies of a sentence is already a drift risk — shipping both
-    // would be paying for it as well.
+    // (`Simulation.screenLabel`); `hint`, `onClear` and `win` are authoring notes kept
+    // beside the level. `onClear` no longer has a counterpart in `data/copy.ts` at all —
+    // the congratulations card that replaced it is `COPY.clearCard`, which is two lines
+    // rather than one — and `hint` predates the control legend moving onto the briefing
+    // cards. Both are prose for whoever reads this file; neither may ship.
     const copy = screen.copy as Record<string, unknown> | undefined;
     if (copy) for (const k of ['hint', 'onClear', 'win']) delete copy[k];
     for (const key of HAZARD_ARRAYS) {

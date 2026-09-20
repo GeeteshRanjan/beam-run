@@ -62,6 +62,8 @@ const DESCENDING = S.DROP_TIME + S.HOLD_TIME;
 interface StampEntry {
   /** Column centre (px). */
   cx: number;
+  /** What this stamp refuses, printed on its index label (see `StampSpec.label`). */
+  label: string;
   /** Local cycle clock, 0..CYCLE. */
   e: number;
   /** Clock reading when an assisted press aborted this cycle (else null). */
@@ -83,6 +85,16 @@ export interface StampState {
   pressing: boolean;
   /** 0..1 through the wind-up that precedes the slam (0 at any other time). */
   warn: number;
+  /**
+   * What this stamp is refusing, set on its index label — ENTITY, BANKING, TAX IDS,
+   * DIR KYC (owner call: the four stamps name the four setup approvals, and DENIED
+   * moves onto the rubber die at the bottom).
+   *
+   * Authored in `levels.json`, carried through here rather than looked up in the
+   * renderer, for the same reason the dragon's taunts are: it is the level's content and
+   * the picture must have exactly one source for it.
+   */
+  label: string;
 }
 
 export class Stamps implements Hazard {
@@ -116,6 +128,7 @@ export class Stamps implements Hazard {
   constructor(stamps: StampSpec[]) {
     this.stamps = stamps.map((s) => ({
       cx: s.gx * T + T / 2,
+      label: s.label ?? 'DENIED',
       e: (((s.phase % 1) + 1) % 1) * S.CYCLE,
       abortE: null,
       abortPress: 0,
@@ -286,6 +299,7 @@ export class Stamps implements Hazard {
         retracting: s.abortE !== null,
         pressing: press >= 1,
         warn: this.warnOf(s),
+        label: s.label,
       };
     });
   }

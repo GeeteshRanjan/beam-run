@@ -24,9 +24,21 @@ export function stepN(sim: Simulation, n: number): void {
  * sits on the card until its guard runs out — which is exactly what every helper
  * and probe in this repo did the moment the timeout was removed. `anyPressed` is
  * ignored while PLAYING, so this is safe to feed on every frame of a drive.
+ *
+ * **There are TWO cards per transition now** (owner call): the congratulations card for
+ * the stage just cleared, then the briefing card for the stage ahead. Both wait, and
+ * both have their own 0.4s press grace, so a driver crossing a screen boundary now
+ * spends ~50 frames on cards rather than ~25. Anything asserting a step count across a
+ * boundary has to account for that.
+ *
+ * `LIFE_LOST` is deliberately **not** pressed through here: it carries a death card on
+ * four of the six screens and the tests that care drive it explicitly, through
+ * `recoverFromLifeLost`.
  */
 export function driveInput(sim: Simulation): ReturnType<typeof makeInput> {
-  return makeInput({ anyPressed: sim.state === 'TITLE_CARD' });
+  return makeInput({
+    anyPressed: sim.state === 'TITLE_CARD' || sim.state === 'SCREEN_CLEAR',
+  });
 }
 
 /** Step until the sim is PLAYING, dismissing any briefing card on the way. */

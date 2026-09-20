@@ -28,20 +28,79 @@ Three rules, all tested: no product name (the receipt is where ANSR answers), no
 the screen is the screen's job), and **no word echoed from the stage name printed above it**. Deliberately
 **not** authored in `levels.json` (prose there ships to the host unless the stripper is taught about it),
 and deliberately short: the card sets it at a 26-character measure, so ≤50 characters keeps it on two
-balanced bitmap lines instead of stranding one word over the button. The current six:
+balanced bitmap lines instead of stranding one word over the button. **All six are the owner's own
+lines** except the Workplace, which they left to us; the two that carried an apostrophe are set without one
+(the 5x7 font has none). The current six:
 
 | Screen | Brief | The real thing it says |
 |---|---|---|
-| Head Office (0) | Every plan looks clean from the lobby. | the business case before contact with reality |
-| Setup Delays (1) | Nothing here is approved the first time. | resubmission loops |
+| Head Office (0) | All journeys are straight roads during planning. | the whole thesis of the game: on a plan, every journey is a straight line |
+| Setup Delays (1) | Do not let the paperwork flatten you. | resubmission loops, named as the thing that lands on you |
 | Compliance (2) | Nothing is filed in a straight line. | the filing chain, and that it doubles back |
-| Workplace (3) | The lease is signed. Nothing works yet. | the enablement gap — the site is committed and none of it works |
-| Hire Under Fire (4) | Talent never waits, and it never plays fair. | a contested market moving faster than the plan |
+| Workplace (3) | Paid for the space. Nobody can work in it. | the enablement gap: nothing is missing, it is all there and none of it is usable |
+| Hire Under Fire (4) | Staff your team before the project goes up in flames. | a contested market moving faster than the plan |
 | Tech Park (5) | Doors open, and a year still in hand. | the whole argument, with no figure in it |
 
-The card is the same on a retry, with the orange "TAKE THE ANSR BADGE" line added — which is the first
-time that line has had long enough to be read (`docs/OPEN.md` §10 is the owner's call on whether a retry
-should wait at all).
+**EVERY TRANSITION IS TWO CARDS NOW** (owner call: "every transition screen needs to be 2 screens instead
+of just 1 — one congratulations for clearing the level, and the second information about the next level").
+The pair is: `SCREEN_CLEAR` (well done for the stage *behind* you) → press → `TITLE_CARD` (what the stage
+*ahead* is) → press → play. Both wait; neither times out. The congratulations card names the stage just
+cleared, which is why `Simulation.clearedScreenId` exists and why the next screen is not loaded until that
+card is left (`docs/INVARIANTS.md`). There are five of them — the Tech Park is reached by a congratulations
+card and does not produce one, because a card in front of the win receipt is the receipt's own headline said
+twice.
+
+| Cleared | Credit (`COPY.clearCard.title`) | Hand-off (`COPY.clearCard.line`) |
+|---|---|---|
+| Head Office (0) | Good start! | Now it gets real. |
+| Setup Delays (1) | Approvals abound! | Good job. Do not get comfortable. |
+| Compliance (2) | Woohoo! | Legal is happy. Facilities has questions. |
+| Workplace (3) | Well done! | A functioning office. The next stage is hot. |
+| Hire Under Fire (4) | Open for business! | What takes a year, done with time to spare. |
+
+The split is not decoration: the headline is the **credit** (short, an exclamation — the only place in the
+game allowed one) and the line under it is the **hand-off**, which is what makes the pair a beat ("you won,
+and it is not over") rather than a second briefing card. Same measures as the briefing card: headline on one
+line at the 20-character title measure, line on two balanced ones at 26, no apostrophes.
+
+**Every screen with a powerup also has a DEATH CARD** (owner call, reversing "a lost life shows no screen at
+all"). It comes **after** the impact beat, never instead of it: `LIVES.LOST_HOLD` on the world first — the
+hero flat under the stamp, the cost flying into the delay log — then the card, which waits. Four of them,
+and the four are exactly the screens carrying a powerup: the second line is "take the ANSR powerup to …", so
+Head Office and the Tech Park would be advice the room cannot obey, and those two keep the older behaviour
+(beat, then the stage restarts by itself).
+
+| Screen | Headline (`COPY.deathCard.title`) | The instruction (`COPY.deathCard.line`) |
+|---|---|---|
+| Setup Delays (1) | Denied! | Take the ANSR powerup to avoid further delays. |
+| Compliance (2) | Non-compliance is a non-option! | Take the ANSR powerup to avoid legal drama. |
+| Workplace (3) | Looks like the floor fell under you! | Take the ANSR powerup to build your workspace. |
+| Hire Under Fire (4) | Declined! | Take the ANSR powerup to hire faster and better. |
+
+The headline is the **system's own word** and never the player's fault; the instruction is in the value
+orange and is aimed at the specific thing this stage would have done differently. It replaced
+`lifeLost.retryHint` — one generic orange line on the briefing card of a retry — and that surface is
+**deleted**, not merely unused (`docs/INVARIANTS.md`).
+
+**THE STAGE IS NUMBERED, AND THE CONTROLS ARE TAUGHT IN PLAY** (owner calls: "call out level 1, level 2,
+etc.", and "move the controls copy to the game screen rather than the opening screen, like a play through",
+with F introduced "when it is relevant"). The briefing card composes, top to bottom: the level number as an
+eyebrow (`COPY.titleCard.tag`, five entries — the Tech Park is the arrival, not a level), the stage name, the
+brief, **the control legend on two of the six cards**, then the cap.
+
+| Card | Legend | Why there |
+|---|---|---|
+| Level 0 — The Head Office | move + jump | the tutorial stage: three labelled steps, no hazard, nothing on the screen but the two verbs |
+| Level 3 — The Fit-Out Trap | fire, on its own | the first powerup that arms a **tool** (the Workplace cutter; the dragon's water cannon is the same button one screen later) |
+
+`LEGEND_ON_SCREEN` in `Game.ts` is the single line that decides this, and it is a fact about the levels
+rather than a preference. The fire cap is shown alone deliberately — reprinting move and jump beside it
+would bury the one control that is news in two the player has used for three stages.
+
+**Stage names moved to `levels.json`'s `copy.titleCard`** and `name` stays what analytics, the HUD plaque
+and the receipt use: **The Head Office · Setup Delays · The Compliance Maze · The Fit-Out Trap · Hire Under
+Fire · Arrival — ANSR Tech Park**. The label is painted as one unwrapped bitmap line, so it is measured
+against the 72% title cap: 37/30/48/40/37/60%.
 
 ---
 
@@ -75,8 +134,9 @@ should wait at all).
    removed, the only surfaces the flood can stand on are the ground and the deck.
    **And the ANSR badge does not put a halo on the hero here** (owner call) — it clears the
    **weather** instead (§ below).
-   Five monsters (TAX, GST, LEGAL, ENTITY,
-   AUDIT) wander one corridor each, re-rolling direction *and* speed at every junction from a seeded
+   Five monsters (**EXIM, INTERCO, NOTARY, BOARD, TP PACT** — owner call: the old TAX / GST / LEGAL /
+   ENTITY / AUDIT named the *departments* a filing goes through, these name the **filings**, which are
+   the things that actually come back) wander one corridor each, re-rolling direction *and* speed at every junction from a seeded
    generator — the player is never an input, so they are unpredictable rather than hunting.
    **The exodus is a walk** (owner call): `GATHER_SPEED` 420 → **160**, above their own `SPEED_MAX`
    (132) and well under the player's 260, so the whole thing takes ~4s rather than 1.8s. The leftover
@@ -96,8 +156,12 @@ should wait at all).
    34×52 (a parking meter) · **the head only, at 30×30**, because `drawGates` anchors the cabinet to
    the screen floor and the head to the gate's own row (`gy 14`), so rendering both from one ground
    line stacks them into a lump ·
-   the architecture is **brown** · the five names TAX/GST/LEGAL/ENTITY/AUDIT are framed plaques
-   **on the monsters**, and signage in the sky has been rejected twice.
+   the architecture is **brown** · the five names are framed plaques
+   **on the monsters**, and signage in the sky has been rejected twice. **Seven characters is the ceiling
+   on a name**, and that is the maze's geometry rather than taste: set at scale 2 over a creature 5 tiles
+   wide, with five of them converging on one landing, the long forms are 18+ characters of near-white lying
+   across half the screen — exactly the unreadable block the plaque is *dropped* on settling to avoid.
+   `screen2.test.ts` holds every authored name to 7, uppercase and apostrophe-free.
    **Contact costs a life, and the player is now visibly FILED for it** (owner call: "add a death
    animation for this screen — what happens to the player when he dies"). `drawFiled` buries him in a
    mound of forms to the chest, uneven course by course, with loose sheets still coming down and the
@@ -108,7 +172,7 @@ should wait at all).
    **The mark itself has no halo any more** (owner call): the dashed ring is gone from both pickup
    treatments, and what says "pickup" is the shaft, the wake, the chevron, the lit plinth and four
    flare cells. `docs/INVARIANTS.md` lists the four rings that were tried; do not add a fifth.
-   **LEGAL rides the hoist** (`MonsterSpec.hoist`), because the plate is a level of the maze and a
+   **NOTARY rides the hoist** (`MonsterSpec.hoist`), because the plate is a level of the maze and a
    level with no monster on it is a free walk; its feet read the plate's live top, never a row in
    `levels.json`.
    **The weather is this screen's payoff, and it is the only weather in the game.** It opens under
@@ -249,18 +313,28 @@ should wait at all).
    Five fire lanes on a shared cycle went first; then a *flying* dragon in a suit that poured a column
    of fire and rolled labelled fireballs down the screen. Both are gone. What stands there now
    **stands there**: an upright beast with **two feet on the ground, no wings and no horns**, authored as
-   **one 48×38 grid at scale 5** (900 cells, drawn 240×190 around the 200×190 body box, so 20px of tail
-   and muzzle hang outside a box that is a water *target* and not a hitbox). It was 260×240 at scale 10
-   and the owner asked for it *smaller and more refined* — which is one change, because a 10px cell
-   cannot describe an animal ("blocks of red colour"). **Rebuilt a fourth time against two owner
+   **one 80×63 grid at scale 3** (2,414 cells, drawn 240×189 around the 200×190 body box, so 20px of tail
+   and muzzle hang outside a box that is a water *target* and not a hitbox; the missing pixel of height is
+   paid for by `BEAST_OFFSET_Y = 1`, which is what keeps the feet on the ground band). It was 260×240 at
+   scale 10, then 240×190 at scale 5, and each time the owner asked for it *more refined* the answer was the
+   **cell**, never the size — **scale 3 is the hero's own cell**, so the boss and the player are on one
+   pixel grid, and that is where it stops. **Rebuilt a fourth time against two owner
    reference rasters** ("very badly shaped"), because the version that replaced it was a featureless oval
    torso with plates pinned beside the spine, a tail merged into the legs and a pale strip down the front
    edge that read as a sash. What it has now: a deep skull with a **brow shelf** over an amber eye set
    *back* from the muzzle, teeth on both lips, a short thick neck narrower than both skull and shoulders,
-   three big dorsal plates on the back continuing as **six triangles down the tail**, two legs with the
+   three dorsal plates on the back continuing as **six triangles down the tail**, two legs with the
    room showing through, a tail that lies flat for its last third, hide bands, and a plated **abdomen**
    held inside the front edge. The grid ships as a literal — it was authored and iterated in a throwaway
    generator against a PNG (`docs/INVARIANTS.md`), and nothing generated runs at load time.
+   **What the third resolution bought** (owner: "the mouth can be made a bit better, it's not well shaped
+   right now" + "reduce the pixel size on the entire Godzilla"): a **mouth that is a jaw** — two dark
+   courses tapering to the corner, teeth interlocking in two tones, an **overbite**, a lit chin plane and a
+   shadow under the mandible — plus a skull lit down its **own contour** per column, a slit pupil, dorsal
+   plates re-cut as separate **leaves** (grown row-by-row they merged into a wing at this cell), a tapered
+   belly, and a **mandible with mass** under the jaw when it opens. The fallen costume was re-authored with
+   it (87×22 at scale 3): the suit and the beast are on screen together through `stripping`, so they cannot
+   be at two cell sizes.
    **Its ending is rebuilt with it:** the fall is a real **pivot** about a point between the feet, eased,
    with a compression, ground shadow and dust kicks over its last fifth (all on sim time, so they survive
    reduced motion); the costume opens as a **side hatch at the hazard's own `door`** — a tapered cavity
@@ -276,7 +350,19 @@ should wait at all).
    scorch marks along the floor first, then the flame grows out to `CONE_REACH` over `CONE_GROW` and
    stands there for the rest of `BURST_TIME`. **Nothing travels** — no fireballs, no rolling fronts —
    so the dangerous floor is a fixed strip with a rhythm. One of the screen's taunts rides each burst
-   on a plaque that **does not move** (owner call); the next burst brings the next taunt.
+   on a plaque that **does not move** (owner call); the next burst brings the next taunt. The four are
+   **OFFER DROPOUT · POOL TOO NARROW · COUNTER OFFER · 90-DAY NOTICE**, authored in `levels.json`; two of
+   them are the owner's rewording of an earlier pair. CANDIDATE DECLINED → OFFER DROPOUT, because a candidate
+   who declines is a no and a dropout is somebody who had already said yes — which is the thing that actually
+   costs a GCC build a quarter. NOTICE PERIOD → 90-DAY NOTICE, because the **number** is the problem;
+   "notice period" is a neutral HR term. The setback tag on this screen is still `OFFER DECLINED`, on purpose:
+   it is the delay-log row, a different string in a different register, and the owner's own death-card
+   headline for this stage is "Declined!".
+   **The word ROAR is no longer painted** (owner call). The concentric arcs off the jaw were always the cue
+   and the word was a caption on them, at scale 3 in the hottest colour on a frame already carrying a name
+   plate, a costume pip row and a taunt printed on the fire — and it was the only string in the game that
+   described a *sound* rather than naming a problem. The `roar` **phase** is untouched: it is the
+   guaranteed-safe opening beat and the only window the boss cannot be hit in.
    The jet is **70→120px thick** (it was 120→190, "too wide"), and narrowing it pushed `CONE_REACH`
    **up** to 620: a thinner cone meets a standing head later along its own axis (f≥0.495), so a shorter
    lane would have handed the screen back to a blind sprint. Lethal strip x 348–661, ~1.31s to cross
@@ -379,9 +465,33 @@ should wait at all).
    was refined on the same pass: **the stamps are light** (pale frame, near-white plate, near-black
    keyline and die) because painted in the sky's own blue-greys they were invisible; the skyline behind
    them is two values darker for the same reason; the material is a 40×20 course at 0.08 speckle with
-   per-brick tones and a course bevel; and the backdrop is down to **two props and one sign** — the
-   PERMITS board, its caption and the ink pads' scale-1 ghost word are deleted, and the clock was
-   rebuilt at 80px in whole pixels.
+   per-brick tones and a course bevel; and the ink pads' scale-1 ghost word is deleted (5px of type, which
+   is below the size anything in this game is legible at) along with the clock's rebuild at 80px in whole
+   pixels.
+
+   **Each stamp names one of the four setup approvals, and DENIED has moved onto the rubber die** (owner
+   call). Left to right, in the order a real setup hits them: **ENTITY · BANKING · TAX IDS · DIR KYC**
+   (Legal Entity Formation · Banking Account Setup · PAN/TAN/GST Registration · Director Forms), authored on
+   the stamp entries in `levels.json` because they are drawn content. Four identical stamps shouting one word
+   was one piece of information repeated four times; four stamps each refusing a *different* approval is the
+   screen's argument — setup is not one gate, it is four, and every one of them comes back. DENIED sits on
+   the die because that is where a real stamp's message lives: the label on the body is the index (what it is
+   for), the die is the impression (what it says). The two are drawn in **inverse values** — dark on the pale
+   plate, light on the near-black die — which is what stops them reading as one block of signage. The plate
+   had to be widened from 20 authored cells to the full **22 between the keylines** (80px → 88px) because
+   7 characters at scale 2 is 82px; `STAMP_LABEL_INNER` is exported and `stamps.test.ts` measures every
+   authored label against it, so a longer one fails the build.
+
+   **The PERMITS file is back, hanging under the clock** (owner call), and it is not the framed board that
+   was cut. That board was deleted for saying the same thing as the stamps, and that argument died with the
+   stamps' new labels: a *file* of paperwork under a clock is now the other half of the sentence — the
+   application, and the wait. Grey a value **below** the stamps (they are deliberately the lightest objects
+   on this screen), ruled, with a dog-eared corner, because a ruled grey rectangle without one reads as a
+   second window. **The column it hangs in is load-bearing.** A parked stamp covers y 202–330 across 96px of
+   its own column and the file sits at 246–318, so at a 40px tile the only gap wide enough for a 104px prop
+   is 548–772 — centre `W*0.5 + 20`, which is where the clock already was. A first cut moved the pair to 540
+   on 32px-tile arithmetic and the raster printed PERMITS as "ITS"; `scenery.test.ts` now fails if either
+   prop overlaps a stamp band.
 
    **Its badge starts in the MIDDLE of the rail, rises, and then falls** (owner call) — and that is
    the whole of the pickup's difficulty, because this is the last rail badge in the game (Head Office's

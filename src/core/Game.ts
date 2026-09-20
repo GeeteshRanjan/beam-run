@@ -16,8 +16,13 @@ import { DebugOverlay } from './DebugOverlay';
 import { Simulation, type SimulationOptions } from './Simulation';
 import type { GameState } from './gameStates';
 import { Hud } from '../ui/Hud';
-import { Overlays, type OverlayName, type CtaContext } from '../ui/Overlays';
-import { injectStyles } from '../ui/styles';
+import {
+  Overlays,
+  type OverlayName,
+  type CtaContext,
+  type LegendKind,
+} from '../ui/Overlays';
+import { injectStyles, stageClassName } from '../ui/styles';
 import { Stamps } from '../world/Hazards/Stamps';
 import { Dragon } from '../world/Hazards/Dragon';
 import { ComplianceMaze } from '../world/Hazards/ComplianceMaze';
@@ -155,6 +160,32 @@ function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
 }
 
+/**
+ * Which briefing card teaches which control (owner call: the controls copy belongs on
+ * the game screen "like a play through", and F for fire is introduced "when it is
+ * relevant").
+ *
+ * **Two entries, and neither is a preference.** Level 0 is the tutorial — three labelled
+ * steps, no hazard, nothing on the screen but moving and jumping — so that is where move
+ * and jump are named. Level 3 is the first screen whose powerup arms a *tool* (the
+ * Workplace cutter; the hiring dragon's water cannon one screen later is the same
+ * button), so that is where the fire cap appears, on its own: re-showing move and jump
+ * beside it would bury the one control that is news in two the player has been using for
+ * three stages.
+ *
+ * `LEGEND_ON_SCREEN` is indexed by screen id and deliberately sparse — an absent entry is
+ * a card with no legend on it, which is four of the six. If a powerup ever arms a tool on
+ * an earlier screen, this array is the single line that has to move.
+ */
+const LEGEND_ON_SCREEN: readonly (LegendKind | undefined)[] = [
+  'moveJump',
+  undefined,
+  undefined,
+  'fire',
+  undefined,
+  undefined,
+];
+
 export class Game {
   readonly root: HTMLElement;
   readonly stage: HTMLDivElement;
@@ -254,7 +285,16 @@ export class Game {
 
     const doc = root.ownerDocument;
     this.stage = doc.createElement('div');
-    this.stage.className = 'beam-run__stage';
+    /*
+     * The control band is a TOUCH layout, not a portrait one. The stage stops being
+     * 16:9 and grows into the available height only when there are thumbs to put in
+     * the bands, and that decision is made here — by the same `isTouchDevice()` call
+     * that decides whether `TouchControls` are ever shown — rather than by an
+     * `@media (orientation: portrait)` query, which also matched every desktop window
+     * dragged taller than it was wide and gave it a phone-shaped box with two empty
+     * bands. See the stage rules in `ui/styles.ts`.
+     */
+    this.stage.className = stageClassName(this.isTouch);
 
     this.canvas = doc.createElement('canvas');
     this.canvas.className = 'beam-run__canvas';
@@ -468,6 +508,17 @@ export class Game {
     this.touch = new TouchControls(ui, {
       setVirtual: (dir, down) => this.input.setVirtual(dir, down),
       onFirstInteraction: () => void this.audio.unlock(),
+      /*
+       * The touch pause button raises the same `pause` edge the Escape key does rather
+       * than calling `setPaused` — so `handleFrameInput`'s guard (only while PLAYING or
+       * already paused) is the single place that decides, and a phone and a keyboard
+       * cannot end up with two different pause behaviours. The press is released
+       * immediately: pause is an edge, not a held direction.
+       */
+      onPause: () => {
+        this.input.pressAction('pause');
+        this.input.releaseAction('pause');
+      },
     });
     this.assist = new AssistController(
       {
@@ -485,8 +536,12 @@ export class Game {
         this.analytics.assistToggled(option, enabled);
         if (option === 'muteMusic' || option === 'muteSfx') this.persistMute();
       },
-      // One-tap play is the default on touch: a non-gamer should not have to
-      // drive a virtual d-pad to hear our message.
+      /*
+       * One-tap play is now OFF by default on touch too (owner call —
+       * `ASSIST.AUTO_RUN_DEFAULT_ON_TOUCH` carries the reasoning). The override is
+       * still wired, so flipping that one constant is all it takes to bring it back,
+       * and the assist menu's checkbox is unchanged either way.
+       */
       { autoRun: this.isTouch && ASSIST.AUTO_RUN_DEFAULT_ON_TOUCH },
     );
     this.assistMenu = new AssistMenu(ui, this.assist, () => {
@@ -577,7 +632,10 @@ export class Game {
    * (nothing to show yet) it hands off immediately.
    */
   private handleSkip(): void {
-    const midRun = this.sim.state === 'PLAYING' || this.sim.state === 'TITLE_CARD';
+    const midRun =
+      this.sim.state === 'PLAYING' ||
+      this.sim.state === 'TITLE_CARD' ||
+      this.sim.state === 'SCREEN_CLEAR';
     if (!midRun) {
       this.handleCta('skip');
       return;
@@ -761,6 +819,9 @@ export class Game {
     if (this.summaryOpen) overlay = 'summary';
     else if (this.paused) overlay = 'pause';
     else if (state === 'START' || state === 'BOOT') overlay = 'start';
+    // The first of the two cards every transition shows (owner call): well done for the
+    // stage behind you, then — one press later — what the stage ahead is.
+    else if (state === 'SCREEN_CLEAR') overlay = 'clearcard';
     else if (state === 'TITLE_CARD') overlay = 'titlecard';
     /*
      * A lost life shows NOTHING (owner call). The sim holds in LIFE_LOST for
@@ -775,31 +836,62 @@ export class Game {
      * on the conversion surface.
      */
     else if (state === 'LIFE_LOST') {
-      overlay = this.sim.lifeLost?.outOfLives ? 'gameover' : null;
+      /*
+       * …and then, on the four stages that carry a powerup, the per-stage **death card**
+       * (owner call, which reverses the "a lost life shows nothing" call above): the
+       * impact beat is still painted on the world first, and `deathCardUp` is the sim
+       * saying that beat is over. The two screens with no powerup keep the older
+       * behaviour — nothing at all, and the stage restarts by itself — because every
+       * death card's second line is "take the ANSR powerup to …".
+       */
+      overlay = this.sim.lifeLost?.outOfLives
+        ? 'gameover'
+        : this.sim.deathCardUp
+          ? 'deathcard'
+          : null;
     } else if (state === 'WIN') overlay = 'win';
 
     // The assist dialog sits above everything; hide the base overlay behind it.
     if (this.assistOpen) overlay = null;
 
+    const screenId = this.sim.screenId;
+    const clearedId = this.sim.clearedScreenId;
     this.overlays.show(overlay, {
       levelLabel: this.sim.screenLabel,
+      // "Level 3" (owner call: call the levels out). Five of the six screens have one —
+      // the Tech Park is the arrival, not a level — so an absent tag is normal and the
+      // card composes without it.
+      levelTag: COPY.titleCard.tag[screenId],
       // What the stage ahead is, in one line. Keyed by screen id in `COPY` rather
       // than authored in `levels.json`: it is prose about the design, and every word
       // in that file ships to the host unless the stripper is taught to remove it.
-      brief: COPY.titleCard.brief[this.sim.screenId],
+      brief: COPY.titleCard.brief[screenId],
       /*
-       * The retry hint, and the only surviving trace of the life-lost screen.
+       * The control legend, which used to be on the title screen (owner call: put the
+       * controls on the game screen, like a play through, and introduce F for fire when
+       * it becomes relevant).
        *
-       * Two conditions, not one: it is a retry, **and** this screen has a powerup to
-       * take (owner call: "from the intro screen of ANSR tech park remove the line
-       * take the ANSR badge — we do not need it here"). Two of the six carry none —
-       * Head Office and the Tech Park — and on those the line is advice the room
-       * cannot honour: there is nothing to collect, so it reads as a rule the player
-       * has already broken. `screenHasPowerup` is the level's own data, so a screen
-       * that gains or loses a mark can never disagree with the card.
+       * Two showings, and both are read off `LEGEND_ON_SCREEN` rather than written here,
+       * because "where is fire relevant" is a fact about the levels: it is the first
+       * screen whose powerup arms a tool.
        */
-      hint:
-        this.sim.retrying && this.sim.screenHasPowerup ? COPY.lifeLost.retryHint : undefined,
+      legend: LEGEND_ON_SCREEN[screenId],
+      /*
+       * The congratulations card names the stage just **cleared**, and that is the whole
+       * reason `clearedScreenId` exists: the next screen is loaded by the press that
+       * leaves this card, so reading `screenId` here would name the stage ahead on the
+       * frame the card is painted and the one behind it a press later.
+       */
+      clear: {
+        title: COPY.clearCard.title[clearedId] ?? '',
+        line: COPY.clearCard.line[clearedId] ?? '',
+      },
+      // The death card, per stage. Only the four screens with a powerup have copy, and
+      // those are exactly the four `Simulation.deathCardUp` shows it on.
+      death: {
+        title: COPY.deathCard.title[screenId] ?? '',
+        line: COPY.deathCard.line[screenId] ?? '',
+      },
       receipt: this.sim.receipt,
       lifeLost: this.sim.lifeLost ?? undefined,
     });
@@ -850,6 +942,10 @@ export class Game {
       !this.summaryOpen &&
       (state === 'PLAYING' ||
         state === 'TITLE_CARD' ||
+        // The congratulations card, for the same reason the briefing card gets it: the
+        // plaques are already correct for the stage the card is about, and taking the
+        // HUD away for one press of a two-card transition reads as the frame reloading.
+        state === 'SCREEN_CLEAR' ||
         (state === 'LIFE_LOST' && this.sim.lifeLost?.outOfLives === false));
     this.hud.setVisible(hudVisible);
     // Plaques off in the secret stage, wrapper (and its live region) still up.

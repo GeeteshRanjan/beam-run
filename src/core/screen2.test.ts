@@ -45,12 +45,28 @@ describe('Screen 2 — Compliance (a staircase maze of compliance monsters)', ()
     // drawn on plaques over the monsters themselves rather than on boards in the
     // sky — so this list is also the screen's entire signage.
     expect(monsters.map((m) => m.name).sort()).toEqual([
-      'AUDIT',
-      'ENTITY',
-      'GST',
-      'LEGAL',
-      'TAX',
+      'BOARD',
+      'EXIM',
+      'INTERCO',
+      'NOTARY',
+      'TP PACT',
     ]);
+    /*
+     * Renamed by the owner, from TAX / GST / LEGAL / ENTITY / AUDIT to the five filings
+     * that actually stall a GCC setup: Export-Import Registration, the inter-company
+     * agreement, notarisation, board meetings and the transfer pricing agreement.
+     *
+     * They are set on a plaque at bitmap scale 2 over a creature 5 tiles wide, so
+     * **length is a constraint, not a preference**: the long forms would be 18 characters
+     * of near-white lying across half the maze, and five of those shoulder to shoulder on
+     * the landing is the unreadable block the plaque is dropped to avoid. Seven characters
+     * is the ceiling the old set established (ENTITY was six) and the new set holds it.
+     */
+    for (const m of monsters) {
+      expect(m.name, m.name).toBe(m.name.toUpperCase());
+      expect(m.name, m.name).not.toMatch(/['\u2018\u2019]/);
+      expect(m.name.length, m.name).toBeLessThanOrEqual(7);
+    }
     // Every corridor starts beyond the badge: the badge is the first thing on the
     // path, always.
     expect(monsters.every((m) => m.from > badgeGx)).toBe(true);
@@ -244,7 +260,7 @@ describe('Screen 2 — Compliance (a staircase maze of compliance monsters)', ()
      */
     const struck = (sim.activeHazard as ComplianceMaze).monsterStates().filter((m) => m.struck);
     expect(struck).toHaveLength(1);
-    expect(struck[0]!.name).toBe('TAX');
+    expect(struck[0]!.name).toBe('EXIM');
     expect(struck[0]!.friendly).toBe(false);
   });
 

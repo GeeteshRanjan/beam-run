@@ -15,6 +15,13 @@
  */
 import { BRAND } from '../data/tuning.config';
 import { TYPOGRAPHY, RADII } from '../data/tokens';
+import {
+  LIVES_PLAQUE,
+  PAD_PORTRAIT,
+  PAD_PORTRAIT_LARGE,
+  PAUSE_BTN,
+  padCss,
+} from './touchGeometry';
 
 export const STYLE_ELEMENT_ID = 'beam-run-styles';
 
@@ -124,15 +131,15 @@ export const CSS = `
 }
 
 /*
- * PORTRAIT / PHONE ------------------------------------------------------------
- * A 16:9 frame can only be as wide as its container, so in portrait it is
- * width-limited: on a 390px-wide phone the play frame is only ~219px tall.
- * Packing the HUD, the overlays and two thumb buttons into that strip is what
+ * THE CONTROL BAND — A TOUCH LAYOUT, NOT A PORTRAIT ONE -----------------------
+ * A 16:9 frame can only be as wide as its container, so on a phone held upright
+ * it is width-limited: on a 390px-wide phone the play frame is only ~219px tall.
+ * Packing the HUD, the overlays and the thumb buttons into that strip is what
  * made the mobile view unusable — the controls covered the ground the player
  * was running on.
  *
- * So in portrait the stage deliberately stops being 16:9 and grows into the
- * free vertical space. The canvas still contain-fits (letterboxed in brand
+ * So on a touch device the stage deliberately stops being 16:9 and grows into
+ * the free vertical space. The canvas still contain-fits (letterboxed in brand
  * teal, which the renderer already paints), and the bands above/below the frame
  * become the HUD + controls area: nothing overlaps gameplay and the buttons sit
  * where a thumb actually is.
@@ -142,24 +149,34 @@ export const CSS = `
  *                             120px thumb button — so an embed stays bounded in
  *                             page flow; a standalone page passes 100dvh to go
  *                             full-screen.
+ *
+ * THE GATE IS THE CLASS, AND IT USED TO BE the orientation media query.
+ * Orientation is not a proxy for "has thumbs". Any *desktop* window taller than
+ * it is wide — a browser docked to half a 16:9 screen, a rotated monitor, a Mac
+ * window dragged narrow — matched that query and got the phone layout: the box
+ * stopped being 16:9, the frame shrank to a strip centred in two large empty
+ * bands, and nothing was ever drawn in them because a mouse device has no thumb
+ * controls. That is the whole of why the game looked a different shape from one
+ * machine to the next. And the same query excluded the case that needed the band
+ * most: a *tablet in landscape* is 4:3-ish, so it had no band at all and the
+ * thumb buttons sat on the gameplay. The Game sets --touch from the same
+ * isTouchDevice() signal that decides whether the buttons exist, so the box and
+ * its contents cannot disagree. Both orientations, one rule: the stage takes the
+ * height it is given and the canvas letterboxes inside it.
  */
-@media (orientation: portrait) {
-  .beam-run__stage {
-    aspect-ratio: auto;
+.beam-run__stage--touch {
+  aspect-ratio: auto;
+  height: min(
+    var(--beam-run-max-height, 100vh),
+    calc(56.25vw + var(--beam-run-portrait-band, 360px))
+  );
+}
+@supports (height: 100dvh) {
+  .beam-run__stage--touch {
     height: min(
-      var(--beam-run-max-height, 100vh),
+      var(--beam-run-max-height, 100dvh),
       calc(56.25vw + var(--beam-run-portrait-band, 360px))
     );
-  }
-}
-@media (orientation: portrait) {
-  @supports (height: 100dvh) {
-    .beam-run__stage {
-      height: min(
-        var(--beam-run-max-height, 100dvh),
-        calc(56.25vw + var(--beam-run-portrait-band, 360px))
-      );
-    }
   }
 }
 .beam-run__canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
@@ -420,10 +437,12 @@ export const CSS = `
  * can breathe. (It held five: a three-line hook, a dare and Start.)
  */
 .beam-run__stack--start { gap: clamp(14px, 3%, 30px); }
-/* The legend and the cap are one group: how you play, then play. The step above the
-   legend is the screen's one real pause, under the headline and its value rule. */
-.beam-run__stack--start .beam-run__keys { margin-top: clamp(8px, 2%, 22px); }
-.beam-run__stack--start .beam-run__actions { margin-top: clamp(4px, 1%, 12px); }
+/* The offer sits with the hook it follows, not adrift between it and the cap. */
+.beam-run__stack--start .beam-run__brief { margin-top: clamp(-4px, -0.4%, 0px); }
+/* The row of key caps that used to be here is on the briefing cards now (owner call:
+   the controls belong on the game screen, introduced as they become relevant), so the
+   title screen is back to three things: the hook, the offer, one cap. */
+.beam-run__stack--start .beam-run__actions { margin-top: clamp(8px, 2%, 22px); }
 
 /* Bitmap type ---------------------------------------------------------------
  * The overlays are set in the game's own 5×7 font, drawn as SVG rects (see
@@ -729,6 +748,31 @@ export const CSS = `
  * wide line and read as a caption rather than as a paragraph to stop for.
  */
 .beam-run__stack--titlecard { width: min(100%, 560px); gap: clamp(10px, 2.2%, 22px); }
+/*
+ * "LEVEL 3", over the stage name. An eyebrow, so it is tied to the heading under it
+ * rather than floating as a line of its own: the stack's own gap would read as two
+ * separate captions, which is the thing a number over a name must not look like.
+ */
+.beam-run__eyebrow {
+  margin: 0 0 clamp(-14px, -1.4%, -6px); width: 100%;
+  display: flex; flex-direction: column; align-items: center;
+}
+/*
+ * The control legend on a briefing card (owner call: the controls copy moved off the
+ * opening screen). Under the brief, above the cap, separated by a step and nothing else.
+ *
+ * **A divider was drawn here and cut in its own raster.** The row is set as chrome about
+ * the machine rather than as another line about the place, so a rule over it looked like
+ * the right idea — but the rule spans the card (560px) and the row it encloses is ~300px
+ * on level 0 and **~100px on level 3**, where the legend is the single F cap. A
+ * full-width rail over one small button is a border drawn round nothing, which is the
+ * same finding that took the out-of-lives panel from 560 to 440: a rail has to hug what
+ * it holds. The caps carry their own bevel and dark fill, so they already read as buttons
+ * rather than as a third sentence — the separation only has to be a pause.
+ */
+.beam-run__overlay--titlecard .beam-run__keys {
+  margin-top: clamp(6px, 1.4%, 14px);
+}
 /* One line of prose about the stage, in bitmap type like everything else here. */
 .beam-run__brief {
   margin: 0; width: 100%;
@@ -785,60 +829,170 @@ export const CSS = `
    sets one step larger (see BUTTON_TYPE); this gives the cap room to match. */
 .beam-run__stack--start .beam-run__btn--primary { padding: 15px 36px; }
 
-/* Touch controls (safe-area aware, ≥44px targets) ---------------------- */
-.beam-run__touch { position: absolute; inset: 0; pointer-events: none; display: none; z-index: 3; }
+/* Touch controls (safe-area aware, >=44px targets) ---------------------- */
+/*
+ * Three clusters: the move pad bottom-left, the act cluster bottom-right, pause
+ * top-centre. Sizes are driven by two custom properties so the portrait, landscape,
+ * larger-controls and one-tap variants each set a number rather than restating the
+ * whole geometry:
+ *
+ *   --beam-run-pad       diameter of a secondary target (the two arrows, the tool)
+ *   --beam-run-pad-jump  diameter of the primary target (jump)
+ *   --beam-run-pad-lift  how far the tool button sits ABOVE jump's baseline
+ *
+ * The lift is the part worth keeping. Jump and the tool button used to be baseline
+ * aligned in a row, which is a 76px circle touching a 104px circle at the same height:
+ * two targets one thumb-width apart on the same arc, so the smaller one reads as a
+ * mis-tap of the bigger one. Offsetting it up and to the left puts them on a diagonal —
+ * the arrangement every console pad and every mobile platformer uses — and the thumb
+ * rolls between two distinct positions instead of sliding along one.
+ */
+.beam-run__touch {
+  position: absolute; inset: 0; pointer-events: none; display: none; z-index: 3;
+  --beam-run-pad: 64px;
+  --beam-run-pad-jump: 88px;
+  --beam-run-pad-lift: 46px;
+  --beam-run-pad-gap: 14px;
+  --beam-run-pad-edge: 13px;
+  --beam-run-pad-slop: 12px;
+}
 .beam-run__touch--visible { display: block; }
 .beam-run__touch-zone {
-  position: absolute; bottom: calc(18px + env(safe-area-inset-bottom, 0px));
-  display: flex; gap: 16px; align-items: flex-end;
+  position: absolute; bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  display: flex; gap: var(--beam-run-pad-gap); align-items: flex-end;
 }
-.beam-run__touch-zone--move { left: calc(14px + env(safe-area-inset-left, 0px)); }
-.beam-run__touch-zone--jump { right: calc(14px + env(safe-area-inset-right, 0px)); }
+.beam-run__touch-zone--move { left: calc(var(--beam-run-pad-edge) + env(safe-area-inset-left, 0px)); }
+.beam-run__touch-zone--jump { right: calc(var(--beam-run-pad-edge) + env(safe-area-inset-right, 0px)); }
 .beam-run__touch-btn {
-  pointer-events: auto; width: 64px; height: 64px; min-width: 44px; min-height: 44px;
+  position: relative;
+  pointer-events: auto; width: var(--beam-run-pad); height: var(--beam-run-pad);
+  min-width: 44px; min-height: 44px; flex: none;
   border-radius: 50%; border: 2px solid rgba(230, 230, 230, 0.5);
   background: rgba(0, 84, 101, 0.5); color: ${BRAND.WHITE};
   font-size: 24px; line-height: 1; display: flex; align-items: center; justify-content: center;
   touch-action: none; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent;
 }
+/*
+ * HIT SLOP. A thumb is not a mouse pointer and it does not land where its owner is
+ * looking, so every target carries an invisible ring wider than the circle it draws. It
+ * is a pseudo-element of the button, so the press still resolves to the button, and the
+ * visible geometry is untouched: the alternative — growing the circles to the size of
+ * the area they should catch — is what pushed the four-target row past the width of a
+ * phone frame (see ui/touchGeometry.ts). It is also what "larger controls" mostly buys
+ * on a narrow phone, because there the diameters have nowhere to go.
+ */
+.beam-run__touch-btn::before {
+  content: ''; position: absolute; inset: calc(-1 * var(--beam-run-pad-slop)); border-radius: 50%;
+}
 .beam-run__touch-btn--jump {
-  width: 84px; height: 84px; font-size: 30px;
+  width: var(--beam-run-pad-jump); height: var(--beam-run-pad-jump); font-size: 30px;
   background: rgba(255, 84, 0, 0.55); border-color: rgba(255, 84, 0, 0.85); color: ${BRAND.DEEP_TEAL};
 }
 .beam-run__touch-btn--active { filter: brightness(1.3); }
-/* The Workplace cutter. Hidden until the badge arms it, and cool-toned so the
-   orange act button stays the primary target. */
-.beam-run__touch-btn--shoot { display: none; }
+/* The armed tool (cutter / water cannon / service hatch). Hidden until a badge arms
+   it, cool-toned so the orange jump stays the primary target, and lifted onto the
+   diagonal described above. */
+.beam-run__touch-btn--shoot { display: none; margin-bottom: var(--beam-run-pad-lift); }
 .beam-run__touch--armed .beam-run__touch-btn--shoot {
   display: flex; background: rgba(0, 84, 101, 0.75); border-color: rgba(207, 230, 236, 0.85);
 }
-@media (orientation: portrait) {
-  /* Portrait puts a band under the play frame (see the stage rules), so the
-     controls live below the action instead of on top of it — and can be bigger.
-     Sizes are kept inside the 180px band: 18px offset + up to 120px button +
-     the bottom safe area. */
-  .beam-run__touch-btn { width: 76px; height: 76px; }
-  .beam-run__touch-btn--jump { width: 104px; height: 104px; }
-  /* One-tap: a single centred target reachable with either thumb. */
-  .beam-run__touch--autorun .beam-run__touch-zone--jump {
-    left: 0; right: 0; justify-content: center;
-  }
-  .beam-run__touch--autorun .beam-run__touch-btn--jump { width: 120px; height: 120px; }
-  .beam-run__touch--autorun.beam-run__touch--large .beam-run__touch-btn--jump {
-    width: 132px; height: 132px;
-  }
+/*
+ * PAUSE — in the top band, and the position is the whole point.
+ *
+ * It is the one control that must NOT be under a thumb: a pause triggered by a stray
+ * thumb mid-jump costs a life, and pause is pressed a handful of times a run while jump is
+ * pressed a hundred. The top band is the answer because on a touch device it is letterbox,
+ * so this sits beside the readouts rather than on the game.
+ *
+ * NOT centred, though it reads as if it should be — the offset below is derived in
+ * ui/touchGeometry.ts and the reason is there: the two HUD plaques are very different
+ * widths, so the gap between them is nowhere near the middle of the frame, and a centred
+ * button lands on the stage plaque. It is anchored past the lives readout's own ceiling
+ * instead. Quiet by design: small, cool-toned, square-ish, so it cannot be mistaken for
+ * the orange action target.
+ */
+.beam-run__touch-menu {
+  position: absolute;
+  top: calc(${PAUSE_BTN.top}px + env(safe-area-inset-top, 0px));
+  right: calc(
+    clamp(8px, 2.2%, 22px) + ${padCss(LIVES_PLAQUE)} + ${PAUSE_BTN.plaqueChrome}px +
+      ${PAUSE_BTN.clear}px + env(safe-area-inset-right, 0px)
+  );
+  display: flex;
 }
-.beam-run__touch--large .beam-run__touch-btn { width: 84px; height: 84px; }
-.beam-run__touch--large .beam-run__touch-btn--jump { width: 108px; height: 108px; }
-/* One-tap mode: the move pad is hidden and the whole lower area is the act button. */
+.beam-run__touch-btn--pause {
+  width: ${PAUSE_BTN.size}px; height: ${PAUSE_BTN.size}px; border-radius: ${PAUSE_BTN.radius}px;
+  font-size: 15px; letter-spacing: 2px;
+  background: rgba(0, 22, 29, 0.66); border-color: rgba(230, 230, 230, 0.4);
+}
+/*
+ * The narrowest frames have no horizontal gap between the two plaques to put a 44px
+ * button in — 31px of slot on a 280px Galaxy Fold cover screen — so below the threshold it
+ * drops under the plaque row instead. A container query, not a media query: the number
+ * that matters is the width of the FRAME, which on a letterboxed stage is not the width of
+ * the window. See PAUSE_BTN in ui/touchGeometry.ts for both figures.
+ */
+@container (max-width: ${PAUSE_BTN.narrowFrame - 1}px) {
+  .beam-run__touch-menu { top: calc(${PAUSE_BTN.narrowTop}px + env(safe-area-inset-top, 0px)); }
+}
 /* One-tap keeps a single BACK button where the pad was, and hides only forward.
    Auto-run makes forward automatic, so the right arrow is redundant - but the left one
    is the only way to walk back, and the Compliance badge is deliberately reached by
    jumping the opposite way (docs/SCREENS.md 4.9). Hiding the whole pad made that
-   pickup, and any future detour, unreachable for the audience this game is built for. */
+   pickup, and any future detour, unreachable for the audience this game is built for.
+   No longer the default on touch (ASSIST.AUTO_RUN_DEFAULT_ON_TOUCH), still an option. */
 .beam-run__touch--autorun .beam-run__touch-btn--right { display: none; }
-.beam-run__touch--autorun .beam-run__touch-btn--jump { width: 116px; height: 116px; font-size: 34px; }
-.beam-run__touch--autorun.beam-run__touch--large .beam-run__touch-btn--jump { width: 140px; height: 140px; }
+.beam-run__touch--autorun .beam-run__touch-btn--jump { font-size: 34px; }
+@media (orientation: landscape) {
+  /* Sideways the band is whatever the height has left over after a full-width 16:9
+     frame - on a tablet about 78px a side - so width is never the constraint here and
+     these stay fixed pixels. Only the one-tap button, which IS the whole control scheme
+     in that mode, grows. The base sizes at the top of this block are the landscape ones. */
+  .beam-run__touch--large { --beam-run-pad: 76px; --beam-run-pad-jump: 100px; --beam-run-pad-slop: 16px; }
+  .beam-run__touch--autorun { --beam-run-pad-jump: 104px; }
+  .beam-run__touch--autorun.beam-run__touch--large { --beam-run-pad-jump: 124px; }
+  /*
+   * And sit as low as the safe area allows. A tablet is about 4:3, so a full-width 16:9
+   * frame leaves ~78px of band a side and the cluster wants ~126 - the bottom corners of
+   * the frame are overlaid by roughly a tenth of its height, which is the mobile-landscape
+   * convention and is why the buttons are semi-transparent. The alternative is to shrink
+   * the frame ~14% to buy a full band, which is an owner call (docs/OPEN.md), not one to
+   * make in a stylesheet. Every 6px here is 6px less of the game covered.
+   */
+  .beam-run__touch-zone { bottom: calc(10px + env(safe-area-inset-bottom, 0px)); }
+}
+@media (orientation: portrait) {
+  /*
+   * Upright, the band under the play frame is the full 180px (see the stage rules), so
+   * the controls live well below the action — but the frame is NARROW, and four targets
+   * have to fit across it. Every number here is generated from ui/touchGeometry.ts,
+   * which is where the arithmetic and the reason live, and touchAndAssist.test.ts
+   * checks the row against every phone width from a 280px Galaxy Fold cover screen up.
+   */
+  .beam-run__touch {
+    --beam-run-pad: ${padCss(PAD_PORTRAIT.pad)};
+    --beam-run-pad-jump: ${padCss(PAD_PORTRAIT.jump)};
+    --beam-run-pad-lift: ${padCss(PAD_PORTRAIT.lift)};
+    --beam-run-pad-gap: ${padCss(PAD_PORTRAIT.gap)};
+    --beam-run-pad-edge: ${padCss(PAD_PORTRAIT.edge)};
+    --beam-run-pad-slop: ${PAD_PORTRAIT.slop}px;
+  }
+  .beam-run__touch--large {
+    --beam-run-pad: ${padCss(PAD_PORTRAIT_LARGE.pad)};
+    --beam-run-pad-jump: ${padCss(PAD_PORTRAIT_LARGE.jump)};
+    --beam-run-pad-lift: ${padCss(PAD_PORTRAIT_LARGE.lift)};
+    --beam-run-pad-slop: ${PAD_PORTRAIT_LARGE.slop}px;
+  }
+  /* One-tap: a single centred target reachable with either thumb. It is the only
+     target, so the row arithmetic does not apply and it can take the tuned size. */
+  .beam-run__touch--autorun .beam-run__touch-zone--jump {
+    left: 0; right: 0; justify-content: center;
+  }
+  .beam-run__touch--autorun { --beam-run-pad-jump: 120px; }
+  /* 128 and not the old 132: the band is 180px, a home indicator takes 34 and the zone
+     inset 16, so 130 is all the height there is. */
+  .beam-run__touch--autorun.beam-run__touch--large { --beam-run-pad-jump: 128px; }
+}
 
 /* Assist options dialog ------------------------------------------------- */
 /* Web type here is deliberate: real form controls, real sentences. */
@@ -962,6 +1116,23 @@ export const CSS = `
  */
 .beam-run [hidden] { display: none !important; }
 `;
+
+/**
+ * The stage element's class list.
+ *
+ * Pure and exported for one reason: the shape of the play box is decided here, and
+ * getting that decision wrong is what made the game look like a different game from one
+ * machine to the next. It used to be made by `@media (orientation: portrait)`, which is
+ * not a test for "this device has thumbs" — every desktop window taller than it was wide
+ * matched it and got the phone box (a strip of game centred in two empty bands), while a
+ * tablet in landscape, the one device that most needed a band, did not match and had its
+ * controls drawn over the gameplay. `Game` passes the same `isTouchDevice()` result it
+ * uses to decide whether the controls exist at all, so the box and its contents cannot
+ * disagree — and because this is a function rather than a media query, there is a test.
+ */
+export function stageClassName(isTouch: boolean): string {
+  return isTouch ? 'beam-run__stage beam-run__stage--touch' : 'beam-run__stage';
+}
 
 /** Inject the stylesheet into a root (idempotent). Returns the <style> node. */
 export function injectStyles(target: Document | ShadowRoot = document): HTMLStyleElement {

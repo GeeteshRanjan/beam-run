@@ -1,7 +1,14 @@
 import { describe, it, expect } from 'vitest';
-import { drawStamps, drawInkPads, STAMP_SCALE, STAMP_BODY_ROWS } from './stamps';
+import {
+  drawStamps,
+  drawInkPads,
+  STAMP_SCALE,
+  STAMP_BODY_ROWS,
+  STAMP_LABEL_INNER,
+} from './stamps';
 import { measureText } from './PixelText';
 import { HAZARDS, RESOLUTION } from '../data/tuning.config';
+import { SCREENS } from '../data/levels';
 import type { StampState } from '../world/Hazards/Stamps';
 
 const S = HAZARDS.STAMPS;
@@ -40,6 +47,7 @@ function state(over: Partial<StampState> = {}): StampState {
     retracting: false,
     pressing: press >= 1,
     warn: 0,
+    label: 'ENTITY',
     ...over,
   };
 }
@@ -57,11 +65,67 @@ describe('stamp painting', () => {
     }
   });
 
-  it('fits the word DENIED inside the printed label panel', () => {
-    // This is the whole message of the hazard, and it silently fell off the label
-    // onto the body at WIDTH 76. Guarded here rather than in a comment.
-    const labelInner = S.WIDTH - 2 * 2 * STAMP_SCALE; // body edge + shade, both sides
-    expect(measureText('DENIED', 2)).toBeLessThan(labelInner);
+  it('fits every authored stamp label on the printed plate', () => {
+    /*
+     * The label is the whole message of the hazard, and it silently fell off onto the
+     * body once at WIDTH 76. It is now **four different words** (owner call: each stamp
+     * names one of the four setup approvals), authored in `levels.json`, so this is a
+     * check on the data rather than on one literal — a fifth stamp, or a longer label,
+     * fails the build instead of rendering off the edge of the plate.
+     *
+     * The plate runs the full 22 cells between the keylines (88px), which is why the
+     * 7-character labels fit: at the old 20-cell inset, 82px did not go into 80.
+     */
+    const stamps = SCREENS[1]!.stamps ?? [];
+    expect(stamps.length).toBeGreaterThan(0);
+    for (const spec of stamps) {
+      const label = spec.label!;
+      expect(label, `stamp gx ${spec.gx}`).toBeTruthy();
+      expect(label, label).toBe(label.toUpperCase());
+      expect(label, label).not.toMatch(/['\u2018\u2019]/);
+      expect(measureText(label, 2), label).toBeLessThan(STAMP_LABEL_INNER);
+    }
+    // …and DENIED, which has moved onto the rubber die at the bottom (owner call), sets
+    // inside the die's own width — the die is the full hitbox less its keylines.
+    expect(measureText('DENIED', 2)).toBeLessThan(STAMP_LABEL_INNER);
+  });
+
+  it('prints DENIED on the rubber die and the subject on the plate above it', () => {
+    /*
+     * The swap the owner asked for, measured rather than eyeballed: the stamp's subject
+     * is set on the pale index label and DENIED on the dark die at the bottom. Proved by
+     * where the *type* lands — the two words are drawn at scale 2, so a glyph row is 2px
+     * tall and the label rows and the die rows do not overlap.
+     *
+     * Rasterising the whole sprite would not prove this (the sprite fills both bands
+     * either way), so the test drives two stamps with labels of different lengths and
+     * measures the horizontal extent of the type in each band: the band carrying the
+     * longer word has to be the plate.
+     */
+    const short = recorder();
+    drawStamps(short.ctx, [state({ label: 'BANKING' })], false);
+    const dieTopOffset = 26 * STAMP_SCALE;
+    const plateTopOffset = 14 * STAMP_SCALE;
+    const top = Math.min(...short.rects.map((r) => r.y));
+    const plateBand = short.rects.filter(
+      (r) => r.y >= top + plateTopOffset && r.y < top + plateTopOffset + 7 * STAMP_SCALE,
+    );
+    const dieBand = short.rects.filter(
+      (r) => r.y >= top + dieTopOffset && r.y < top + dieTopOffset + 5 * STAMP_SCALE,
+    );
+    const typeWidth = (rs: Rect[]): number => {
+      // Type is drawn in 2px cells; the sprite's own rows are 4px wide runs of cells.
+      const glyphs = rs.filter((r) => r.w === 2 && r.h === 2);
+      if (glyphs.length === 0) return 0;
+      return (
+        Math.max(...glyphs.map((r) => r.x + r.w)) - Math.min(...glyphs.map((r) => r.x))
+      );
+    };
+    // BANKING (7 chars) on the plate, DENIED (6) on the die: both bands carry type, and
+    // the plate's is the wider of the two, which is only true if they are not swapped.
+    expect(typeWidth(plateBand)).toBeCloseTo(measureText('BANKING', 2), 0);
+    expect(typeWidth(dieBand)).toBeCloseTo(measureText('DENIED', 2), 0);
+    expect(typeWidth(plateBand)).toBeGreaterThan(typeWidth(dieBand));
   });
 
   it('the authored body is exactly the hitbox', () => {

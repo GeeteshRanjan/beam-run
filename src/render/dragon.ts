@@ -5,13 +5,15 @@
  * clock read inside, no DOM, no host state — so the whole screen rasterises on its
  * own, which is the only way any of it gets checked.
  *
- * **Why this is composed and not one grid.** Every other creature in this game is
- * a single authored string grid (the maze monster is 7×13, the Workplace figure
- * 20×26). At 200×190 the dragon would be a 40×38 grid: 1,520 hand-placed cells, in
- * a file where a mistyped row is invisible until it rasterises. So it is built the
- * way the Workplace *props* are built — one small grid (the head) placed by a
- * composer, with the torso, neck, tail and legs stepped out of `pxRect` runs. Same
- * 8-bit output, one order of magnitude less to get wrong.
+ * **The beast is ONE authored grid, and this note used to say the opposite.** It was
+ * composed — a head grid placed by a composer with the torso, neck, tail and legs
+ * stepped out of `pxRect` runs — on the argument that 1,500 hand-placed cells in a
+ * file where a mistyped row is invisible is the expensive way to draw an animal. That
+ * argument was sound and the conclusion was wrong: a composer cannot see a silhouette,
+ * and the composed version rasterised as a hunched lizard through three art rounds. It
+ * is one 80×63 grid now (`BEAST`), generated against a PNG in a throwaway script and
+ * pasted in, which is what made the cell count affordable. The `pxRect` runs that are
+ * left belong to the fire, the water and the chrome.
  *
  * **It stands on the ground on two feet, and it has no wings** (owner call, third
  * art pass). The reference is a Godzilla, not a wyvern: the body box's bottom edge
@@ -30,13 +32,12 @@
  * nothing in the fire is crimson. Water, the halo and the cannon stay cyan, the one
  * family on the screen that is the opposite of the fire.
  *
- * **The costume is one piece, and it is the health bar.** Glasses, and nothing else
- * — no jacket and no tie (owner call, third pass). Four water jets fog them, crack
- * them twice and then wash them off the snout. Nothing draws a bar or a number: the
- * state of the fight is legible from the state of the glass, backed by the pips.
- * And when the last hit lands the **beast goes with the costume** — what is left on
- * the floor is the wreckage of what it was wearing and the five people who were
- * inside it, never a dragon standing there undressed.
+ * **It wears nothing, and the fight is read off a real bar.** The glasses that used to
+ * be its costume *and* its health readout are gone (owner call), and four water jets
+ * now show as water on the hide with a 192px cyan bar under the name plate carrying the
+ * count. And when the last hit lands the **beast goes with the costume** — what is left
+ * on the floor is the suit five people were inside, never a dragon standing there
+ * undressed.
  */
 import { RESOLUTION } from '../data/tuning.config';
 import { pxRect, drawPixels, hash2, maxWidth, type Palette } from './PixelArt';
@@ -114,90 +115,129 @@ const WATER_LIT = '#A8ECFA';
 // ---------------------------------------------------------------------------
 
 /**
- * The Godzilla, authored as **one 46×38 grid** and drawn at scale 5 → 230×190.
+ * The Godzilla, authored as **one 80×63 grid** and drawn at scale 3 → 240×189.
  *
- * Rebuilt from the 30×24-at-scale-10 version the owner rejected ("the Godzilla is not
- * at all refined and looks like blocks of red colour — make it look like a real
- * Godzilla, just in 8-bit … also decrease the size"). Both halves of that note pull the
- * same way and the answer to both is **cells, not pixels**: the beast is *smaller* on
- * the frame (230×190 against 300×240) and made of **1,748 cells instead of 720**,
- * because 10px cells cannot describe an animal — at that size a leg is two cells wide
- * and every curve in the silhouette is a 10px stair, which is exactly what "blocks of
- * red colour" describes. This is the same lesson the sun and the clouds on screen 2
- * paid for: when something reads as too pixelated, count the steps in its outline
- * before reaching for a bigger cell.
+ * **Third resolution, same animal** (owner: "reduce the pixel size on the entire
+ * Godzilla, right now it's not looking very good and not at all refined" — plus the mouth,
+ * below). The lineage is the whole lesson: 30×24 at **scale 10** was rejected as "blocks of
+ * red colour", 48×38 at **scale 5** answered that and was still coarse enough to read as
+ * beads, and this is 80×63 at **scale 3** — **2,414 cells against 1,748 and 720**, at the
+ * same 240px on the frame. Every pass has been the same trade in the same direction, and
+ * nothing about the silhouette had to change to buy it: the size on screen is fixed by what
+ * a boss has to be next to a 48×60 person, so refinement is only ever available in the
+ * cell.
+ *
+ * **Scale 3 is the hero's own cell** (`Game.drawPlayer` draws the 16×20 hero at 3), which
+ * is the argument for stopping here rather than going finer: the boss and the player are
+ * now on one pixel grid, so the screen has a single resolution instead of a coarse animal
+ * standing next to a fine one. Below 3 the beast would be *finer* than the player and the
+ * 8-bit direction starts to come apart.
  *
  * It still deliberately breaks the "a big creature is composed, not authored as one
  * grid" rule, for the reasons that rule already concedes: the creature **is** a
  * silhouette (no clothing to register against it), a row of the wrong width is caught
  * **mechanically** by a test that measures the grid, and one grid **mirrors for free**.
- * What made 1,748 cells affordable is that they are not hand-typed: the silhouette was
- * authored as per-row spans in a throwaway generator, which derives the outline, the
- * three-band shading, the belly plates, the dorsal plates and the hide bands
- * mechanically, and the **output** was pasted in here. Nothing generated ships.
+ * What makes 2,414 cells affordable is that they are not hand-typed: the silhouette is
+ * authored as interpolated control rows in a throwaway generator, which derives the
+ * outline, the shading, the belly plates, the dorsal plates and the hide bands
+ * mechanically, and the **output** is pasted in here. Nothing generated ships.
  *
  * What the grid spends its cells on is the silhouette, which is what makes a shape read
- * as Godzilla rather than as a lizard — and four of these were fixed against a raster
- * that the code could not have shown:
- *  · **a deep, blocky skull** with a short muzzle, a heavy brow, a two-cell amber eye
- *    and teeth on both lips. The first three cuts drew a long snout and every one of
- *    them rasterised as a crocodile or a raptor;
+ * as Godzilla rather than as a lizard. Each of these was fixed against a raster, and the
+ * ones marked (3) are what the finer cell was spent on:
+ *  · **a deep skull** with a short muzzle, a heavy brow, an amber eye with a slit pupil
+ *    and an **overbite** — the upper jaw reaches one cell further forward than the lower
+ *    (3). The first three cuts drew a long snout and every one rasterised as a raptor;
+ *  · **a mouth that is a jaw and not a slot** (3) — see `JAW_ROW` below;
+ *  · **a head lit down its own CONTOUR**, per column, not by the horizontal three-band
+ *    the body uses (3): shaded like the body, the back half of the skull came out at
+ *    `SCALE_DARK` and the head rasterised as a hole with an eye in it;
  *  · **a short thick neck, set back and narrower than both the skull and the
  *    shoulders** — the narrowing that stops the head merging into the chest;
  *  · **an upright stance** on two thick legs with the room showing through between
  *    them, and feet with lit top planes and claws;
- *  · **four big dorsal plates** (`f`, base row `c`), narrow at the top and widest at
- *    the base, with a clear row of air between each pair. Wider or taller and they
- *    merge into one pale mass along the spine, which reads as fur;
- *  · **a heavy tail** that lies FLAT along the floor for its last third. Tapered all
- *    the way to a point down a straight diagonal it read as a blade;
- *  · **hide bands** — runs of three darker cells with gaps of three on every fourth
- *    row. Single darker cells on a grid rasterise as polka dots, which is a costume.
+ *  · **dorsal plates as separate LEAVES** (`f`, tips `c`), each widest in its middle
+ *    course and pointed at the tip, with air between (3). Grown row by row off the back
+ *    edge — which is how the 48-wide version drew them — they merge into one pale wedge
+ *    over the shoulders, and a pale wedge on a back is a **wing**;
+ *  · **a heavy tail** that lies FLAT along the floor for its last third, its plates
+ *    continuing down it as triangles. Tapered all the way to a point down a straight
+ *    diagonal it read as a blade;
+ *  · **a tapered belly** (3) — the plated abdomen narrows at both ends. A rectangle of
+ *    cream on the front of the animal reads as a bib, which is the same defect as the
+ *    "scarf" the version before it drew;
+ *  · **hide bands** — runs of five darker cells on every sixth row. Single darker cells
+ *    on a grid rasterise as polka dots, which is a costume.
  *
  * `B`/`b` are the belly plates, `H` the lit planes, `S` the shade, `A`/`p` the eye,
- * `m`/`h` the maw and its teeth, `c` claws and plate bases. There are **no horns and no
+ * `m`/`h` the maw and its teeth, `c` claws and plate tips. There are **no horns and no
  * wings** — both were on the dragon this replaced, and both are exactly what said
  * "this animal is not a Godzilla".
  */
-const BEAST: readonly string[] = [
-  '................................................',
-  '................................................',
-  '...................................KKKKKKKKKK...',
-  '.................................KKHHHHHHHHHHKK.',
-  '................................KHHSSsSssAASHHHK',
-  '................................KSSSSssssApsHHHK',
-  '................................KSSSSsssssssHHHK',
-  '................................KSSSSsmhmhmhmhmh',
-  '.................................KSSSssshshHhKh.',
-  '................................KHSSsssssHHK....',
-  '..............................KKHSsssssHHHK.....',
-  '..........................KfKKHHssssssHHHK......',
-  '......................KfffKKHHSsssssssHHHHK.....',
-  '...................KffffKKHHSSsSSSssssHHHHK.....',
-  '.................KcKcccKHHSSSsssssssssHHHHHKK...',
-  '..................KfKfKHSSSSsssssssssHHHHHKssK..',
-  '................KfKfKKHSSSSsssssssssHBBBHK.KssK.',
-  '...............KfKfffKSSSSSssssSSSssHBBBHK.Kssc.',
-  '............KcccKKfffKSSSSsssssssssHbbbHK.KKKc..',
-  '...............KfKcccKSSSSsssssssssHBBBHK.......',
-  '.............KKfffKKHSSSSSsssssssssHBBBHK.......',
-  '............KfKfffKHSSSSSSSssssSSSsHbbbHK.......',
-  '...........KfffKccKHSSSSSSsssssssssHBBBHK.......',
-  '..........KKfffKKHHsSSSSSSSsssssssssHBBBHK......',
-  '.........KfKcccKHHsssSSSSSSsssssssssHbbbHK......',
-  '........KfffKKKHHssssKSSSSSssssSSSssBBBHK.......',
-  '.......KKcccKHHHssssK.KSSSSSsssssssBBBHK........',
-  '.....KfffKKKHHHssssSK..KSSSSKKsssssHHHK.........',
-  '....KKcccKHHHssssSSSSKKssHHK..KSSSsssK..........',
-  '..KfffKKKHsssssSSSSSKssssHHK..KSSSsssK..........',
-  '..KcccKHHssssSSSSKKK.KsssHHK..KSSSsssK..........',
-  '....KKHsssssSSSKK....KsssHHK..KSSSsssK..........',
-  '...KHHssssSSSKK......KsssHHK..KSSSsssK..........',
-  'KKKHssssSSKKK.......KssssHHK..KSSSssssK.........',
-  'KHsssSSSKK..........KssssHHK..KSSSssssK.........',
-  'KssSSKKK............KssssHHK..KSSSssssK.........',
-  'KSKKK.............KKSssssHHK..KSSSssssHKKK......',
-  'KK................cKKcKKcKKc..cKKcKKcKKcKK......',
+export const BEAST: readonly string[] = [
+  '................................................................................',
+  '..........................................................KKKKKKKKKKKKK.........',
+  '........................................................KKHHHHHHHHHHHHHKKK......',
+  '......................................................KKHHHHHHHHHHHHHHHHHHH.....',
+  '.....................................................KHHHHHHHHHHHHHHHHHHHHHH....',
+  '....................................................KHHHHHHHHHHssssssssHHHHHK...',
+  '....................................................KHHHHHssssSSKKKKKKKKSSsppK..',
+  '...................................................KHHsssssssssssAAApAAsssssSK..',
+  '...................................................KHssssssssssssAAApAAssssssK..',
+  '...................................................KsssssssssssssSSSSSSssssssK..',
+  '...................................................KsssssssssSmmmmmmccmmccmmcc..',
+  '...................................................KsssssssssssSSmhhmmhhmmhhmm..',
+  '...................................................KssssssSSSSSSSHHHHHHHHHKK....',
+  '...................................................KsSSSSSSSSSSSsssssssKKK......',
+  '..................................................KSSSSSSSSSSSSSSSSKKKK.........',
+  '.................................................KsSSSSSSSSSSSSKKKK.............',
+  '...............................................KKssSSSSSSSSSSKK.................',
+  '............................................KccKSSSSSSSSSSSSK...................',
+  '........................................KccfffKHSSSsssssssHHHKK.................',
+  '.....................................KccfffffKHSSSSsssssssssHHHKK...............',
+  '.......................................KccfffKSSSSSSssssssssssHHHKKK............',
+  '.........................................KccKHSSSSSSssssssssssHHHHHHK...........',
+  '.........................................KKKHSSSSSSsssssssssssHHHHHHHK..........',
+  '.....................................KccfKHHSSSSSSsssssssssssssHHHHHHHK.........',
+  '.................................KccffffKHSSSSSSSssssssSSSSSsssHHHHHHHHKK.......',
+  '.............................KccfffffffKHSSSSSSSSsssssssssssssHHHHHHHHHHHKK.....',
+  '..............................KccffffKKHSSSSSSSsssssssssssssssHHHHHHHHHHHHHKK...',
+  '............................K...KccfKHHSSSSSSSSsssssssssssssssHHHHHHHHHssssssK..',
+  '...........................KfK....KKHSSSSSSSSSsssssssssssssssHHHHHHHHHsssssscK..',
+  '...........................KfK.KccfKSSSSSSSSSSsssssssssssssssHHHHHHHHHSSSSScK...',
+  '..........................KfffKfffKHSSSSSSSSSSSSSssssssSSSSSHHbbbHHHHSSSKcK.....',
+  '........................KcKfffKfffKSSSSSSSSSSsssssssssssssssHBBBBHHHKKKK........',
+  '..........................KfffKffKHSSSSSSSSSsssssssssssssssHBBBBHHHK............',
+  '......................K...KfffKcfHSSSSSSSSSSsssssssssssssssbbbbbHHHK............',
+  '.....................KfK.KfffffKKSSSSSSSSSSSsssssssssssssssBBBBBHHHK............',
+  '.....................KfK.KcccccKHSSSSSSSSSSSssssssssssssssBBBBBBHHHK............',
+  '....................KfffKKcccccKHSSSSSSSSSSSSSSSSssssssSSSbbbbbbHHHK............',
+  '....................KfffK...KHHHHSSSSSSSSSSSsssssssssssssssBBBBBBHHHK...........',
+  '................K...KfffK.KKHHHssSSSSSSSSSSSsssssssssssssssBBBBBBHHHK...........',
+  '...............KfK.KfffffKHHHHssssSSSSSSSSSSSssssssssssssssbbbbbbHHHK...........',
+  '...............KfK.KcccccKHHHsssssKSSSSSSSSSSsssssssssssssssBBBBBHHHK...........',
+  '..............KfffKKcccccKHHsssssK.KSSSSSSSSSsssssssssssssssBBBBBHHHK...........',
+  '..............KfffK..KKHHHsssssssK.KSSSSSSSSSSSSSssssssSSSSHbbbbHHHK............',
+  '...........K.KfffffKKHHHHssssssssK..KSSSSSSSSssssssssssssssBBBBHHHK.............',
+  '..........KfKKcccccKHHHHsssssssSSK..KSSSSSSSSSssssssssssssHBBBHHKK..............',
+  '..........KfKKcccccKHHssssssssSSSK.KSSSSSSSSSSKKKKKssssssHHHHHHK................',
+  '.........KfffK.KKHHHsssssssssSSSSK.KSSssssHHHK.....KSSSssssHHHK.................',
+  '......K..KcccKKHHHsssssssssSSSSSSK.KSSssssHHHK.....KSSSssssHHHK.................',
+  '.....KfK.KcccKHHHssssssssSSSSSSSSSKSSSssssHHHK.....KSSSsssssHHHK................',
+  '....KfffK..KHHHssssssssSSSSSSSSKKKSSSSssssHHHK.....KSSSsssssHHHK................',
+  '....KcccKKKHHHsssssssSSSSSSSSKK...KSSSssssHHHK.....KSSSsssssHHHK................',
+  '..K.KcccKHHHssssssssSSSSSSSKK....KSSSsssssHHHK.....KSSSsssssHHHK................',
+  '.KfK..KKHHHssssssSSSSSSSSKK......KSSSsssssHHHK.....KSSSsssssHHHK................',
+  'KcccKKHHHssssssSSSSSSSKKK........KSSSsssssHHHK....KSSSssssssHHHK................',
+  'KcccKHHsssssSSSSSSSSKK...........KSSSsssssHHHK....KSSSssssssHHHK................',
+  '.KKHHssssssSSSSSSKKK............KSSSssssssHHHK....KSSSssssssHHHK................',
+  'KHHssssssSSSSSSKK...............KSSSssssssHHHK....KSSSssssssHHHK................',
+  'KssssssSSSSSKKK.................KSSSssssssHHHK....KSSSssssssHHHK................',
+  'KsssSSSSSSKK...................KSSSssssssHHHHK....KSSSssssssHHHHK...............',
+  'KsSSSSSKKK.....................KSSSssssssHHHHK....KSSSssssssHHHHK...............',
+  'KSSSKKK......................KKSSSsssssssHHHHHK...KSSSSSsssssssHHKKKK...........',
+  'KSKK.........................KSSSSsssssssHHHHHK...KSSSSSsssssssHHHHHK...........',
+  'KK...........................KKKKKKKKKcKKcKKcKK...KKKKKKcKKKcKKKcKKcK...........',
 ];
 
 const DORSAL = '#F08A90';
@@ -217,17 +257,18 @@ const BEAST_PALETTE: Palette = {
 };
 
 /**
- * Scale 5 — half the cell the rejected version used, and the whole reason this one
- * reads.
+ * Scale 3 — a third of the cell the first version used, and the whole reason this one
+ * reads as an animal.
  *
- * 10px cells made a *bead* picture: a 200px animal has 20 beads across it, so a leg is
- * two cells, a jaw is one, and every diagonal is a 10px stair. That is what the owner
- * saw as "blocks of red colour". At 5px the same animal is 46 cells across, which is
- * where a muzzle, a brow, a plated belly and four dorsal plates can all exist at once —
- * and it is still twice the maze monster's cell, so the beast stays chunkier than
- * anything else on the frame.
+ * 10px cells made a *bead* picture: a 200px animal is 20 beads across, so a leg was two
+ * cells, a jaw one, and every diagonal a 10px stair. 5px halved that and bought a muzzle,
+ * a brow and a plated belly, and it is still what the owner saw as "not at all refined":
+ * at 5px a **mouth** is one cell deep, an eye is two cells, and there is nowhere to put a
+ * chin. At 3px the same animal is 80 cells across — the hero's own cell, so the boss and
+ * the player share one pixel grid — and it is where an overbite, interlocking teeth, a
+ * slit pupil and a contour-lit skull can all exist at once.
  */
-const BEAST_SCALE = 5;
+const BEAST_SCALE = 3;
 const BEAST_COLS = maxWidth(BEAST);
 export const BEAST_W = BEAST_COLS * BEAST_SCALE;
 export const BEAST_H = BEAST.length * BEAST_SCALE;
@@ -235,34 +276,59 @@ export const BEAST_H = BEAST.length * BEAST_SCALE;
 /**
  * Where the grid is pinned inside the body box.
  *
- * The box is 200×190 (`HAZARDS.DRAGON.BODY_W/H`) and the grid is 230×190, so it is
- * centred with 15px hanging out of each side: the tail's tip at the back, the muzzle and
+ * The box is 200×190 (`HAZARDS.DRAGON.BODY_W/H`) and the grid is 240×189, so it is
+ * centred with 20px hanging out of each side: the tail's tip at the back, the muzzle and
  * the forelimb's claws at the front. The legs and torso sit inside the box, which is
- * what a water jet has to hit. The bottom row lands on the ground band, which is what
- * "two feet on the ground" is, measured.
+ * what a water jet has to hit.
+ *
+ * **`BEAST_OFFSET_Y` is 1, and it is arithmetic rather than taste.** 63 rows at scale 3 is
+ * 189px in a 190px box, so the grid is pushed down by the missing pixel and the bottom row
+ * lands *exactly* on the ground band — which is what "two feet on the ground" is, measured,
+ * and what `dragon.test.ts` asserts. A grid whose height divides the box exactly is a
+ * luxury of the cell size; the alternative was 95 rows at scale 2, i.e. a beast finer than
+ * the hero.
  */
 const BEAST_OFFSET_X = -20;
-const BEAST_OFFSET_Y = 0;
+const BEAST_OFFSET_Y = 1;
 
 /**
  * The jaw, in grid cells: where the mouth line is, where it hinges and where it ends.
  *
  * Read off the drawn grid, like `MOUTH_*_FRACTION` in the hazard — the mouth row is the
- * one carrying the `mhmhmh` teeth and the muzzle tip is its last column. Nothing here may
- * be guessed: an opening jaw that hinges in the wrong column is a head coming apart.
+ * upper of the two carrying the teeth, and the muzzle tip is its last column. Nothing here
+ * may be guessed: an opening jaw that hinges in the wrong column is a head coming apart.
+ *
+ * **The shut mouth is a JAW, not a slot** (owner call: "the Godzilla's mouth can be made a
+ * bit better, it's not well shaped right now"). Four things the 5px cell could not hold,
+ * all of them in the grid rather than here:
+ *  · the two dark courses **taper to nothing at the hinge**, so the mouth closes into a
+ *    corner instead of ending as a squared-off cut with the same thickness as the middle;
+ *  · **the teeth interlock** — 2-cell blocks in the lower course alternating with 2-cell
+ *    blocks in the upper — so the line has a bite. A single bone row is a zip, and 1-cell
+ *    teeth are 3px and vanish;
+ *  · **the upper jaw overbites** the lower by a cell, and the muzzle is rounded off above
+ *    it rather than running flat into the grid's last column;
+ *  · a **lit chin plane** under the mouth and a shadow course under the mandible, which is
+ *    the difference between a jawline and a throat.
  *
  * The eye's cell (`EYE_COL`/`EYE_ROW`) used to live here too, because a pair of glasses had
  * to be registered to it. The owner removed the glasses, and the eye is now just part of
  * the grid like every other feature.
  */
-const JAW_ROW = 7;
-const JAW_HINGE_COL = 38;
-const JAW_TIP_COL = 47;
-/** Cells the muzzle end of the jaw drops when the mouth is fully open. */
-const JAW_MAX_CELLS = 5;
+const JAW_ROW = 10;
+const JAW_HINGE_COL = 62;
+const JAW_TIP_COL = 77;
+/** Cells the muzzle end of the jaw drops when the mouth is fully open (8 × 3px = 24px). */
+const JAW_MAX_CELLS = 8;
 
 /**
- * The costume, **lying on the floor with one side unzipped** — 52×13 at scale 5 → 260×65.
+ * The costume, **lying on the floor with one side unzipped** — 87×22 at scale 3 → 261×66.
+ *
+ * **Re-authored at the beast's new cell** (scale 5 → 3) in the same pass, and not for
+ * tidiness: the suit and the standing animal are on screen **together** through the whole
+ * of `stripping`, cross-fading into one another, so two cell sizes there would be one
+ * animal visibly turning into a coarser one. When the creature's resolution changes, so
+ * does the resolution of everything it becomes.
  *
  * This is the owner's ending, and it replaces a heap of spectacle frames: "the Godzilla
  * for the dying effect dies on the ground and on one side the Godzilla's costume opens up
@@ -282,22 +348,31 @@ const JAW_MAX_CELLS = 5;
  * intact for a beat first.
  */
 const COSTUME: readonly string[] = [
-  '....................................................',
-  '.......................cf...........................',
-  '.................cf.KKKKKKKKcf......................',
-  '......KK..........KKsZzZzZzZzKKKKcf.................',
-  '....KKHHKK......KKssBiiiiiiiiZzZHKKK................',
-  '....sHppssK..cfKsssssiiiiiiiiiiiBHHHKKcf............',
-  '...KspsssssKK.KssssssiiiiiiiiiiisSSSssKKK...........',
-  '..KssssssssssKsssssssiiiiiiiiiiisssssssssKK.........',
-  '..ssssSSssssssssssSSSiiiiiiiiiiiSssssssssssKK.......',
-  '.KssSSSSSSSssssSSSSSSiiiiiiiiiiiSSSSSSsssssssKK.....',
-  'KsSSSSSSSSSSSSSSSSSSSiiiiiiiiiiiSSSSSSSSSSSssssKKK..',
-  'KhmhmhmhSSSSSSSSSSSSSiiiiiiiiiiiSSSSSSSSSSSSSSSsssKK',
-  'KKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK',
+  '........................................K..............................................',
+  '.......................................KfK.......K.....................................',
+  '..............................K........cff......KfK....................................',
+  '.............................KfK.KKKKKKKKKKKKK..cff......K.............................',
+  '.............................cffKssZzzZzzZzzZzKKKK......KfK............................',
+  '...........KK.................KsssBZzzZzzZzzZzzZzzKKKK..cff............................',
+  '.........KKHHKK.............KKssssBiiiiiiiiiiizZzzZzzHKKKK.............................',
+  '.......KKHHppssKK..........KsssssssiiiiiiiiiiiiiiiZzzBHHHHKK.....K.....................',
+  '......KsHppssssssK.....K..KssssssssiiiiiiiiiiiiiiiiiiBHHHHHHKK..KfK....................',
+  '......sspsssssssssK...KfKKsssssssssiiiiiiiiiiiiiiiiiisSSSSHHssKKcff....................',
+  '.....KsssssssssssssKK.cffssssssssssiiiiiiiiiiiiiiiiiisssssSSssssKKK....................',
+  '....KssssssssssssssssK.KsssssssssssiiiiiiiiiiiiiiiiiissssssssssssssKK..................',
+  '...KssssssssssssssssssKssssssssssSSiiiiiiiiiiiiiiiiiissssssssssssssssKK................',
+  '...ssssssssSSsssssssssssssssssSSSSSiiiiiiiiiiiiiiiiiiSsssssssssssssssssKK..............',
+  '..KssssSSSSSSSSSSssssssssssSSSSSSSSiiiiiiiiiiiiiiiiiiSSSSSSSsssssssssssssKK............',
+  '.KssssSSSSSSSSSSSSSssssssSSSSSSSSSSiiiiiiiiiiiiiiiiiiSSSSSSSSSSSsssssssssssKK..........',
+  '.sssSSSSSSSSSSSSSSSSSSsSSSSSSSSSSSSiiiiiiiiiiiiiiiiiiSSSSSSSSSSSSSSSSssssssssKK........',
+  'KssSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSiiiiiiiiiiiiiiiiiiSSSSSSSSSSSSSSSSSSSSssssssKKK.....',
+  'KSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSiiiiiiiiiiiiiiiiiiSSSSSSSSSSSSSSSSSSSSSSSSsssssKKK..',
+  'KShhmhhmhhmhhSSSSSSSSSSSSSSSSSSSSSSiiiiiiiiiiiiiiiiiiSSSSSSSSSSSSSSSSSSSSSSSSSSSSSsssKK',
+  'KSmmmmmmmmmmmSSSSSSSSSSSSSSSSSSSSSSiiiiiiiiiiiiiiiiiiSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSK',
+  'KKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK',
 ];
 
-const COSTUME_SCALE = 5;
+const COSTUME_SCALE = 3;
 
 const COSTUME_PALETTE: Palette = {
   K: OUTLINE,
@@ -367,7 +442,7 @@ function drawFallenCostume(
       // The authored opening cells now describe where the fabric folds, not a hole
       // that appears as a rectangular void. Paint the base suit intact; the shaped
       // side hatch below is the only interior the player sees.
-      if (ch === 'i' || ch === 'z' || ch === 'Z') ch = r < 4 ? 's' : 'S';
+      if (ch === 'i' || ch === 'z' || ch === 'Z') ch = r < 7 ? 's' : 'S';
       const color = COSTUME_PALETTE[ch];
       if (!color) continue;
       const dx = flip ? cols - 1 - c : c;
@@ -379,19 +454,26 @@ function drawFallenCostume(
   // Its tapered silhouette and two displaced lips read as flexible costume fabric,
   // not a black rectangle cut through a wall.
   if (openness > 0.02) {
-    const authoredDoor = 34;
+    /*
+     * Every number here is in CELLS and the cell changed under it this pass (5 → 3), so all
+     * of them were re-derived to hold the hatch at the same *pixels*: it is the door five
+     * 48×60 people walk out of, and a hatch that shrank with the cell would be a door they
+     * no longer fit through. 57 cells ≈ the 170px the 34th cell of the coarse grid stood at;
+     * ±8 cells ≈ the ±25px the coarse half-width gave; 13 courses ≈ its 40px of height.
+     */
+    const authoredDoor = 57;
     const doorCol = flip ? cols - 1 - authoredDoor : authoredDoor;
     const doorX = x0 + doorCol * COSTUME_SCALE;
-    const doorY = y0 + 7 * COSTUME_SCALE;
-    const openCells = Math.max(1, Math.round(openness * 5));
-    const rowHalf = [1, 3, 4, 5, 5, 4, 3, 1];
+    const doorY = y0 + 12 * COSTUME_SCALE;
+    const openCells = Math.max(1, Math.round(openness * 8));
+    const rowHalf = [2, 4, 5, 6, 7, 8, 8, 8, 7, 6, 5, 4, 2];
     rowHalf.forEach((fullHalf, r) => {
       const half = Math.max(1, Math.round(fullHalf * openness));
       for (let c = -half; c <= half; c += 1) {
-        pxRect(ctx, '#180509', doorX + c * COSTUME_SCALE, doorY + (r - 4) * COSTUME_SCALE, COSTUME_SCALE, COSTUME_SCALE, 1);
+        pxRect(ctx, '#180509', doorX + c * COSTUME_SCALE, doorY + (r - 6) * COSTUME_SCALE, COSTUME_SCALE, COSTUME_SCALE, 1);
       }
-      const edgeY = doorY + (r - 4) * COSTUME_SCALE;
-      const peel = Math.round(openCells * (1 - Math.abs(r - 3.5) / 8));
+      const edgeY = doorY + (r - 6) * COSTUME_SCALE;
+      const peel = Math.round(openCells * (1 - Math.abs(r - 6) / 13));
       pxRect(ctx, SCALE_LIT, doorX - (half + 1) * COSTUME_SCALE - peel, edgeY, 6, COSTUME_SCALE, 1);
       pxRect(ctx, SCALE_DARK, doorX + (half + 1) * COSTUME_SCALE + peel, edgeY, 6, COSTUME_SCALE, 1);
       if (r % 2 === 0) {
@@ -400,7 +482,7 @@ function drawFallenCostume(
       }
     });
     // The pull travels down the seam while the hatch spreads around it.
-    const sliderY = doorY - 4 * COSTUME_SCALE + Math.round(openness * 7) * COSTUME_SCALE;
+    const sliderY = doorY - 6 * COSTUME_SCALE + Math.round(openness * 11) * COSTUME_SCALE;
     pxRect(ctx, OUTLINE, doorX - 5, sliderY - 3, 13, 11, 1);
     pxRect(ctx, BONE, doorX - 3, sliderY - 5, 9, 8, 1);
     pxRect(ctx, MAW, doorX, sliderY - 3, 3, 3, 1);
@@ -580,6 +662,13 @@ export function drawDragon(
    * lit. A separate open-mouthed head grid was the alternative and it is the wrong trade —
    * two 4,700-cell heads that have to stay in agreement, to say something one wedge says.
    *
+   * **And the dropped jaw is now a jaw** (owner call: "the mouth can be made a bit better,
+   * it's not well shaped"). The wedge alone put the maw *outside* the skull's own outline at
+   * the muzzle end — correct, that is where a lower jaw goes when it swings — but with
+   * nothing drawn under the tooth line it read as a dark triangle bitten out of the head
+   * against the sky. Two courses of hide and a keyline under the teeth give the mandible
+   * mass, so the mouth opens instead of the head breaking.
+   *
    * `jawOpen` also carries the whole wind-up telegraph now that the floor marks are gone
    * (see `drawCone`), which is why it is ramped rather than switched: the jaw parting *is*
    * the warning.
@@ -609,14 +698,30 @@ export function drawDragon(
           2,
         );
       }
-      // Teeth: one cell on the upper lip and one on the lower, every other column, so the
-      // jaw has a bite rather than two smooth edges.
-      if (c % 2 === 0) {
+      /*
+       * Teeth: 2-cell blocks on the upper lip and on the lower, alternating between the two,
+       * so the open jaw keeps the interlocking bite the shut one has. At scale 3 a one-cell
+       * tooth is 3px and disappears, which is why the pitch is counted in *pairs* here and
+       * in the grid — the two have to agree or the mouth changes its dentistry as it opens.
+       */
+      const tooth = Math.floor((c - JAW_HINGE_COL) / 2) % 2 === 0;
+      if (tooth) {
         const upper = cellRect(c, JAW_ROW, 1, 1);
         pxRect(ctx, BONE, upper.x, upper.y, upper.w, upper.h, 2);
       }
       const lower = cellRect(c, JAW_ROW + depth, 1, 1);
-      pxRect(ctx, c % 2 === 0 ? BONE : BONE_DARK, lower.x, lower.y, lower.w, lower.h, 2);
+      pxRect(ctx, tooth ? BONE_DARK : BONE, lower.x, lower.y, lower.w, lower.h, 2);
+      // …and the mandible under them: two courses of hide and a keyline, so what swings
+      // down is a jaw with mass rather than the lower edge of a hole.
+      // Mid tone first, shade under it, keyline last — in that order and not darkest-first:
+      // a mandible painted in `SCALE_DARK` against the maw is two near-blacks touching, and
+      // the jaw disappears back into the hole it is supposed to be the bottom of.
+      const jaw = cellRect(c, JAW_ROW + depth + 1, 1, 1);
+      pxRect(ctx, SCALE, jaw.x, jaw.y, jaw.w, jaw.h, 2);
+      const under = cellRect(c, JAW_ROW + depth + 2, 1, 1);
+      pxRect(ctx, SCALE_DARK, under.x, under.y, under.w, under.h, 2);
+      const keel = cellRect(c, JAW_ROW + depth + 3, 1, 1);
+      pxRect(ctx, OUTLINE, keel.x, keel.y, keel.w, keel.h, 2);
     }
   }
 
@@ -659,10 +764,22 @@ export function drawDragon(
 
   ctx.globalAlpha = prev;
 
-  // --- the roar ------------------------------------------------------------
-  // The opening beat, and the one thing on this screen that is loud and harmless.
-  // Concentric arcs off the jaw plus the word, so a player who has never seen a boss
-  // knows something is about to happen and that it has not happened yet.
+  /*
+   * --- the roar ------------------------------------------------------------
+   * The opening beat, and the one thing on this screen that is loud and harmless.
+   * Concentric arcs off the jaw, so a player who has never seen a boss knows something
+   * is about to happen and that it has not happened yet.
+   *
+   * **The word ROAR is gone** (owner call: "remove the roar text from screen"). The
+   * arcs were always the cue; the word was a caption on them, at scale 3 in the hottest
+   * colour on the frame, on a screen that is already carrying a name plate, a costume
+   * pip row and a taunt printed on the fire. It was also the one string in the game that
+   * described a *sound* rather than naming a problem — everything else on this screen is
+   * a hiring word.
+   *
+   * The `roar` **phase** is untouched: it is the guaranteed-safe opening window
+   * (`HAZARDS.DRAGON.ROAR_TIME`) and the only beat the boss cannot be hit in.
+   */
   if (state.phase === 'roar') {
     // The hazard's own jaw position, never a second guess at it.
     const m = {
@@ -677,13 +794,6 @@ export function drawDragon(
         pxRect(ctx, `rgba(255,242,208,${a})`, m.x + (flip ? -d : d), m.y + s * 13, 6, 9, 2);
       }
     }
-    drawText(ctx, 'ROAR', m.x + (flip ? -110 : 46), m.y - 66, {
-      scale: 3,
-      color: FIRE_HOT,
-      align: flip ? 'right' : 'left',
-      outline: 'rgba(0,20,26,0.9)',
-      alpha: 0.95,
-    });
   }
 
   // --- name plate + costume pips -------------------------------------------

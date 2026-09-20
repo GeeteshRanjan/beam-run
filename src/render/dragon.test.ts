@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  BEAST,
   BEAST_H,
   BEAST_W,
   drawBurningHero,
@@ -141,29 +142,61 @@ function candidate(over: Partial<CandidateState> = {}): CandidateState {
 const upper = (rs: Rect[]) => rs.map((r) => r.fill.toUpperCase());
 
 describe('the Godzilla', () => {
-  it('is a boss-sized silhouette, four heroes wide and three tall', () => {
+  it('is a boss-sized silhouette, four heroes wide and three tall, out of the HERO cell', () => {
     /*
      * The Workplace lesson, applied: size against the DRAWN hero (48×60), never his 28×44
      * hitbox. It has now been measured from both ends. At 200×190 *with 10px cells* it
      * rasterised as a hunched lizard with no legible legs, which bought 260×240; the owner
      * then asked for it smaller ("decrease the size, it's too big"), and the way to give
-     * that up without going back to the lizard was to halve the CELL rather than keep the
-     * pixels — 200×190 out of 5px cells is 1,748 cells where 260×240 out of 10px cells was
-     * 720. So the floor here is about what a boss has to be next to a person, and the
-     * refinement is somewhere else entirely.
+     * that up without going back to the lizard was to shrink the CELL rather than the
+     * pixels. That has now happened twice — 10px, then 5px, now 3px, at a fixed 240px on
+     * the frame — so the floor here is about what a boss has to be next to a person, and
+     * the refinement is somewhere else entirely: in the cell.
      */
     expect(D.BODY_W / 48).toBeGreaterThanOrEqual(4);
     expect(D.BODY_H / 60).toBeGreaterThanOrEqual(3);
-    // …and the cell is small enough to describe an animal. 10px cells are what "blocks of
-    // red colour" was, and a grid this size cannot be made of them. 48 columns since the
-    // rebuild against the owner's reference rasters — re-read off the art, because a
-    // divisor left at the previous grid's width is an assertion about a picture that is
-    // no longer drawn.
-    expect(BEAST_W / 48).toBeLessThanOrEqual(6);
-    // The grid is a little wider and no taller than the box: the extra is all tail,
-    // which is allowed to hang out of the back of a box that is only a water target.
+    /*
+     * …and the cell is the HERO's cell (`Game.drawPlayer` draws the 16×20 grid at 3), which
+     * is the whole of the owner's "reduce the pixel size on the entire Godzilla": the boss
+     * and the player are on one pixel grid, so the screen has one resolution. Asserted as
+     * an equality against 3 rather than as "small enough", because both directions are
+     * defects now — coarser is the note this pass answered, finer would make the boss
+     * sharper than the person it is standing next to.
+     */
+    expect(BEAST_W / 80).toBe(3);
+    // The grid is wider than the box: the extra is all tail and muzzle, which is allowed to
+    // hang out of a box that is only a water target.
     expect(BEAST_W).toBeGreaterThan(D.BODY_W);
-    expect(BEAST_H).toBe(D.BODY_H);
+    /*
+     * …and it is no taller than the box, but it no longer *divides* it: 63 rows of 3px is
+     * 189 in a 190px box. The missing pixel is paid for by `BEAST_OFFSET_Y = 1`, which is
+     * what keeps the feet on the ground band — asserted by the next test, and the reason
+     * this one is a bound rather than an equality.
+     */
+    expect(BEAST_H).toBeLessThanOrEqual(D.BODY_H);
+    expect(BEAST_H).toBeGreaterThan(D.BODY_H - 3);
+  });
+
+  it('is a RECTANGULAR grid: every row is the same width and every cell is a known tone', () => {
+    /*
+     * The mechanical check the whole "one authored grid" argument rests on, and until this
+     * pass it did not exist — `BEAST_W` is `maxWidth × scale`, which takes the **max**, so a
+     * row typed one character short changed nothing anybody could see except the picture.
+     * At 80 columns and 63 rows that is 5,040 characters of literal in which a missing dot
+     * is invisible to a reader and, before this test, to the build.
+     *
+     * The palette half matters for the same reason: an unmapped letter is silently skipped
+     * by `drawPixels`, so a typo inside a row rasterises as a hole in the animal rather than
+     * as an error.
+     */
+    const widths = new Set(BEAST.map((r) => r.length));
+    expect(widths.size, `rows are ragged: ${[...widths].join(',')}`).toBe(1);
+    expect(BEAST).toHaveLength(63);
+    expect([...widths][0]).toBe(80);
+    const known = new Set('.KsSHBbfApmhc'.split(''));
+    for (const row of BEAST) {
+      for (const ch of row) expect(known.has(ch), `unknown cell '${ch}'`).toBe(true);
+    }
   });
 
   it('stands on the ground: the lowest thing it paints is the ground band', () => {
@@ -275,6 +308,84 @@ describe('the Godzilla', () => {
     drawDragon(ctx, dragon({ jawOpen: 1, phase: 'burning' }), 1.2, true);
     expect(upper(rects)).toContain('#FFF2D0');
   });
+
+  it('has a MOUTH and not a slot: a tapered line, teeth in two tones, and an overbite', () => {
+    /*
+     * Owner call: "the Godzilla's mouth can be made a bit better, it's not well shaped right
+     * now." What was there was one course of maw with alternating single-cell teeth running
+     * flat into the grid's last column — at a 5px cell that is the most a mouth could be, and
+     * it read as a slot cut across the head. Every part of the fix is in the grid, so it is
+     * asserted on the grid: the drawn frame is 2,400 rectangles and a picture-level assertion
+     * about "the mouth" cannot pick the jaw out of the animal.
+     */
+    const rowsWith = (ch: string) => BEAST.map((r, i) => [i, r] as const).filter(([, r]) => r.includes(ch));
+    // Two courses of maw, not one: an upper lip and a lower.
+    const maw = rowsWith('m');
+    expect(maw).toHaveLength(2);
+    const [upperRow, lowerRow] = maw.map(([i]) => i);
+    expect(lowerRow).toBe(upperRow! + 1);
+    // The line TAPERS to the corner of the mouth: the lower course starts further forward
+    // than the upper, so the mouth closes into a hinge instead of ending as a squared cut.
+    const firstOf = (row: string, chars: string) => {
+      for (let c = 0; c < row.length; c += 1) if (chars.includes(row[c]!)) return c;
+      return -1;
+    };
+    expect(firstOf(BEAST[lowerRow!]!, 'mhc')).toBeGreaterThan(firstOf(BEAST[upperRow!]!, 'mhc'));
+    // Teeth INTERLOCK and in two tones: bone hanging off the upper lip, bone-dark standing
+    // up off the lower. In one tone the two courses rasterise as a zip fastener.
+    expect(BEAST[lowerRow!]).toContain('hh');
+    expect(BEAST[upperRow!]).toContain('cc');
+    // …and the upper jaw OVERBITES: the mouth row reaches further forward than the row under
+    // the mandible, which is what stops the muzzle running flat off the front of the grid.
+    const lastSolid = (row: string) => {
+      for (let c = row.length - 1; c >= 0; c -= 1) if (row[c] !== '.') return c;
+      return -1;
+    };
+    expect(lastSolid(BEAST[upperRow!]!)).toBeGreaterThan(lastSolid(BEAST[lowerRow! + 2]!));
+    // Nothing runs off the front of the grid: the snout is closed by its own keyline, which
+    // is what the previous cut got wrong (its mouth row ended ON the last column).
+    for (const row of BEAST) expect(row.endsWith('.') || row.endsWith('K')).toBe(true);
+  });
+
+  it('drops a JAW WITH MASS, not the lower edge of a hole', () => {
+    /*
+     * The other half of the mouth note. The wedge puts the maw *outside* the skull's outline
+     * at the muzzle end — correct, that is where a lower jaw goes when it swings — but with
+     * nothing under the tooth line it read as a dark triangle bitten out of the head against
+     * the sky. So under the dropped teeth there must be hide, and under that a keyline.
+     *
+     * Measured as "the lowest thing painted on the head is not the maw": if the mandible is
+     * missing, the bottom of the jaw is `MAW`, and that is exactly the defect.
+     */
+    const { ctx, rects } = recorder();
+    const d = dragon({ jawOpen: 1, phase: 'charging' });
+    drawDragon(ctx, d, 1.2, true);
+    /*
+     * The window is **in front of the box and immediately under the maw**, and both halves of
+     * that are load-bearing. The beast faces left here, so the muzzle is the one thing drawn
+     * outside `box.x`; anything at or behind that line is chest, neck or forelimb, and a first
+     * cut of this test that took the whole head band passed with the mandible deleted because
+     * it was reading the chest. The 12px depth keeps the forelimb out, which starts 15px lower.
+     */
+    const maw = rects.filter((r) => r.fill.toUpperCase() === '#2E070B' && r.y < d.box.y + 90);
+    const floorOfMaw = Math.max(...maw.map((r) => r.y + r.h));
+    const under = rects.filter(
+      (r) => r.x < d.box.x && r.y >= floorOfMaw - 3 && r.y <= floorOfMaw + 12,
+    );
+    // Hide, shade and keyline all present below the maw…
+    for (const tone of ['#9B2F38', '#5C1620', '#1A0A0E']) {
+      expect(upper(under), `${tone} is the mandible and it is missing`).toContain(tone);
+    }
+    // …and the keyline is the last thing down there, so the jaw has an edge.
+    const lowest = under.reduce((a, r) => (r.y + r.h > a.y + a.h ? r : a), under[0]!);
+    expect(lowest.fill.toUpperCase()).toBe('#1A0A0E');
+    // …and none of it is there when the mouth is shut.
+    const shut = recorder();
+    drawDragon(shut.ctx, dragon({ jawOpen: 0 }), 1.2, true);
+    expect(
+      shut.rects.filter((r) => r.x < d.box.x && r.y >= floorOfMaw - 3 && r.y <= floorOfMaw + 12),
+    ).toHaveLength(0);
+  });
   it('leaves an empty COSTUME on the floor once it is beaten, and nothing standing', () => {
     /*
      * The owner's ending: "it dies on the ground and on one side the Godzilla's costume
@@ -369,16 +480,35 @@ describe('the Godzilla', () => {
     expect(late.rects.some((r) => r.fill.includes('155,47,56'))).toBe(false);
   });
 
-  it('says ROAR while it is harmless, and stops the moment it is not', () => {
+  it('shows the roar as arcs off the jaw and NOT as the word ROAR', () => {
+    /*
+     * The word is deleted (owner call: "remove the roar text from screen"). The arcs were
+     * always the cue and the word was a caption on them, at scale 3 in the hottest colour
+     * on a frame that already carries a name plate, a costume pip row and a taunt printed
+     * on the fire.
+     *
+     * The phase is untouched, which is the thing this test has to keep proving: it is the
+     * guaranteed-safe opening beat and the only window the boss cannot be hit in.
+     */
     const roaring = recorder();
     drawDragon(roaring.ctx, dragon({ phase: 'roar', progress: 0.5 }), 1.2, true);
     const quiet = recorder();
     drawDragon(quiet.ctx, dragon({ phase: 'waiting' }), 1.2, true);
-    // The roar adds cream arcs off the jaw and the word itself.
     const cream = (rs: Rect[]) => rs.filter((r) => r.fill.includes('255,242,208')).length;
     expect(cream(roaring.rects)).toBeGreaterThan(6);
     expect(cream(quiet.rects)).toBe(0);
     expect(roaring.rects.length).toBeGreaterThan(quiet.rects.length);
+    /*
+     * …and no type in the hot fire colour, which is what the word was set in. A bitmap
+     * glyph at scale 3 paints 3x3 cells, and nothing else on this beast paints a 3x3 rect
+     * in `FIRE_HOT` — so counting those is a real check that the string is gone rather
+     * than a grep against the source.
+     */
+    const FIRE_HOT = '#FFB07A'; // dragon.ts's own constant, not exported
+    const hotGlyphCells = roaring.rects.filter(
+      (r) => r.w === 3 && r.h === 3 && r.fill === FIRE_HOT,
+    );
+    expect(hotGlyphCells).toHaveLength(0);
   });
 
   it('carries a real HEALTH BAR, and keeps it off the HUD corner it stands in', () => {

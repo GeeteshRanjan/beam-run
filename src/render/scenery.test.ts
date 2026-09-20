@@ -424,3 +424,58 @@ describe('the Head Office step labels', () => {
     }
   });
 });
+
+describe("Setup Delays' permits file", () => {
+  /**
+   * The file hanging under the clock — back by owner call, after a pass deleted the old
+   * framed PERMITS board for saying the same thing as the stamps.
+   *
+   * Two assertions, and the second is the one the raster caught. The prop has to be
+   * **there** (a grey ruled folder with the word on it), and it has to be in a column of
+   * sky that **no stamp parks in** — because a parked stamp covers y 202-330 across 96px
+   * of its own column and the file sits at 246-318, i.e. squarely inside that band. A
+   * first cut placed the pair at x 540 on 32px-tile arithmetic; the real tile is 40px, the
+   * gx-12 stamp occupies 452-548, and the raster printed PERMITS as "ITS".
+   */
+  const screen1 = SCREENS.find((s) => s.id === 1)!;
+  const stampBands = (screen1.stamps ?? []).map((s) => {
+    const cx = s.gx * RESOLUTION.TILE + RESOLUTION.TILE / 2;
+    return { left: cx - 48, right: cx + 48 }; // HAZARDS.STAMPS.WIDTH / 2
+  });
+
+  /** Everything the backdrop paints in the file's own band of the frame. */
+  function fileBand() {
+    const { ctx, rects } = recorder();
+    // The sky is a real gradient fill, so the recorder has to answer for it; it is
+    // stubbed rather than measured (nothing here is about the sky).
+    (ctx as unknown as { createLinearGradient: () => unknown }).createLinearGradient = () => ({
+      addColorStop: () => undefined,
+    });
+    drawSceneBackground(ctx, 1, 0.5, false, 0, 0);
+    return rects.filter((r) => r.y >= 230 && r.y + r.h <= 330);
+  }
+
+  it('hangs a grey ruled file with the word PERMITS on it', () => {
+    const band = fileBand();
+    expect(band.length).toBeGreaterThan(20);
+    // The manila body and its ruling are mid greys — a value BELOW the stamps, which are
+    // deliberately the lightest objects on this screen, and above the near-black sky.
+    expect(band.some((r) => r.fill === '#7C8A90')).toBe(true);
+    expect(band.some((r) => r.fill === '#4E5F66')).toBe(true);
+    // The word is bitmap type at scale 2, i.e. 2x2 cells; nothing else in this band is.
+    const glyphCells = band.filter((r) => r.w === 2 && r.h === 2);
+    expect(glyphCells.length).toBeGreaterThan(40); // PERMITS is 7 glyphs
+    expect(band.some((r) => r.fill === '#16232A')).toBe(true);
+  });
+
+  it('sits in the one column of sky that no stamp parks in', () => {
+    const band = fileBand();
+    const left = Math.min(...band.map((r) => r.x));
+    const right = Math.max(...band.map((r) => r.x + r.w));
+    // Nothing about the prop may overlap a stamp column, or it is invisible behind one.
+    for (const s of stampBands) {
+      const overlaps = left < s.right && right > s.left;
+      expect(overlaps, `file ${left}-${right} vs stamp ${s.left}-${s.right}`).toBe(false);
+    }
+  });
+});

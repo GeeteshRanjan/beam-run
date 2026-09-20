@@ -4,12 +4,15 @@ This was §7 and §8 of `HANDOFF.md`. Nothing here is a bug to go and fix unprom
 either a decision the owner owes, or a thing only a hand on a real device can answer. When one is
 resolved, delete it from here and record the resolution in `docs/JOURNAL.md`.
 
-**New this pass:** §26 (the Head Office name is on the frame twice) · §27 (the code says badge, the
-player reads powerup).
+**New this pass:** §32 (on a **tablet in landscape** the thumb buttons still overlay the bottom corners of
+the frame, and closing that costs ~14% of the frame's width — a trade only the owner can price) · §33
+(the pixel art is upscaled by a **fractional** factor on any screen wider than 1280, which is the one
+remaining reason the same build looks slightly different on two machines).
 
-**Top three:** §18 screen 1's badge is no longer a pass-jump (new, and it pairs with §9) ·
-§1 the budget gate's measurement · §2 the placeholder `navigatorUrl`. Then §9, screen 1 unassisted
-played by hand.
+**Top three:** §29 the press count across a transition (the one item here that a hand on a device settles
+in thirty seconds — and now that auto-run is off by default on touch, the taps it costs are on top of a
+player who is also steering) · §1 the budget gate's measurement · §2 the placeholder `navigatorUrl`.
+Then §32, which is the same "hand on a device" question for the tablet.
 
 ---
 
@@ -32,10 +35,12 @@ played by hand.
    `DEFAULT_OPTIONS`). Every CTA in the game lands on our own 404 page until it points at the real
    GCC Opportunity Navigator, or a Vercel rewrite is added. Highest-value fix outstanding.
 3. Does the Navigator accept a parameter that **pre-selects a stage**? If so, wire `br_topic` to it.
-4. **Screen 4's badge now needs a jump on touch, and that is the biggest live risk on the screen.**
-   The badge lands on a floating brick (owner call), so an auto-run player who used to collect it by
-   walking into it must now tap jump — and he gets **one chance**, because by the time the second
-   delivery arrives (4.8s later) an auto-runner has left the frame. The swept-tap gate in
+4. **Screen 4's badge now needs a jump on touch.** The badge lands on a floating brick (owner call), so an
+   auto-run player who used to collect it by walking into it must now tap jump — and he gets **one chance**,
+   because by the time the second delivery arrives (4.8s later) an auto-runner has left the frame. *Less
+   urgent since auto-run stopped being the default on touch:* a player who is steering can stop, look and
+   line the jump up, and can walk back if they miss the first delivery. It is still the live risk for
+   anybody who turns the option on. The swept-tap gate in
    `screen4.test.ts` proves the window is one contiguous ≥0.3s band inside the first delivery's life,
    so it is makeable; whether it is *discoverable* on a phone is untested by anything but that probe.
    If telemetry shows screen 4 attempts ending without the capability, the cheapest fixes in order are:
@@ -154,15 +159,16 @@ played by hand.
    choice the player just made* rather than signage on an object, which is why they were left — but if
    "no text on the powerup" meant no text at all, the toast's second line is the one to cut, and it
    would have to go on all four screens or none.
-21. **The title screen's key-cap legend is device-specific and has not been held in a hand.** Desktop
-   draws `<` `>` · SPACE · F; touch draws the pads (two arrows, a big disc, a smaller act disc). Two
-   things an owner may want to call: **(a)** the row shows the **act** button on a screen where no badge
-   has armed it yet — the touch button itself only appears once one has, so the legend is a promise the
-   first two screens do not keep (the alternative is not teaching the control at all, which is what the
-   game did until now); and **(b)** it no longer says that a touch player *runs automatically*. That was
-   in the written line it replaced, and the caps have no way to say it. If a phone player looks lost, the
-   answer is one short line under the row, not a longer sentence — that sentence is what out-measured the
-   headline (`docs/INVARIANTS.md`).
+21. **RESOLVED, and what is left of it.** This item asked what to do about a key-cap legend on the title
+   screen that promised an **act** button no badge had armed yet. The owner answered by moving the whole
+   legend: it is on the briefing cards now, "like a play through", with move + jump on level 0's card and
+   the F cap alone on level 3's — the first screen whose powerup arms a tool. Part (a) is therefore gone,
+   because each control is now taught on the screen it is needed on.
+   **Part (b) survives and is still open:** nothing anywhere says that a touch player *runs automatically*.
+   That was in the written line the caps replaced, and caps have no way to say it. The level 0 card is now
+   the natural home for it — it is the tutorial stage and it already carries a legend — but it would be one
+   short line, not a sentence: a sentence is what out-measured the headline on the title screen
+   (`docs/INVARIANTS.md`), and the card's own measure is 26 characters.
 
 22. **The secret stage has never been played, and three of its numbers want a hand rather than a probe.**
    THE ENGINE ROOM is proved *finishable* (27 policies, no stalls) and proved *free* (no months, no
@@ -231,6 +237,62 @@ played by hand.
    rather than a new colour, and if the mark is still not catching the eye the next move is the **staging**
    (the shaft, the chevron, the plinth) rather than a lighter orange, because the step after this one is
    cream.
+
+29. **A transition is now FOUR presses, and that number has never been felt on a device.** The owner asked
+   for two cards per transition; they are built, and they read well. But the *run* has changed shape:
+   clearing a stage is press (leave the congratulations card) then press (leave the briefing) where it used
+   to be one press, and there are five transitions, so a clean 90-second run has gained five. On a keyboard
+   that is nothing. On a phone, where one-tap auto-run is the default and the player's thumb is already the
+   jump button, it is five extra taps on cards **plus a 0.4s grace on each that deliberately swallows the
+   first one** — and the grace is not optional: the player arrives at the congratulations card *running*, so
+   without it the card is dismissed by the press that earned it. Three ways out if it feels like a stall, in
+   increasing cost: shorten the graces (one constant, `TRANSITION.TITLE_CARD_SKIP_AFTER`, shared with the
+   briefing card); let the **congratulations** card time out while the briefing card keeps waiting (it is
+   the one of the two carrying no instruction, so a timeout there breaks no rule the briefing card's does);
+   or merge them back into one card with two registers, which is what the owner explicitly asked us not to
+   do. **Do not touch any of it on a guess** — the cards are correct as specified and this is a feel
+   judgement.
+30. **Two authoring strings in `levels.json` now describe a game that does not exist.** Screen 0's
+   `copy.hint` is still `"Move: <- ->  ·  Jump: Space / ^"`, written when the controls were a sentence on
+   the title screen; they are key caps on the level 0 briefing card now. And every screen's `copy.onClear`
+   is a one-line mirror of a `COPY.onClear` that has been **deleted** — the congratulations card that
+   replaced it is two lines (`COPY.clearCard`). Both are stripped at build time, so neither ships and
+   neither is a bug; they are stale notes in the file a level author reads first. Cheapest fix is to delete
+   both keys (and `ScreenCopy.hint`/`.onClear` with them); the alternative is to re-point `onClear` at the
+   new pair, which re-creates exactly the two-copies-of-one-sentence drift the stripper's own comment warns
+   about.
+31. **The levels are numbered from 0, and that is a programmer's habit the owner may or may not want.** It
+   is the owner's own text ("Level 0: The Head Office") so it ships as written, and there is a real argument
+   for it: level 0 is the tutorial, the one screen with no hazard and no powerup, and "level 0" says *before
+   the game starts* in a way "level 1" does not. The argument against is that a player counting stages now
+   finishes level 4 and arrives somewhere unnumbered — the run reads 0-1-2-3-4 and then stops counting. If
+   it should be 1-5, it is one object (`COPY.titleCard.tag`) and one test expectation.
+32. **On a tablet held sideways the thumb buttons still cover the bottom corners of the frame, and closing
+   that gap costs about 14% of the game's width.** Portrait is now fully clear — the control band is real
+   estate outside the play frame and everything fits inside it, measured and tested. Landscape cannot be,
+   because the arithmetic does not allow it: a tablet is roughly 4:3, so a full-width 16:9 frame on an
+   1180×820 iPad leaves **78px** of band a side, and the taller of the two clusters (the lifted tool button)
+   wants **126px**. The overlap is ~68px at the two bottom corners, a tenth of the frame's height, over
+   pavement and ground rather than over anything the player reads — which is why every mobile platformer
+   does exactly this in landscape and why these buttons are 50-55% alpha. Reserving a full band means
+   capping the frame from `(available height − 2 × 128px)`, which on that iPad gives a 1002px frame instead
+   of 1180 (and an iPad Mini 868 instead of 1133, a 23% cut). **The cheap half is already done** (the
+   landscape zone inset is 10px rather than 16, which is 6px less of the game covered) and the constant for
+   the expensive half is one line in `ui/styles.ts`. A landscape *phone* is out of the question either way —
+   390px of height has no band to give — so if this is taken, it should be gated on `min-height` so it
+   applies to tablets only.
+33. **The pixel art is upscaled by a fractional factor on any screen wider than 1280, and that is now the
+   only reason the same build looks different on two machines.** The shape question is settled (the box is
+   16:9 everywhere on a mouse device, a frame plus bands everywhere on a touch one), and the world was never
+   distorted — the renderer's fit is uniform on both axes and tested. What is left is sharpness:
+   `index.html` deliberately lifts the 1280px display cap (`--beam-run-max-width: 100vw`), so on a maximised
+   1920×1080 Windows window the frame is ~1689px, i.e. **1.32×** the internal resolution, and every authored
+   "pixel" is 1.32 device pixels — so some are drawn 1px wider than their neighbours and every edge lands
+   half-way across a pixel. A Mac at dpr 2 lands on a different fraction again. It is subtle and it is the
+   kind of thing an art director notices and a player does not. The fix is integer scaling: snap the
+   displayed frame to a whole multiple of 1280×720 (or of `1/dpr`), which is crisp at every size and buys it
+   with visible letterbox bars — on that 1920×1080 window the frame would be 1280×720 with 320px of teal a
+   side, i.e. a third of the screen given back. That is a look, not a bug fix, so it is the owner's call.
 
 ---
 

@@ -13,6 +13,7 @@ import {
   recoverFromLifeLost,
   standAtColumn,
   stepN,
+  stepToPlaying,
 } from '../test/helpers';
 import type { Simulation } from './Simulation';
 
@@ -443,6 +444,10 @@ describe('Screen 4 — Hire Under Fire (cross the lane → Talent500 → hire th
       sim.step(DT, makeInput({ right: !back, left: back }));
       t += DT;
     }
+    // Clearing a stage now stops on the congratulations card and then on the next
+    // stage's briefing card (owner call: two cards per transition), so the crossing
+    // ends in SCREEN_CLEAR rather than on screen 5. Press through both.
+    stepToPlaying(sim);
     expect(sim.screenId).toBe(5);
     expect(sim.setbacks).toBe(0);
   });
@@ -484,10 +489,12 @@ describe('Screen 4 — Hire Under Fire (cross the lane → Talent500 → hire th
     const before = sim.months;
     const base = sim.screen.data.monthsBase!;
     // Walk out of the right-hand side, haloed, so nothing intervenes.
-    for (let i = 0; i < 4000 && sim.screenId === 4; i += 1) {
+    for (let i = 0; i < 4000 && sim.state === 'PLAYING'; i += 1) {
       sim.player.box.x = Math.min(RESOLUTION.WIDTH, sim.player.box.x + 8);
       sim.step(DT, makeInput({ right: true }));
     }
+    // …and then through the two transition cards.
+    stepToPlaying(sim);
     expect(sim.screenId).toBe(5);
     expect(sim.months).toBe(before + base);
   });

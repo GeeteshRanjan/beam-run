@@ -19,15 +19,23 @@ need all of it. The rules that constrain these modules are in `docs/INVARIANTS.m
 **Engine (`src/core/`)**
 - `Loop.ts` — `advanceAccumulator()` (pure) + fixed 1/60 loop, dt clamp, timeScale, injectable now/raf.
 - `StateMachine.ts` + `gameStates.ts` — `GameState` and transitions (BOOT→START→TITLE_CARD→
-  PLAYING→WIN, plus PLAYING→**LIFE_LOST**→TITLE_CARD (same stage) | START (out of lives)).
-  `LIFE_LOST` cannot reach PLAYING directly — every retry goes via the stage's title card. With lives
-  left **nothing is drawn over the frame** during it (§4.2); `Simulation.retrying` tells the host to
-  print the badge line on the title card that follows.
-  **`TITLE_CARD` is the briefing between two screens and it waits for a press** — the one mid-run state
-  with no timeout (owner call). `Simulation.requestAdvance()` is the only way out of it and is called by
-  both `step()` (a mapped key) and the card's own button; `titleCardReady` reports the 0.4s grace,
-  `titleCardProgress` is presentation only. Every headless driver therefore has to press: see
-  `driveInput`/`stepToPlaying` in `src/test/helpers.ts`.
+  PLAYING→WIN, plus PLAYING→**SCREEN_CLEAR**→TITLE_CARD (next stage) and PLAYING→**LIFE_LOST**→TITLE_CARD
+  (same stage) | START (out of lives)).
+  `LIFE_LOST` cannot reach PLAYING directly — every retry goes via the stage's title card.
+  **Every transition is TWO waiting cards** (owner call): `SCREEN_CLEAR` congratulates the stage just
+  cleared and `TITLE_CARD` briefs the next one. `PLAYING` can no longer reach `TITLE_CARD` directly, and
+  the next screen is loaded by the press that *leaves* `SCREEN_CLEAR` — so `Simulation.clearedScreenId`,
+  not `screenId`, is what the congratulations card is drawn from (`docs/INVARIANTS.md`).
+  **`TITLE_CARD` is the briefing between two screens and it waits for a press** — neither card times out
+  (owner call). `Simulation.requestAdvance()` is the only way out of all three waiting states and is
+  state-aware (`SCREEN_CLEAR` → load + brief · `LIFE_LOST` → the same stage · `TITLE_CARD` → play), called
+  by both `step()` (a mapped key) and each card's own button; `titleCardReady` / `clearCardReady` /
+  `deathCardReady` report the 0.4s grace each needs, `titleCardProgress` is presentation only. Every
+  headless driver therefore has to press **twice per boundary**: see `driveInput`/`stepToPlaying` in
+  `src/test/helpers.ts`.
+  With lives left `LIFE_LOST` paints nothing over the frame for `LIVES.LOST_HOLD` — the impact beat —
+  and then, on the four stages that carry a powerup, `deathCardUp` turns the per-stage **death card** on
+  and the sim stops advancing by itself. The two screens with no powerup keep the old behaviour.
 - `Renderer.ts` — `computeViewport()` + `clampPixelRatio()` (both pure; DPR capped at 2), HiDPI,
   teal letterbox, internal 1280×720 transform + clip, shake offsets.
 - `Input.ts` — edge-detected `InputState`, arrows/WASD/Space/Esc/P/M, `setVirtual()`, `setAutoRun()`,
@@ -140,7 +148,11 @@ dark cell core, plus levitation shaft + flare + ground chevron — pure, so it r
 `Game.drawBadge` supplies only the band and a phase — plus **`drawBadgePerch`**, the same mark
 standing still on a wall with a contact shadow, a lit plinth and four flare cells, and none of the
 rail's shaft, brackets or ground chevron),
-`stamps.ts` (screen 1's hazard — pure, no wall clock, so it rasterises alone),
+`stamps.ts` (screen 1's hazard — pure, no wall clock, so it rasterises alone. **Two words per stamp**: the
+approval it refuses on the pale index plate, from `StampState.label` (authored in `levels.json`, carried
+through `Hazards/Stamps.ts` so the picture has one source), and **DENIED on the rubber die** in the inverse
+value. `STAMP_LABEL_INNER` is exported — the plate is the full 22 authored cells between the keylines, 88px,
+because 7 characters at scale 2 is 82px and the old 20-cell plate was 80),
 `maze.ts` (screen 2: the **7×13 grid at scale 5 = 35×65**, i.e. the *whole* creature that is on
 `origin/main` — slate cabinet, a gap, and the approval head floating above it — read through two mood
 palettes; the striped boom arm painted **behind** the head, 7 cells so it fits the box at rest;
@@ -148,13 +160,15 @@ the gather pad; **both plates through one `drawPlate`** — the lift's chevrons 
 and the hoist's stepping up above it, plus carriage shoes under each end and a mark per 80px of plate;
 and **`drawWeatherWash`**, the full-frame veil-and-wash half of that screen's weather, painted over the
 masonry the backdrop cannot reach and under the cast; pure, rasterises alone),
-**`dragon.ts`** (screen 4: the Godzilla as **one 46×38 grid at scale 5** — see `docs/INVARIANTS.md` for why
-that breaks the composed-creature rule on purpose, and why halving the cell is what "make it smaller and
-more refined" meant — plus the glasses drawn on top in *cell* coordinates so they mirror with it; the cone
+**`dragon.ts`** (screen 4: the Godzilla as **one 80×63 grid at scale 3** — the hero's own cell; see
+`docs/INVARIANTS.md` for why that breaks the composed-creature rule on purpose, and why shrinking the cell
+three times over is what "make it smaller / more refined" always meant — plus the opening **jaw** drawn on
+top in *cell* coordinates so it mirrors with the grid (a wedge from `JAW_ROW`, its own teeth at the grid's
+pitch, and a mandible under them); the cone
 of fire, painted **per column from `coneBoxes`' own arithmetic** rather than from the boxes themselves,
 with its cream floor telegraph and pinned taunt plaque; the floating brick the badge lands on; the
-**topple** (`drawTopplingBeast`, a per-row shear) and the **fallen costume** it becomes (a second 52×13
-grid whose zip is painted only as far as it has been opened); the cannon (32×17, a flared bell) and its
+**topple** (`drawTopplingBeast`, a per-row shear) and the **fallen costume** it becomes (a second grid,
+87×22 at the same scale 3, whose zip is painted only as far as it has been opened); the cannon (32×17, a flared bell) and its
 jets (a tapering line of cells, not five squares); steam; the five HIRED candidates walking out; and
 **`drawBurningHero`**, the game's fourth death pose. Pure, rasterises alone),
 `workplace.ts` (screen 3 — also **`drawBandages`** (the thrown roll as a stepped *disc* with a pale core
@@ -187,7 +201,9 @@ bands — and both are exported for `scenery.test.ts`, which is the only test th
 for Head Office, `docs/SCREENS.md` §4.13, and `drawOfficeInterior` for the Workplace, which paints that
 room **as the fix leaves it** and exports the geometry the damage layer draws against — now off the teal
 axis (`WALL` warm plaster, `FURN` warm furniture, a **cool** ceiling, cool daylight in the glazing), with
-two work pods instead of three and the services duct **cut** around each spotlight).
+two work pods instead of three and the services duct **cut** around each spotlight. Screen 1's backdrop also
+owns **`drawPermitFile`**, the grey ruled folder hanging under the clock — back by owner call, in the one
+gap in that sky no stamp parks in; both props' x is load-bearing, see `docs/SCREENS.md` §4.14).
 **Screen 4 has a second dial now**: `drawSceneBackground` takes `relief` alongside `weather` (a separate
 parameter, not a second meaning for one number), which turns an ember night into a bright morning — the
 same sun and cloud bank screen 2 uses, the skyline's lit windows going *out*, the heat haze off — and
@@ -200,16 +216,24 @@ it, the exact counterpart of `drawWeatherWash`),
 resolves to null without `Path2D`, draw is a no-op).
 
 **UI (`src/ui/`, DOM)** — `styles.ts` (scoped CSS in a TS template literal, minified by a Vite plugin),
-`Overlays.ts`'s `titlecard` is a **briefing** now, not a caption: stage name · one line about the stage
-(`COPY.titleCard.brief[screenId]`, at a 26-char measure) · the retry hint · a primary **Continue** cap
-wired to `onAdvance`, and **nothing under it** (two keyboard-prompt lines were tried and cut — see
+`Overlays.ts` carries **eight** surfaces, three of which are the run's punctuation and are built from the
+same parts: `clearcard` (you cleared THAT stage) · `titlecard` (here is THIS one) · `deathcard` (what just
+happened, and the powerup that answers it). `titlecard` is a **briefing**, not a caption: the level number
+as an eyebrow (`COPY.titleCard.tag`) · the stage name · one line about the stage
+(`COPY.titleCard.brief[screenId]`, at a 26-char measure) · **the control legend on two of the six cards**
+(`fillLegend`, driven by `LEGEND_ON_SCREEN` in `Game.ts`) · a primary **Continue** cap wired to
+`onAdvance`, and **nothing under it** (two keyboard-prompt lines were tried and cut — see
 `docs/INVARIANTS.md`). `role="dialog"` and it takes focus like every other overlay —
-the two `titlecard` special cases (`role="status"`, "transient → skip focus") are deleted. Its three
-variable lines are repainted only when one of them changes, because the host calls `show()` every frame.
+the two `titlecard` special cases (`role="status"`, "transient → skip focus") are deleted. Its variable
+lines are repainted only when one of them changes, because the host calls `show()` every frame — and the
+legend row is **emptied**, not just hidden, when a card teaches nothing (`display: none` does not take text
+out of `textContent`). `clearcard` and `deathcard` each repaint behind their own key; `deathcard` is an
+`alertdialog`, like `gameover`. The old `retryHint` line and its element are **deleted**: the per-stage
+death card says the same thing better.
 `Hud.ts` (two absolutely-positioned flex **columns**: left = stage · engaged capability,
 right = **lives · delay log**. There is **no TIME TO MARKET plaque** — owner call, §4; the months live
 on the receipt. `pixelArtWidthPx` is the numeric twin of the CSS sizing formula, taking cells so it
-answers for hand-built art too), `Overlays.ts` (start / titlecard (+ the retry line) / pause /
+answers for hand-built art too), `Overlays.ts` (start / clearcard / titlecard / deathcard / pause /
 **gameover** / win / summary — `columns()` splits the two *receipt* screens at ≥900px; `gameover` is
 deliberately one centred column. On `win` the left column is the run's cost — the **months lost to
 delays** figure that `startMonthsCountUp`/`advanceMonths` drive, the verdict line, and the itemised
@@ -219,9 +243,20 @@ lines are **deleted** with the two published averages — `docs/INVARIANTS.md`),
 silhouette hollowed out = spent, so shape carries it and the plaque cannot change width),
 `PixelType.ts` (bitmap type in the DOM as inline SVG:
 `setPixelText`, `setPixelButtonLabel`, `wrapPixelLabel`, `PX_TYPE` specs), `BrandMark.ts` +
-`ansrMark.ts` (generated brand path), `TouchControls.ts`, `AssistMenu.ts`, `NotFoundPage.ts`
+`ansrMark.ts` (generated brand path), `AssistMenu.ts`, `NotFoundPage.ts`
 (build-time only — its copy lives in `data/notFoundCopy.ts`, apart from `COPY`, so the 404 page's
 strings do not ship inside the game bundle).
+
+`TouchControls.ts` builds **three** clusters: the move pad bottom-left, the act cluster bottom-right
+(jump largest and lowest-right, the armed tool lifted onto a diagonal beside it) and **pause** in the top
+band. Only the pads are `aria-hidden` — pause duplicates no key on a phone, so it keeps a real label — and
+pause raises the same `pause` **edge** the Escape key does rather than touching the Game's flag, so one
+guard decides. `touchGeometry.ts` is its numbers: every portrait size is a `clamp(min, N × --beam-run-u,
+max)` spec, `styles.ts` generates the CSS from it and `touchAndAssist.test.ts` sums the row — four targets
+across a 390px frame do not fit at hand-picked pixel sizes, which is why the arithmetic is a module and not
+four literals in a stylesheet (`docs/INVARIANTS.md`, **Layout**). `styles.ts` also exports
+`stageClassName(isTouch)`: the stage stops being 16:9 and grows a control band **only on a touch device**,
+never on `@media (orientation: portrait)`, which used to give every narrow desktop window the phone box.
 
 **Other** — `audio/AudioEngine.ts` (Web Audio buses, 23 synthesised cues, 0 audio bytes shipped;
 two synthesis primitives — `tone()` for anything with a pitch and `noise()`, a looped white-noise buffer

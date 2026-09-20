@@ -125,39 +125,56 @@ export const COPY = {
      * avoid. It carries the word GCC where `COPY.meta.tagline` does not — that one
      * labels the *game* in host chrome, this one is the promise.
      */
-    tagline: 'Play the GCC journey before you plan it.',
+    headline: 'All of the delays. None of the damage.',
     /**
-     * The control guide, **drawn as key caps rather than written as a sentence**
-     * (owner call: "for the guide show the buttons instead of text, and you have not
-     * shown for fire").
-     *
-     * These two strings are what assistive tech and `textContent` get: the caps
-     * themselves are decorative pixel artwork, so the legend needs one real sentence
-     * behind it. They are also the only place the **act** button is named in words.
-     * A legend was cut from this screen once for reading as a manual, so the
-     * constraint is the size, not the fact: one row of small caps with a two- or
-     * three-letter label each, in the dimmest ink on the screen, and **above** the
-     * Start cap — a line of chrome under a button reads as a caption on the button.
-     *
-     * Which one is used depends on the device (`OverlayOptions.touch`): a phone player
-     * has no arrow keys and gets one-tap play by default, so the caps become the
-     * on-screen pads they will actually see.
+     * The offer, under the headline. It carries the word GCC where
+     * `COPY.meta.tagline` does not — that one labels the *game* in host chrome, this
+     * one is the promise — and it is set at `body` rather than as a second title,
+     * because two headlines is no headline.
      */
-    controlsKeys: 'Arrow keys move. Space jumps. F fires an ANSR tool.',
-    controlsTap: 'The pads move you, the big button jumps, the small one fires.',
-    /**
-     * The label under each cap in the legend. Two or three characters wherever the
-     * word allows it, because a label wider than the cap it sits beside turns a row of
-     * buttons into a row of words — which is what the owner asked to get away from.
-     *
-     * FIRE rather than SHOOT or CUT: one button does two jobs (the Workplace cutter
-     * and the hiring dragon's water cannon) and it only exists once a badge has armed
-     * one of them, so the legend names the *control*, not either tool. The per-tool
-     * wording lives on the touch button's own `aria-label` (`COPY.controls`).
-     */
-    legend: { move: 'Move', jump: 'Jump', fire: 'Fire' },
+    tagline: 'Play through the GCC journey, before you plan it.',
     play: 'Start',
     focusHint: 'Click or tap to play',
+  },
+
+  /**
+   * The control legend — **and it is not on the title screen any more** (owner call:
+   * "move the controls copy to the game screen rather than the opening screen, like a
+   * play through", and "introduce F for fire when it is relevant").
+   *
+   * It lives on the briefing cards now, which is the only place in the run where
+   * something stops and waits to be read. Two showings, no more:
+   *
+   *  - **Level 0** gets move + jump, on the card of the tutorial stage the two verbs
+   *    are taught on.
+   *  - **Level 3** gets the fire cap on its own, because that is the first screen
+   *    whose powerup puts a *tool* in the player's hands (the Workplace cutter; the
+   *    hiring dragon's water cannon is the same button one screen later). Showing all
+   *    three again there would re-teach the two the player has been using for three
+   *    stages to introduce the one they have not.
+   *
+   * The caps are decorative pixel artwork, so each row needs one real sentence behind
+   * it for assistive tech and `textContent` — that is what these four strings are, and
+   * which pair is used depends on the device (`OverlayOptions.touch`): a phone player
+   * has no arrow keys and gets one-tap play by default, so the caps become the
+   * on-screen pads they will actually see.
+   */
+  legend: {
+    moveJumpKeys: 'Arrow keys move. Space jumps.',
+    moveJumpTap: 'The pads move you, the big button jumps.',
+    fireKeys: 'F fires an ANSR tool once a powerup has armed one.',
+    fireTap: 'The small button fires an ANSR tool once a powerup has armed one.',
+    /**
+     * The label beside each cap. Two or three characters wherever the word allows it,
+     * because a label wider than the cap it sits beside turns a row of buttons into a
+     * row of words — which is what the owner asked to get away from.
+     *
+     * FIRE rather than SHOOT or CUT: one button does two jobs (the Workplace cutter
+     * and the hiring dragon's water cannon), so the legend names the *control*, not
+     * either tool. The per-tool wording lives on the touch button's own `aria-label`
+     * (`COPY.controls`).
+     */
+    caps: { move: 'Move', jump: 'Jump', fire: 'Fire' },
   },
 
   hud: {
@@ -264,25 +281,57 @@ export const COPY = {
    * `Simulation.screenLabel`.
    */
   titleCard: {
+    /**
+     * **The stage is numbered now** (owner call: "we need to call out level 1, level
+     * 2, etc.").
+     *
+     * It is a separate line rather than part of the name, set as a small caption above
+     * the title, and that is a measurement before it is a preference: the label is
+     * painted as *one* unwrapped bitmap line (`paintPixelSvg` is handed a single-element
+     * array), so folding the number into it — "LEVEL 2: THE COMPLIANCE MAZE", 28
+     * characters — would either overflow `maxShare` or shrink every stage name in the
+     * game to fit the longest one. An eyebrow also gives the number its own job: it
+     * says where you are in the run, which the name does not.
+     *
+     * **Five entries, not six.** The Tech Park is the arrival, not a level: it has no
+     * obstacle, no powerup and no months of its own, and numbering it would promise a
+     * sixth test after the one the player just passed.
+     */
+    tag: {
+      0: 'Level 0',
+      1: 'Level 1',
+      2: 'Level 2',
+      3: 'Level 3',
+      4: 'Level 4',
+    } as Record<number, string>,
     brief: {
-      0: 'Every plan looks clean from the lobby.',
-      1: 'Nothing here is approved the first time.',
+      /*
+       * Head Office, and the line the owner wrote for it is the whole thesis of the
+       * game in eight words: on a plan, every journey is a straight line. The screen
+       * then *is* a straight line — three labelled steps, no hazard — and every screen
+       * after it is not.
+       */
+      0: 'All journeys are straight roads during planning.',
+      /*
+       * Setup Delays. No apostrophe (the 5x7 font has none), so the owner's "don't"
+       * is set as "do not" — which at this measure also balances better: 24/12 rather
+       * than a widow.
+       */
+      1: 'Do not let the paperwork flatten you.',
       2: 'Nothing is filed in a straight line.',
       /*
-       * The Workplace. It used to read "The team is ready. The floor is not." — a
-       * good line on the wrong screen (owner call): **hiring is the stage after
-       * this one**, so a brief that opens with a team already in place promises
-       * people the run has not recruited yet, and the argument of the next screen
-       * ("talent never waits") reads as a contradiction of it.
+       * The Workplace — the one stage the owner left to us ("for this level think of a
+       * line"), so it is written to their pattern rather than to ours: name the thing
+       * the room does to you, in the room's own vocabulary, with no B2B word in it.
        *
-       * The problem this room is actually about is the one nobody budgets for: the
-       * site is committed — signed, paid for, on the plan — and none of it works.
-       * No power, no fit-out, half of it taped off. So the brief names the gap
-       * between the property and a place anybody could do a day of work in, and it
-       * names nobody, which is what keeps it true a screen early.
+       * The trap on this floor is the one nobody budgets for: the site is committed —
+       * signed, paid for, on the plan — and none of it works. Nothing is *missing*; it
+       * is all there and none of it is usable. So the brief puts the money and the
+       * uselessness in the same breath and names nobody, which is what keeps it true a
+       * screen before there is anybody to name.
        */
-      3: 'The lease is signed. Nothing works yet.',
-      4: 'Talent never waits, and it never plays fair.',
+      3: 'Paid for the space. Nobody can work in it.',
+      4: 'Staff your team before the project goes up in flames.',
       5: 'Doors open, and a year still in hand.',
     } as Record<number, string>,
     /**
@@ -300,15 +349,94 @@ export const COPY = {
     begin: 'Continue',
   },
 
-  /** Per-screen "on clear" lines (mirrored in levels.json, centralised here). */
-  onClear: {
-    0: 'Approved on paper.',
-    1: 'Setup accelerated.',
-    2: 'Compliance cleared.',
-    3: 'Workplace running.',
-    4: 'Talent secured.',
-    5: 'Live.',
-  } as Record<number, string>,
+  /**
+   * **Every transition is TWO cards now** (owner call: "every transition screen needs
+   * to be 2 screens instead of just 1 — one congratulations for clearing the level,
+   * and the second information about the next level").
+   *
+   * This is the first of the pair, and it is keyed by the screen the player has just
+   * **cleared**, not the one they are walking into — which is the whole trap in this
+   * feature, because `Simulation.clearScreen()` used to load the next screen before
+   * putting a card up. A congratulations card that reads its label off `screenId` says
+   * well done for a stage nobody has played yet.
+   *
+   * Two lines, and they do two different jobs on purpose: the headline is the credit
+   * (short, an exclamation, the only place in the game that is allowed one) and the
+   * line under it is the hand-off to the next stage. That split is why the pair works
+   * as a *beat* rather than as a second briefing card — you are told you won, and then
+   * told it is not over, and then the next card tells you what is next.
+   *
+   * Same two measurements as the briefing card: the headline is one bitmap line at the
+   * 20-character title measure, the line under it is two balanced ones at 26. And no
+   * apostrophes anywhere — the owner's "let's" and "don't" are set as "it gets" and
+   * "do not", because the 5x7 font has no apostrophe and a folded one is a hole.
+   */
+  clearCard: {
+    title: {
+      0: 'Good start!',
+      1: 'Approvals abound!',
+      2: 'Woohoo!',
+      3: 'Well done!',
+      4: 'Open for business!',
+    } as Record<number, string>,
+    line: {
+      0: 'Now it gets real.',
+      1: 'Good job. Do not get comfortable.',
+      2: 'Legal is happy. Facilities has questions.',
+      3: 'A functioning office. The next stage is hot.',
+      4: 'What takes a year, done with time to spare.',
+    } as Record<number, string>,
+    begin: 'Continue',
+  },
+
+  /**
+   * **A lost life shows a screen again, and it is per stage** (owner call, which
+   * reverses the earlier "a lost life shows no screen at all").
+   *
+   * What has *not* changed is the beat in front of it: the impact is still painted on
+   * the world for `LIVES.LOST_HOLD` — the hero flat under the stamp, or wrapped in the
+   * tape, with the cost flying up into the delay log — and only then does this card
+   * come up and wait for a press. So the player sees what happened before they are
+   * told about it, which is the order those two things have to arrive in.
+   *
+   * Four entries, and the four are exactly the screens that **carry a powerup**
+   * (`Simulation.screenHasPowerup`). That is not a coincidence to be tidied up later:
+   * the second line of every one of these cards is "take the ANSR powerup to …", so on
+   * Head Office and the Tech Park the card would be advice the room cannot obey. Those
+   * two keep the old behaviour — the impact beat, then the stage starts again.
+   *
+   * The headline is the system's own word, in the system's own register (DENIED!,
+   * Declined!) and never the player's fault; the line under it is the one instruction
+   * this game has, aimed at the specific thing this stage would have done differently.
+   * It replaces `lifeLost.retryHint` ("TAKE THE ANSR POWERUP"), which said the same
+   * thing generically, on the briefing card of the retry, in a slot a player had no
+   * reason to look at.
+   *
+   * **POWERUP, not badge** (owner call). "Badge" is what the code calls it — the type,
+   * the module, the data key — and it is the wrong word to hand a player: a badge is
+   * something you are given and wear, this is a thing you go and take that changes
+   * what the screen can do to you.
+   */
+  deathCard: {
+    title: {
+      1: 'Denied!',
+      2: 'Non-compliance is a non-option!',
+      3: 'Looks like the floor fell under you!',
+      4: 'Declined!',
+    } as Record<number, string>,
+    line: {
+      1: 'Take the ANSR powerup to avoid further delays.',
+      2: 'Take the ANSR powerup to avoid legal drama.',
+      3: 'Take the ANSR powerup to build your workspace.',
+      4: 'Take the ANSR powerup to hire faster and better.',
+    } as Record<number, string>,
+    /**
+     * The cap. "Try again" rather than the briefing card's "Continue": the card after
+     * this one is the same stage over again, and a button that says Continue on a
+     * screen that is sending you backwards is the browser explaining itself wrongly.
+     */
+    retry: 'Try again',
+  },
 
   /**
    * Setbacks cost months *and* a life. Every line still names the **system** as
@@ -345,30 +473,15 @@ export const COPY = {
     months: (months: number) => `+${months} months`,
   },
 
-  /**
-   * Losing a life no longer shows a screen at all (owner call): the stage simply
-   * starts again. What is left of the old coaching overlay is this one line,
-   * printed under the stage name on the title card of a retry — the teaching beat
-   * ("the powerup is why this happened") without a dialog to dismiss.
-   *
-   * Kept deliberately short: it is read in the second and a half a title card is
-   * on screen, and the full sentence still reaches assistive tech through the
-   * setback announcement (`a11y.setback` + `a11y.livesLeft`).
-   *
-   * **The player-facing word is POWERUP, not badge** (owner call). "Badge" is what
-   * the code calls it — the type, the module, the data key — and it is the wrong
-   * word to hand a player: a badge is something you are *given* and wear, and this
-   * is a thing you go and take that changes what the screen can do to you. Every
-   * surface a player reads says powerup now (here, the out-of-lives argument and
-   * both screen-reader lines); nothing in `src/` was renamed, because the internal
-   * vocabulary is consistent and this is a copy decision, not a refactor.
-   *
-   * It is only printed on a card whose screen actually carries one — Head Office
-   * and the Tech Park have no powerup at all (`Game.titleCardModel`).
+  /*
+   * `lifeLost.retryHint` ("Take the ANSR powerup") used to be here: one orange line
+   * under the stage name on the briefing card of a retry, and all that survived of an
+   * even earlier coaching overlay. It is **deleted**, because the per-stage death card
+   * (`COPY.deathCard`) now says the same thing louder, sooner and specifically — "take
+   * the ANSR powerup to avoid legal drama" on the maze, not "take the ANSR powerup" on
+   * a card introducing a stage. Printing both would have put the instruction on two
+   * consecutive surfaces, the second one quieter and vaguer than the first.
    */
-  lifeLost: {
-    retryHint: 'Take the ANSR powerup',
-  },
 
   /**
    * Out of lives — the only end-of-attempt screen there is now, and a conversion
@@ -382,7 +495,18 @@ export const COPY = {
    * beside "Start again".
    */
   gameOver: {
-    title: 'Out of runway.',
+    /**
+     * **"Business Case, Closed"** (owner call), and it is a sharper headline than the
+     * "Out of runway." it replaces for one reason: it is written in the language of the
+     * room where this actually happens. A GCC programme that runs out of time does not
+     * run out of runway, it gets its business case closed — by somebody who never saw
+     * any of the four screens the player just played.
+     *
+     * It is also the only end-screen headline in the game that names a *document*
+     * rather than a state, which is the register the whole run has been in: forms,
+     * filings, approvals, offers.
+     */
+    title: 'Business Case, Closed',
     /**
      * The caption over the figure, and the figure is the **same one the win screen
      * closes on** — months lost to delays (`win.lostLabel` / `win.monthsUnit`).
@@ -407,16 +531,20 @@ export const COPY = {
     fromDelays: (delays: number) =>
       delays === 1 ? 'From 1 delay.' : `From ${delays} delays.`,
     /*
-     * The argument that figure is evidence for. POWERUP, not badge (see
-     * `lifeLost.retryHint`); it still wraps to the same two balanced bitmap lines at
-     * the 26-character measure — "TAKE THE ANSR POWERUP AND" / "THESE MONTHS NEVER
-     * HAPPEN." — so the word is longer and the picture is not.
+     * The argument that figure is evidence for, and it is now the owner's line rather
+     * than ours: forward-looking ("next time") instead of a verdict on the attempt just
+     * lost, which is the right register on the one screen a player might close the tab
+     * on. POWERUPS, not badges (see `COPY.deathCard`).
      *
-     * "These months" is a **reference** to the figure printed directly above it, which
-     * is the one licensed way to say a word twice in a column: it points at the number
-     * rather than repeating it.
+     * Trimmed to the measure, not to taste. The owner's full line — "Next time, catch
+     * the ANSR powerups and breeze through your GCC setup!" — is 68 characters and needs
+     * **three** bitmap lines at the card's 26-character measure, the third of which is
+     * one word standing over the button. "Next time" is also already carried by the cap
+     * under it ("Start again"), and "your GCC setup" by the four screens the player has
+     * just been through, so both come out and the verb survives: catch them, and breeze
+     * through. Two balanced lines, 23/19.
      */
-    advice: 'Take the ANSR powerup and these months never happen.',
+    advice: 'Catch the ANSR powerups and breeze through.',
     /**
      * The only route off this screen (owner call: no Navigator button on the first
      * screen, this one, or the last). An attempt that ran out of lives has been shown
@@ -538,6 +666,14 @@ export const COPY = {
      * reveal, because there is no key cap to paint on the paving.
      */
     enterTunnel: 'Drop into the service tunnel',
+    /**
+     * The pause button, top-centre on touch. The only label in this group that is meant
+     * to be read out: the two thumb clusters are aria-hidden because they duplicate keys,
+     * and this one duplicates nothing — a phone has no Escape key, so before this button
+     * existed a touch player had no route to pause, the assist options or the way out at
+     * all.
+     */
+    pause: 'Pause the game',
   },
 
   /**
@@ -601,8 +737,8 @@ export const COPY = {
      * game read out loud.
      */
     outOfLives: (delayMonths: number, delays: number) =>
-      `Out of lives. ${delays} delays cost ${delayMonths} months. ` +
-      'Take the ANSR powerup at every stage and those months never happen.',
+      `Business case closed. ${delays} delays cost ${delayMonths} months. ` +
+      'Next time, catch the ANSR powerups and breeze through your GCC setup.',
     won: (delayMonths: number) =>
       delayMonths === 0
         ? 'Market entry complete. You reached the ANSR Tech Park with no delays.'

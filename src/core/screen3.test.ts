@@ -223,7 +223,13 @@ describe('Screen 3 — Workplace (taped off → 500Leaders → the room put righ
           sim.step(DT, makeInput({ right: i >= delay, jumpPressed: hold >= 8, jumpHeld: hold > 0 }));
           if (hold > 0) hold -= 1;
         }
-        if (sim.screenId > 3) won += 1;
+        /*
+         * Cleared, and that is now read off the STATE as well as the id: a stage ends on
+         * its congratulations card (owner call, two cards per transition), where the id
+         * is still the stage just finished. Reading the id alone reported every policy in
+         * this sweep as a failure.
+         */
+        if (sim.screenId > 3 || sim.state === 'SCREEN_CLEAR') won += 1;
         if (sim.setbacks > 0) delayed += 1;
       }
       return { won, delayed };

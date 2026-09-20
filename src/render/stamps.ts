@@ -6,8 +6,21 @@
  * black rubber die at the bottom. It is authored as a pixel grid (like the hero
  * and the badge) rather than as a pile of rectangles, because that is the idiom
  * the rest of the art uses and because the grid is what makes the shape read at
- * 8-bit scale. `DENIED` itself is set in the 5×7 bitmap font on the label panel,
- * so there is exactly one font in the game.
+ * 8-bit scale. Both words on it are set in the 5×7 bitmap font, so there is exactly
+ * one font in the game.
+ *
+ * **Two words now, and which one is where is the whole point** (owner call):
+ * `DENIED` is printed on the **rubber die at the bottom** — the part that actually
+ * comes down on you, and the part that leaves the mark — and the index label above it
+ * carries what *this* stamp is refusing: ENTITY · BANKING · TAX IDS · DIR KYC, one
+ * each, authored in `levels.json`.
+ *
+ * That swap is worth more than it looks. Four identical stamps all shouting the same
+ * word is one piece of information repeated four times; four stamps each naming a
+ * different approval, all refusing it, is the screen's argument — setup is not one
+ * gate, it is four, and every one of them comes back. And DENIED belongs on the die
+ * because that is where a real stamp's message lives: the label on the body is the
+ * index (what it is for), the die is the impression (what it says).
  *
  * Two rules the geometry has to obey, both guarded by tests:
  *
@@ -84,11 +97,20 @@ const STAMP_PALETTE: Palette = {
  * 22 rows × scale 4 = 88px = `HEAD_H`, and 24 cols × 4 = 96px = `WIDTH`.
  *
  * The body stays full width rather than being waisted like a real stamp, because
- * the label has to carry DENIED at bitmap scale 2 (71px) and every cell inset from
+ * the label has to carry a word at bitmap scale 2 and every cell inset from
  * the edge is 4px off the panel. The silhouette is therefore carried by the knob
  * and stem, and the body is separated from the rubber die by shading and a lit
  * seam instead of by width. The die is the full width of the hitbox on purpose: a
  * die narrower than the box would clip you with pixels that are not there.
+ *
+ * **The label plate runs the full 22 cells between the keylines** (cols 1–22, 88px),
+ * where it used to be inset a further cell each side inside the pale body frame (20
+ * cells, 80px). That is a measurement, not a restyle: the longest authored label is 7
+ * characters and the font sets 7 at scale 2 in 82px, which does not fit 80. Losing the
+ * frame on those seven rows costs nothing — the plate is still boxed by the `B`/`b`
+ * courses above and below it and by the near-black keyline either side — and it reads
+ * *better*, because a paper index label glued across the full width of the body is what
+ * the real object has.
  */
 const STAMP: readonly string[] = [
   '.......KKKKKKKKKK.......',
@@ -105,13 +127,13 @@ const STAMP: readonly string[] = [
   'KLLLLLLLLLLLLLLLLLLLLLLK',
   'KBBBBBBBBBBBBBBBBBBBBBBK',
   'KBbbbbbbbbbbbbbbbbbbbbBK',
-  'KBwwwwwwwwwwwwwwwwwwwwBK',
-  'KBWWWWWWWWWWWWWWWWWWWWBK',
-  'KBWWWWWWWWWWWWWWWWWWWWBK',
-  'KBWWWWWWWWWWWWWWWWWWWWBK',
-  'KBWWWWWWWWWWWWWWWWWWWWBK',
-  'KBWWWWWWWWWWWWWWWWWWWWBK',
-  'KBwwwwwwwwwwwwwwwwwwwwBK',
+  'KwwwwwwwwwwwwwwwwwwwwwwK',
+  'KWWWWWWWWWWWWWWWWWWWWWWK',
+  'KWWWWWWWWWWWWWWWWWWWWWWK',
+  'KWWWWWWWWWWWWWWWWWWWWWWK',
+  'KWWWWWWWWWWWWWWWWWWWWWWK',
+  'KWWWWWWWWWWWWWWWWWWWWWWK',
+  'KwwwwwwwwwwwwwwwwwwwwwwK',
   'KBbbbbbbbbbbbbbbbbbbbbBK',
   'KBBBBBBBBBBBBBBBBBBBBBBK',
   'KbbBBBBBBBBBBBBBBBBBBbbK',
@@ -128,9 +150,18 @@ const STAMP: readonly string[] = [
 /** Rows of `STAMP` that are the pressing body, i.e. the hitbox. */
 export const STAMP_BODY_ROWS = 22;
 const STAMP_H = STAMP.length * STAMP_SCALE;
-/** Label panel: the `w`/`W`/`w` rows, where DENIED is set. */
+/** Label panel: the `w`/`W`/`w` rows, where the stamp's subject is set. */
 const LABEL_TOP_ROW = 14;
 const LABEL_ROWS = 7;
+/**
+ * Widest string the label plate can take, in internal px: the plate spans cols 1–22,
+ * i.e. `WIDTH` less one keyline cell each side. Exported so `stamps.test.ts` measures
+ * every authored label against the plate rather than against a number typed twice.
+ */
+export const STAMP_LABEL_INNER = S.WIDTH - 2 * STAMP_SCALE;
+/** The rubber die, where DENIED is printed: the `D` rows, above the bottom keyline. */
+const DIE_TOP_ROW = 26;
+const DIE_ROWS = 5;
 
 /**
  * The inked impression under every stamp column, printed on the floor. Drawn
@@ -201,16 +232,34 @@ export function drawStamps(
 
     drawPixels(ctx, STAMP, STAMP_PALETTE, cx - W / 2, gridTop, { scale: STAMP_SCALE });
 
-    // The printed index label. Cool and quiet while ANSR holds the mechanism back —
-    // the same stamp, no longer shouting.
+    // The printed index label: what THIS stamp is for. Cool and quiet while ANSR holds
+    // the mechanism back — the same stamp, no longer shouting.
     const labelY = gridTop + LABEL_TOP_ROW * STAMP_SCALE;
     const labelH = LABEL_ROWS * STAMP_SCALE;
     if (slowed) {
-      pxRect(ctx, '#9FB6BE', cx - W / 2 + PX * 2, labelY, W - PX * 4, labelH, PX);
+      pxRect(ctx, '#9FB6BE', cx - W / 2 + PX, labelY, STAMP_LABEL_INNER, labelH, PX);
     }
-    drawText(ctx, 'DENIED', cx, labelY + labelH / 2 - 7, {
+    drawText(ctx, s.label, cx, labelY + labelH / 2 - 7, {
       scale: 2,
       color: slowed ? '#2C4A55' : '#3A1414',
+      align: 'center',
+    });
+
+    /*
+     * …and DENIED on the rubber die, which is where a stamp's message actually lives
+     * (owner call: "denied can be shifted onto the black/bottom part of the stamp").
+     *
+     * Light type on the darkest value in the picture, so it is the *inverse* of the
+     * label above it — which is what stops the two words reading as one block of
+     * signage. It sits in the die's own five rows and stops clear of the bottom
+     * keyline, so the word is on the rubber rather than on the edge of it. Dimmed
+     * under assist for the same reason the label is: the refusal is still there, it
+     * just is not shouting.
+     */
+    const dieY = gridTop + DIE_TOP_ROW * STAMP_SCALE;
+    drawText(ctx, 'DENIED', cx, dieY + (DIE_ROWS * STAMP_SCALE) / 2 - 7, {
+      scale: 2,
+      color: slowed ? '#5D7A84' : '#F1F7F9',
       align: 'center',
     });
 

@@ -204,6 +204,19 @@ export class Simulation {
 
   private titleCardT = 0;
   private lifeLostT = 0;
+  /** Time on the congratulations card, for its own press grace (see `clearCardReady`). */
+  private clearCardT = 0;
+  /**
+   * The screen the congratulations card is about — the one just **cleared**, not the
+   * one ahead.
+   *
+   * It exists because the two are no longer the same thing at the moment a card is up:
+   * the next screen is loaded by the press that leaves `SCREEN_CLEAR`, so while that
+   * card is on screen `_screenId` is still the finished stage — and this field keeps
+   * that reading valid for the host even after the load, which is what stops a
+   * one-frame flicker of the wrong stage name as the two cards swap.
+   */
+  private _clearedScreenId = 0;
   /**
    * True while the stage the player is on is a *retry* — i.e. the last thing that
    * happened was a lost life on this same screen.
@@ -264,6 +277,45 @@ export class Simulation {
    */
   get titleCardReady(): boolean {
     return this.titleCardT >= TRANSITION.TITLE_CARD_SKIP_AFTER;
+  }
+  /**
+   * True once a press on the congratulations card would be taken.
+   *
+   * The same grace as the briefing card's, and it is needed for a sharper reason here:
+   * the player is **running** when this card opens — they walked into the exit, so a
+   * movement or jump key is almost certainly held down on the frame it appears. Without
+   * the grace the congratulations card would be dismissed by the press that earned it.
+   */
+  get clearCardReady(): boolean {
+    return this.clearCardT >= TRANSITION.TITLE_CARD_SKIP_AFTER;
+  }
+  /** The screen the congratulations card is about: the one just cleared. */
+  get clearedScreenId(): number {
+    return this._clearedScreenId;
+  }
+  /**
+   * True while the per-stage **death card** should be on screen: a life was lost, there
+   * are lives left, the impact beat has been held, and this stage has a powerup to be
+   * told about.
+   *
+   * That last condition is the whole reason this is a getter rather than a plain state:
+   * every death card's second line is "take the ANSR powerup to …", so on the two
+   * screens that carry no powerup (Head Office, the Tech Park) the card would be advice
+   * the room cannot obey. Those two keep the older behaviour — the impact beat, then the
+   * stage restarts by itself — and `step()` reads the same getter to decide whether to
+   * wait or to carry on.
+   */
+  get deathCardUp(): boolean {
+    return (
+      this.sm.state === 'LIFE_LOST' &&
+      this._lives > 0 &&
+      this.lifeLostT >= LIVES.LOST_HOLD &&
+      this.screenHasPowerup
+    );
+  }
+  /** True once a press on the death card would be taken (grace, as above). */
+  get deathCardReady(): boolean {
+    return this.lifeLostT >= LIVES.LOST_HOLD + TRANSITION.TITLE_CARD_SKIP_AFTER;
   }
   /** True when the current stage is a retry after a lost life (see `_retry`). */
   get retrying(): boolean {
@@ -600,6 +652,25 @@ export class Simulation {
    * host can wire the button once and never check.
    */
   requestAdvance(): void {
+    /*
+     * The congratulations card, which is the *first* of the two cards every transition
+     * now shows. Leaving it is where the next screen is actually loaded — see
+     * `clearScreen()` — so the pair reads: you cleared THAT stage, press, here is THIS
+     * one, press, play.
+     */
+    if (this.sm.state === 'SCREEN_CLEAR') {
+      if (!this.clearCardReady) return;
+      this.loadScreen(this._clearedScreenId + 1);
+      this.enterTitleCard();
+      return;
+    }
+    // The death card, on a stage with a powerup to be told about. It hands back to the
+    // same screen, never the next one — `continueAfterLifeLost` owns that rule.
+    if (this.sm.state === 'LIFE_LOST') {
+      if (!this.deathCardUp || !this.deathCardReady) return;
+      this.continueAfterLifeLost();
+      return;
+    }
     if (this.sm.state !== 'TITLE_CARD') return;
     if (!this.titleCardReady) return;
     this.sm.transitionTo('PLAYING');
@@ -629,6 +700,8 @@ export class Simulation {
       this.resetRunState();
       this.loadScreen(0);
       this.titleCardT = 0;
+      this.clearCardT = 0;
+      this._clearedScreenId = 0;
       this.sm.transitionTo('START');
       return;
     }
@@ -646,6 +719,8 @@ export class Simulation {
     this.loadScreen(0);
     this.titleCardT = 0;
     this.lifeLostT = 0;
+    this.clearCardT = 0;
+    this._clearedScreenId = 0;
     this.sm.force('START');
   }
 
@@ -725,14 +800,26 @@ export class Simulation {
     this.sm.transitionTo('LIFE_LOST');
   }
 
+  /**
+   * The stage is won: book its months, tell the host, and stop on the
+   * **congratulations card** (owner call — every transition is two cards now).
+   *
+   * Note what does *not* happen here any more: the next screen is **not loaded**. That
+   * moved to `requestAdvance()`, because a card that congratulates the player has to be
+   * able to name the stage they just finished, and this method used to swap the screen
+   * out from under the card before it was ever painted. `_clearedScreenId` is the
+   * card's subject and it survives the load that follows.
+   */
   private clearScreen(): void {
     this.monthsBooked += this._screen.data.monthsBase ?? 0;
     this.events.onScreenClear?.(this._screenId, this.screenClock, this.setbacksOnScreen);
-    const next = this._screenId + 1;
-    if (next < SCREEN_COUNT) {
-      this.loadScreen(next);
-      this.enterTitleCard();
-    }
+    // Guarded exactly as the old two-line version was: the last screen ends on its
+    // win trigger, and walking off the right-hand edge of it must not open a
+    // congratulations card for a stage that does not exist.
+    if (this._screenId + 1 >= SCREEN_COUNT) return;
+    this._clearedScreenId = this._screenId;
+    this.clearCardT = 0;
+    this.sm.transitionTo('SCREEN_CLEAR');
   }
 
   private finishRun(): void {
@@ -766,6 +853,19 @@ export class Simulation {
         this.updatePlaying(dt, input);
         break;
 
+      /*
+       * The congratulations card — the first half of every transition (owner call). It
+       * waits, exactly like the briefing card, and for the same reason: a line the
+       * player is meant to read cannot be on a timer somebody else chose. Its grace is
+       * doing more work than the briefing card's, though, because a player arrives here
+       * with a key held down (they walked into the exit).
+       */
+      case 'SCREEN_CLEAR': {
+        this.clearCardT += dt;
+        if (input.anyPressed) this.requestAdvance();
+        break;
+      }
+
       case 'LIFE_LOST': {
         this.lifeLostT += dt;
         // With lives left this is not a screen at all: it is the beat the impact
@@ -776,8 +876,24 @@ export class Simulation {
         // waits for a deliberate choice and never times out from under the
         // player.
         if (this._lives > 0) {
-          const canSkip = this.lifeLostT >= LIVES.LOST_SKIP_AFTER && input.anyPressed;
-          if (canSkip || this.lifeLostT >= LIVES.LOST_HOLD) this.continueAfterLifeLost();
+          /*
+           * …and then, on the four stages that carry a powerup, the **death card** comes
+           * up and waits (owner call, which reverses "a lost life shows no screen at
+           * all"). The impact beat in front of it is unchanged — `LOST_HOLD` on the
+           * flattened hero, with the cost flying into the delay log — so the player
+           * still watches what happened before they are told about it. The card is the
+           * only thing that has been put back, and it is per stage.
+           *
+           * `LOST_SKIP_AFTER` therefore only cuts the *beat* short now, on the two
+           * screens with no card (Head Office, the Tech Park): elsewhere an early press
+           * is swallowed and the card takes over at `LOST_HOLD`.
+           */
+          if (this.screenHasPowerup) {
+            if (input.anyPressed) this.requestAdvance();
+          } else {
+            const canSkip = this.lifeLostT >= LIVES.LOST_SKIP_AFTER && input.anyPressed;
+            if (canSkip || this.lifeLostT >= LIVES.LOST_HOLD) this.continueAfterLifeLost();
+          }
         }
         break;
       }

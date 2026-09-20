@@ -38,7 +38,7 @@
       ],
       "note": "Head Office has NO BADGE (owner call). It carried a SAFE_PASSAGE mark as a tutorial - collect it and nothing happens - and that is exactly why it went: the first ANSR badge a player ever sees taught them that taking one changes nothing, one screen before the badge that saves their life. The first mark in the run is now 1Wrk on Setup Delays, where taking it is the difference between walking through the DENIED stamps and being flattened by them. The three labelled steps are the tutorial: they teach the jump, and they are the only thing on this screen that has to be learnt.",
       "copy": {
-        "titleCard": "Head Office",
+        "titleCard": "The Head Office",
         "hint": "Move: \u2190 \u2192  \u00b7  Jump: Space / \u2191",
         "onClear": "Approved on paper."
       }
@@ -74,10 +74,16 @@
         }
       ],
       "stamps": [
-        { "gx": 7, "phase": 0.0, "zone": "struggle" },
-        { "gx": 12, "phase": 0.5, "zone": "struggle" },
-        { "gx": 20, "phase": 0.25, "zone": "relief" },
-        { "gx": 25, "phase": 0.75, "zone": "relief" }
+        {
+          "gx": 7,
+          "phase": 0.0,
+          "zone": "struggle",
+          "label": "ENTITY",
+          "note": "Each stamp names ONE of the four setup approvals on its index label, and every one of them prints DENIED on its rubber die (owner call: 'where denied is written it needs to convey these, 1 for each', and 'denied can be shifted onto the black/bottom part of the stamp'). Legal Entity Formation -> ENTITY, Banking Account Setup -> BANKING, PAN/TAN/GST Registration -> TAX IDS, Director Forms -> DIR KYC, left to right in the order a real setup hits them. Four identical stamps shouting one word was one piece of information repeated four times; four stamps each refusing a different approval is the screen's argument. These labels are DRAWN content, so: uppercase only, no apostrophe, and at most 7 CHARACTERS - the label plate is 22 authored cells (88px) and the 5x7 font sets 7 characters at scale 2 in 82px. stamps.test.ts measures every authored label against the plate, so a longer one fails the build rather than silently falling off the label onto the body."
+        },
+        { "gx": 12, "phase": 0.5, "zone": "struggle", "label": "BANKING" },
+        { "gx": 20, "phase": 0.25, "zone": "relief", "label": "TAX IDS" },
+        { "gx": 25, "phase": 0.75, "zone": "relief", "label": "DIR KYC" }
       ],
       "badge": {
         "type": "PLACE_TILE",
@@ -130,12 +136,13 @@
       },
       "monsters": [
         {
-          "name": "TAX",
+          "name": "EXIM",
           "from": 7,
           "to": 8,
           "gy": 15,
           "seed": 11,
           "zone": "struggle",
+          "note": "THE FIVE NAMES ARE THE OWNER'S, and they replace TAX / GST / LEGAL / ENTITY / AUDIT: Export-Import Registration -> EXIM, Inter-company Agreement -> INTERCO, Notarisation -> NOTARY, Board Meetings -> BOARD, Transfer Pricing Agreement -> TP PACT. The old set named the DEPARTMENTS a filing goes through; this one names the FILINGS themselves, which is the thing that actually comes back. Each is set on a plaque at bitmap scale 2 over a creature 5 tiles wide, so LENGTH IS A CONSTRAINT: the long forms are 18+ characters of near-white lying across half the maze, and five of those shoulder to shoulder on the landing is the unreadable block the plaque is dropped to avoid. Seven characters is the ceiling the old set established (ENTITY was six) and screen2.test.ts holds the new set to it. Uppercase, no apostrophe - these are drawn in the 5x7 font, which has neither lower case nor an apostrophe.",
           "route": [
             { "gx": 9, "gy": 14 },
             { "gx": 11, "gy": 13 },
@@ -146,7 +153,7 @@
           ]
         },
         {
-          "name": "GST",
+          "name": "INTERCO",
           "from": 9,
           "to": 15,
           "gy": 14,
@@ -161,14 +168,14 @@
           ]
         },
         {
-          "name": "LEGAL",
+          "name": "NOTARY",
           "from": 9,
           "to": 14,
           "gy": 9,
           "hoist": true,
           "seed": 53,
           "zone": "struggle",
-          "note": "LEGAL rides the clearance hoist, which is this maze's fifth level now that the long platform at gy 8 is gone. `hoist` means its surface is the plate's live top rather than a row in this file, so `gy` here is only the plate's parking row - the corridor it wanders is the plate's own span (gx 9-14). Boarding the hoist therefore costs the same as any other corridor on this screen: you read the monster first.",
+          "note": "NOTARY rides the clearance hoist, which is this maze's fifth level now that the long platform at gy 8 is gone. `hoist` means its surface is the plate's live top rather than a row in this file, so `gy` here is only the plate's parking row - the corridor it wanders is the plate's own span (gx 9-14). Boarding the hoist therefore costs the same as any other corridor on this screen: you read the monster first.",
           "route": [
             { "gx": 15, "gy": 11 },
             { "gx": 17, "gy": 10 },
@@ -176,7 +183,7 @@
           ]
         },
         {
-          "name": "ENTITY",
+          "name": "BOARD",
           "from": 17,
           "to": 22,
           "gy": 10,
@@ -185,7 +192,7 @@
           "route": [{ "gx": 20, "gy": 10 }]
         },
         {
-          "name": "AUDIT",
+          "name": "TP PACT",
           "from": 20,
           "to": 23,
           "gy": 5,
@@ -211,7 +218,7 @@
         "restW": 2,
         "note": "GCC-BOT files on your behalf. Every toll gate in the maze stands open for good, the five compliance monsters stop scowling and walk off to the landing together, and the weather over the market clears - the whole maze becomes a staircase you simply climb. Skip it and the same maze has to be timed corridor by corridor, with a wandering monster on every level. DELIVERY: this is the one badge that is neither on a rail nor air-dropped (owner call: 'remove the ANSR powerup rail and instead make a brick wall which will have an ANSR powerup on it'). It stands on the top course of 'wall-ansr-mark', which is a FLOATING brick structure over the left corridor and not a wall standing on the floor (owner call, a second note on the same pass: 'the powerup is easily available and is on the way, so the player would anyway take it - keep it somewhere that it is on the user to take it or not, maybe a floating brick structure where it resides, the player jumps up to it, takes it and then comes back to the normal path'). On the ground it was a hurdle you had to clear anyway, so everybody collected the mark for free; floating at gy 12 its underside leaves 36px of air over a standing head, so holding RIGHT walks straight underneath and the detour is a decision. The mark is CENTRED on the deck (owner call: 'the ANSR powerup is on the right side of the brick, make it centre on the floating brick'), which is what 'restW': 2 means - gx is the deck's first column and the one-tile pickup is centred across the two, at x 60-100. It used to stand on the deck's LAST column under an older owner rule (a mark in the middle can be walked off the far side by somebody who landed late), and that rule was written for a deck you arrive at walking RIGHT; this one is reached by turning round and jumping back up-LEFT, so the player arrives at its far end and walks into the middle regardless. gx 6 is still the last column any part of this pickup may use, because TAX's corridor starts at gx 7 and the badge has to precede every obstacle. The deck is THREE blocks (gx 4-6) rather than four, and that is a measured number, not a shape: it is 120px over the floor, so it has to be cleared in one arc, and every column added to its LEFT end costs run-up. At gx 3-6 a one-tap auto-run player had a 0.20s window of taps that landed on it; at gx 4-6 the window is 0.35s, against a 0.30s budget (badgeReach.test.ts)."
       },
-      "copy": { "titleCard": "Compliance", "onClear": "Compliance cleared." }
+      "copy": { "titleCard": "The Compliance Maze", "onClear": "Compliance cleared." }
     },
 
     {
@@ -251,7 +258,7 @@
         "restGy": 12,
         "note": "DELIVERY: the rail is gone (owner call: 'for the powerup remove the rail and add - from the spot light I just said - an ANSR powerup that falls and stays for a few seconds, and the user has to take it otherwise it's gone, and this happens at regular intervals; and this powerup doesn't drop immediately, it's visible as the user comes to this screen but drops after a few seconds the user has spent in the screen, and this drops on a cabinet or something which is before the partition wall so the user can take it safely but the player has to put in some effort to grab it'). So this is the fourth delivery model and the only one tied to its own screen's picture: the mark hangs in the beam of the FIRST of the four ceiling spotlights - gx 5 is that fitting's own centre column (x 220), so it falls straight down its own axis - waits POWERUPS.CEILING.HOLD (3.2s) while the player walks in and watches it, drops onto the top of the floating overhead cabinet at restGy 12, rests there for LIFETIME (4.5s) and is gone until the next cycle. The cabinet ('cabinet-badge', gx 4-5 gy 12) is the effort: it FLOATS, leaving 36px over a standing head, so holding RIGHT walks straight underneath and takes nothing, and getting on top of it means clearing 120px of the 140 a jump has - i.e. the button held for ~20 frames, the same figure the air-dropped brick on screen 4 forced. It is BEFORE the partition (gx 7) so the whole transaction happens on the safe side of the wall, which is the owner's 'so the user can take it safely'; and its right edge (x 240) is 40px clear of the wall's face, which is load-bearing rather than tidy - a player pinned against the partition must not be standing UNDER the cabinet, or its underside caps his jump at 36px and the screen is sealed. The only badge in the game that is visible before it is takeable: the offer is on screen from frame one and being ready for it is a decision. The rest is unchanged - it is still the only badge that hands the player a verb of their own: it makes a cutter appear and the shoot button live, and what it fires are small orbs of fire. Three hits BURN the three tape layers off him - an ember front eats along each band, ash falls away, and a permanent soot mark is left behind, so the body carries the score rather than only the three pips over his head - and then he unravels, and he does NOT die. He is a colleague somebody taped off like a piece of broken furniture: shirt, sleeves rolled up, straight to the sparking terminal, and it is his work that lights the floor and clears every sign and every strip of tape. The blocker becomes the person who makes it right. Skip the badge and there is no cutter, so the same figure has to be timed and jumped instead."
       },
-      "copy": { "titleCard": "Workplace", "onClear": "Workplace running." }
+      "copy": { "titleCard": "The Fit-Out Trap", "onClear": "Workplace running." }
     },
 
     {
@@ -280,9 +287,10 @@
           "from": 23,
           "to": 29,
           "seed": 1774,
-          "taunts": ["CANDIDATE DECLINED", "POOL TOO NARROW", "COUNTER OFFER", "NOTICE PERIOD"],
+          "taunts": ["OFFER DROPOUT", "POOL TOO NARROW", "COUNTER OFFER", "90-DAY NOTICE"],
+
           "zone": "struggle",
-          "note": "It STANDS ON THE GROUND on two feet (owner call, third pass - it used to hover over row 9, and before that it roamed the whole frame holding a standoff from the player). There is no hover row here any more: HAZARDS.DRAGON.BODY_H and the ground band decide its height, and columns 23-29 are the patch of floor it holds, drifting only inside HAZARDS.DRAGON.ROOST_DRIFT of the centre of them. Its BODY IS NOT A HITBOX: the only lethal thing on the screen is one straight, growing, slightly diverging CONE of fire thrown from its jaw down the lane in front of it (HAZARDS.DRAGON.CONE_*). Nothing travels - the fireballs and the rolling flame fronts are gone - so the dangerous floor is a fixed strip with a rhythm, telegraphed for BURST_WINDUP along the ground before it lights. Each burst carries ONE of the taunts on a plaque that stays put over the lane; the next burst brings the next one. The taunts are drawn content rather than notes: uppercase only, no apostrophes, short enough to read while the floor in front of you is on fire."
+          "note": "It STANDS ON THE GROUND on two feet (owner call, third pass - it used to hover over row 9, and before that it roamed the whole frame holding a standoff from the player). There is no hover row here any more: HAZARDS.DRAGON.BODY_H and the ground band decide its height, and columns 23-29 are the patch of floor it holds, drifting only inside HAZARDS.DRAGON.ROOST_DRIFT of the centre of them. Its BODY IS NOT A HITBOX: the only lethal thing on the screen is one straight, growing, slightly diverging CONE of fire thrown from its jaw down the lane in front of it (HAZARDS.DRAGON.CONE_*). Nothing travels - the fireballs and the rolling flame fronts are gone - so the dangerous floor is a fixed strip with a rhythm, telegraphed for BURST_WINDUP along the ground before it lights. Each burst carries ONE of the taunts on a plaque that stays put over the lane; the next burst brings the next one. TWO of them are the owner's rewording: CANDIDATE DECLINED -> OFFER DROPOUT (a candidate who declines is a no; a dropout is somebody who had already said yes, which is the thing that actually costs a GCC build a quarter) and NOTICE PERIOD -> 90-DAY NOTICE, because the number IS the problem - 'notice period' is a neutral HR term and '90-day' is the delay. The word ROAR that used to be painted off the beast's jaw is gone with them (owner call): the concentric arcs were always the cue and the word was a caption on them. The taunts are drawn content rather than notes: uppercase only, no apostrophes, short enough to read while the floor in front of you is on fire."
         }
       ],
       "badge": {

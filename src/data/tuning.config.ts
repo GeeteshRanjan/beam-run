@@ -1453,8 +1453,18 @@ export const ASSIST = {
   SLOW_MODE_TIME_SCALE: 0.7,            // optional 30% slowdown
   NO_SETBACKS: false,                   // "just explore" mode toggle
   EXTRA_TELEGRAPH_BONUS: 0.25,          // s added to all telegraphs when ON
-  /** One-tap play: the hero runs forward, a single tap acts. Default on touch. */
-  AUTO_RUN_DEFAULT_ON_TOUCH: true,
+  /**
+   * One-tap play: the hero runs forward on his own, a single tap acts.
+   *
+   * OFF by default, including on touch (owner call). It shipped on, on the argument
+   * that an executive should not have to drive a virtual d-pad to hear the message —
+   * but auto-run also takes away the only thing the player controls between
+   * obstacles, so a phone player was carried into every hazard on a timer they had
+   * no part in setting, and "walk up to it, look at it, then jump" stopped being
+   * available on the platform most of this audience is on. It remains an assist
+   * option, one checkbox away, for anybody who wants it.
+   */
+  AUTO_RUN_DEFAULT_ON_TOUCH: false,
 } as const;
 
 /** Brand palette (from ANSR Brand Style Guide 2022) — engine reference only. */

@@ -4116,3 +4116,517 @@ Rasters, all in `/tmp/brrender`: `gz2.mts` → `gz2.png` (the grid at 6×, four 
 `s4-idle.png`, `s4-windup.png`, `s4-burn.png`, `s4-fall.png`, `s4-open.png`, `s4-hired.png` — the beast
 against the skyline, the telegraph on its head, the cone, the pivot mid-fall, the hatch open with the first
 two hires out, and the full line-up of five in the recovered daylight.
+
+---
+
+## Pass — the Godzilla's third resolution, and a mouth that is a jaw
+
+**Owner, one note in two parts:** *"The Godzilla's mouth can be made a bit better, it's not well shaped
+right now, and can we reduce the pixel size on the entire Godzilla — right now it's not looking very good
+and not at all refined?"*
+
+Both halves are presentation, so `world/`, `data/` and every tuning number are untouched. The pass changed
+two grid literals, four constants, one drawing routine and one comment that had been lying for three passes.
+
+### The size question was already answered twice, and the answer was the same both times
+
+This is the **third** time the same note has arrived about this animal, and the lineage is the finding:
+
+| pass | grid | scale | drawn | cells |
+|---|---|---|---|---|
+| first | 30×24 | 10 | 300×240 | 720 |
+| second | 48×38 | 5 | 240×190 | 1,748 |
+| **this** | **80×63** | **3** | **240×189** | **2,414** |
+
+The **size on screen has not moved since the second pass** and cannot: it is set by what a boss has to be
+next to a 48×60 person (`D.BODY_W/48 ≥ 4`, `BODY_H/60 ≥ 3`), and the owner has already once asked for it
+smaller and got a smaller *cell* instead. So the only dial refinement is ever available on is the cell, and
+the useful question is not "how fine" but **"how fine before it is wrong"**. That has an answer:
+`Game.drawPlayer` draws the 16×20 hero grid at **scale 3**. At 3 the boss and the player are on one pixel
+grid; below 3 the antagonist would be sharper than the protagonist, which is where an 8-bit direction starts
+to come apart. So this pass takes the last step available and the constant now carries that argument, which
+is the thing that stops a fourth round of the same note being answered by going to 2.
+
+Scale 2 was the alternative and it was rejected for a second reason worth recording: 95 rows at scale 2 is
+190px, i.e. it *divides* the body box exactly, and 63 rows at scale 3 is 189 in a 190px box. The missing
+pixel is now paid for by `BEAST_OFFSET_Y = 1` — the grid is pushed down one pixel and the bottom row still
+lands exactly on the ground band. A remainder in an offset is cheaper than a resolution you cannot defend.
+
+### What a finer cell actually buys
+
+Nothing, by itself. 5px → 3px does not improve a picture; it makes room for features that do not fit in a
+5px cell, and if the feature list is empty the pass renders the same animal out of more rectangles. The list
+this time, all of it authored in the throwaway generator (`/tmp/brrender/gz3.mts`, a numbers-only descendant
+of last pass's `gz2.mts`) and judged in PNGs, never in code:
+
+- **the mouth** (below), which was the owner's other half;
+- a **skull lit down its own contour**, per column, from that column's own top and bottom;
+- an **eye with a slit pupil** under a hard brow keyline, instead of two amber cells;
+- **dorsal plates re-cut as leaves**;
+- a **tapered belly** instead of a rectangle of cream;
+- a **forelimb** big enough to read, with its own value band and three claws;
+- **hide bands** re-derived to the same pixels (runs of five on every sixth row).
+
+### The head was the interesting failure
+
+Two shading rules were tried and rasterised before the third one worked, and both failures were *correct
+arithmetic on the wrong object* — the same shape of mistake as last pass's plates-anchored-to-the-tail:
+
+1. **The body's own rule.** The torso is lit in horizontal three-bands (dark 30% at the back of each row).
+   Applied to the head, "the back 30% of the row" is the whole rear half of a skull that is 26 cells long,
+   so it came out at `SCALE_DARK` and **the head rasterised as a hole with an eye in it.**
+2. **Flat vertical bands.** Lit for the top 30% of the head's *row range* instead. The light then stopped at
+   a straight horizontal line across the crown and read as **a cap**.
+3. **Per column, down the contour.** Each column's own head extent, lit plate / mid cheek / shadow under the
+   jaw. That is what a skull looks like, and it is three lines of generator.
+
+### The mouth: four things, and one of them was a mistake
+
+What was there: one course of maw with alternating single-cell teeth, running flat into the grid's last
+column. At a 5px cell that is close to the most a mouth could be — which is why "the mouth is not well
+shaped" and "reduce the pixel size" are one note and not two. What is there now:
+
+- the two dark courses **taper to nothing at the hinge**, so the mouth closes into a corner. Uniform
+  thickness from hinge to snout is a slot cut across a head, and that is what the owner was looking at;
+- the teeth **interlock in two tones** — 2-cell bone blocks hanging off the upper lip alternating with
+  2-cell bone-dark blocks standing up off the lower. In one tone the two courses rasterise as a
+  **checkerboard, i.e. a zip fastener**, which is what the first cut of this looked like; at one cell they
+  are 3px and vanish;
+- the upper jaw **overbites** by a cell and the muzzle is rounded off above it. The previous grid's mouth
+  row ended *on* the last column, so the snout had no keyline and read as a blunt cut;
+- a **lit chin plane** under the mouth and a shadow course under the mandible — the difference between a
+  jawline and a throat.
+
+**The mistake, kept here because it is the kind that looks obvious in advance:** the mouth line was given a
+*curve*, dropped one course over the last five columns, on the reasoning that a dead-level line is what made
+it read mechanical. It rasterised as **two teeth that had fallen out** — a step in a tooth row is a gap, not
+a bend — and was reverted in the same loop it was introduced. What shapes this mouth is the taper, the
+interlock, the overbite and the chin. Not a bend.
+
+### The opening jaw needed a jaw
+
+`jawOpen` cuts a wedge from `JAW_ROW` down to `JAW_ROW + 8` at the muzzle, which correctly puts the maw
+**outside** the skull's own outline — that is where a lower jaw goes when it swings. But with only a tooth
+line under it, the open mouth read as a dark triangle bitten out of the head against the sky. It now paints
+two courses of hide and a keyline below the teeth, **mid tone first and shade under it**: the first cut put
+`SCALE_DARK` against `MAW` and the mandible disappeared into the hole it is supposed to be the bottom of.
+
+One more agreement to keep: the shut mouth's teeth are authored as 2-cell pairs, and the opening jaw draws
+its own from `c % 2` — so while that rule stood, **the animal changed its dentistry as its mouth opened.**
+The renderer counts in pairs now. Anything the grid draws that the renderer also draws is one rule living in
+two places.
+
+### The costume had to come with it
+
+The fallen suit was re-authored 52×13@5 → 87×22@3 (`/tmp/brrender/costume3.mts`), not for tidiness: the suit
+and the standing beast are on screen **together** through the whole of `stripping`, cross-fading into one
+another, so two cell sizes there is one animal visibly turning into a coarser one.
+
+And changing `COSTUME_SCALE` silently shrank four things that are *staged in pixels* rather than authored in
+cells: the hatch's column and row, its half-widths, the peel, the zip pull's travel and the interior/fabric
+remap threshold. The hatch is **the door five 48×60 people walk out of**; at 40% smaller it is a door they no
+longer fit through. Every one was re-derived to hold its old pixels (57 cells ≈ the old 34th cell's 170px,
+±8 cells ≈ ±25px, 13 courses ≈ 40px).
+
+### Tests: two new ones, and both were proved by deleting the art
+
+- **`is a RECTANGULAR grid`.** The claim that "a row of the wrong width is caught mechanically by a test
+  that measures the grid" has been in the module header for two passes and **was not true**: `BEAST_W` is
+  `maxWidth × scale` — the *max* — so a row typed one character short changed nothing except the picture. At
+  80×63 that is 5,040 characters in which a missing dot is invisible to a reader. The test asserts one
+  distinct row width, 63 rows, 80 columns, and that **every character is in the palette**, because
+  `drawPixels` skips unmapped letters silently: a typo inside a row is a hole in the animal, not an error.
+- **`drops a JAW WITH MASS`.** Its first cut took "the head band" (`y < box.y + 90`) and **passed with the
+  mandible deleted**, because in a 2,400-rectangle frame that band is also chest, neck and forelimb. It is
+  narrowed to *in front of `box.x`* — the only place the leftward-facing muzzle is drawn — and to 12px under
+  the maw, which keeps the forelimb (15px lower) out. Both new tests were verified by removing the art they
+  describe and watching them fail.
+- **`is a boss-sized silhouette`** was the only existing failure: it asserted `BEAST_H === BODY_H`, which
+  189 ≠ 190 breaks. It is a bound now plus `BEAST_W / 80 === 3` — an equality on the cell, because both
+  directions are defects: coarser is the note this pass answered, finer is sharper than the hero.
+
+### Comments that had been lying
+
+The module header said **"Why this is composed and not one grid"** and described a head grid placed by a
+composer with the torso stepped out of `pxRect` runs. That has been false since the beast became one grid
+three passes ago, and it is the exact document a future session would read before touching the animal. It
+now records the reversal instead — the argument for composing was sound and the conclusion was wrong,
+because *a composer cannot see a silhouette*. The same header's "the costume is one piece and it is the
+health bar" (the glasses) went the same way. And `world/Hazards/Dragon.ts`'s note on `MOUTH_*_FRACTION`
+described the 46×38 grid: those two fractions have now survived two re-authorings without moving, which is
+what they are for, so the note states the **rule** (keep them pointing into the drawn mouth) rather than the
+grid — and records that they land 3px above today's mouth line, inside a jet 120px thick, deliberately not
+chased because closing it puts `CONE_REACH` and the whole lethal-lane chain out for re-measurement.
+
+### Green
+**619 tests (48 files)** — three added, one rewritten — typecheck, lint, build, build:site, validate:levels
+all green. IIFE **80.62 KB** gzip (79.99 → 80.62), site payload **83.89 KB** (82.90 → 83.89): **+0.63 KB**
+on the game for 2.8× the cells in one grid and 2.6× in the other, against **~9.4 KB of headroom** — grid
+literals are long, repetitive dot-runs and gzip is very good at them. `analyze` still reads over budget
+(156.9 KB) for the documented reason (`docs/OPEN.md` §1: it sums both output formats).
+
+Rasters, all in `/tmp/brrender`: `gz3.mts` → `gz3.png` (the grid at 6×), `gz3-actual.png` (at the size it is
+drawn, which is the only judgement that counts) and `gz3-head.png` (the head at 14×, five iterations);
+`costume3.mts` → `costume3.png`; and `s4.mts` → `s4-idle.png`, `s4-beast.png`, `s4-headbig.png`,
+`s4-jawclean.png` (the open jaw with the cone's own windup graphics *off* — with them on, the tightening
+ember ring covers the head and nothing about the mouth can be judged), `s4-burn.png`, `s4-fall.png`,
+`s4-open.png` and `s4-hired.png`. `s4.mts` gained a `zoom` option and a `jawOpen` passthrough; the fixture
+had never been able to draw an open mouth at all.
+
+---
+
+## Pass: the run learns to speak — two cards per transition, a death card per stage, the controls taught in play, and four stamps that stop saying the same thing
+
+Owner, three sets of notes in one go (A: general, B: screen copy, C: three in-world labels), and they are
+not three features. They are one: **almost every word a player reads is now written for the surface it is
+on and for the moment it arrives.** Sets A and B rebuild the run's punctuation; set C fixes the three
+places where the world was repeating itself. Doing them separately would have shipped a card carrying
+copy for a level that had just been renamed underneath it.
+
+### What the owner asked for, and what it turned out to be
+
+- **A1** "move the controls copy to the game screen rather than the opening screen, like a play through."
+- **A2** "ideally introduce F for fire when it is relevant (on screen 3, when the powerup lets you throw a
+  projectile)."
+- **A3** "we need to call out level 1, level 2, etc."
+- **B** "every transition screen needs to be 2 screens instead of just 1" — congratulations, then the next
+  level — plus authored copy for the opening screen, all five level cards, all five congratulations cards,
+  **four per-stage death screens** and the final death screen.
+- **C1** the permits file back under the clock on Setup Delays; DENIED moved onto the stamp's black die,
+  and each stamp naming one of four setup approvals.
+- **C2** the five compliance monsters renamed to five real filings.
+- **C3** 90-day notice period rather than "notice period"; "candidate declined" → "offer dropout"; and the
+  word ROAR off the screen.
+
+Two of these reverse earlier owner calls, and both reversals are improvements rather than churn. **A lost
+life shows a screen again** (it was "a lost life shows NO screen at all", §4.2) — but the *reason* that call
+was made still holds and is intact: the impact beat is still painted on the world first, for
+`LIVES.LOST_HOLD`, with the cost flying up into the delay log. What the old call got wrong was concluding
+that because a *dialog interrupting the impact* was bad, no surface could follow it. The new card comes
+**after** the beat, so the player watches what happened and is then told about it, which is the order those
+two things have to arrive in. And **the permits file is back** — the pass that deleted it was right that a
+wall sign saying PERMITS behind four stamps saying DENIED is one sentence twice, and the fix for that turned
+out to be the other half of set C: now that the stamps say ENTITY / BANKING / TAX IDS / DIR KYC, a file of
+paperwork under a clock is the *other* half of the sentence rather than a duller copy of it.
+
+### Set B, the state machine: a seventh state, and where the screen is loaded
+
+`SCREEN_CLEAR`, entered from `PLAYING` and leaving only to `TITLE_CARD`. The card waits, exactly as the
+briefing card does.
+
+**The one load-bearing decision is where `loadScreen` happens.** `clearScreen()` used to book the months
+and then, in two lines, `loadScreen(next)` and `enterTitleCard()`. So anything reading `screenId` while a
+card was up was already looking at the stage *ahead* — which was harmless when the only card was a briefing
+and is fatal the moment a card has to name the stage **behind**. The load moved onto the press that leaves
+`SCREEN_CLEAR` (`requestAdvance`), and `_clearedScreenId` is what the congratulations card is drawn from.
+It survives the load deliberately: reading it rather than `screenId` is also what stops a one-frame flash
+of the wrong stage name as the two cards swap.
+
+`requestAdvance()` is now state-aware — `SCREEN_CLEAR` → load + briefing, `LIFE_LOST` → back to the same
+stage, `TITLE_CARD` → play — rather than gaining two siblings. The host wires one button to it and never
+checks state, which is the property that made it a *request* in the first place.
+
+Three things the state does **not** do. It is not entered on the last screen (`finishRun()` still goes
+straight to `WIN`: a congratulations card in front of the win receipt is the receipt's own headline said
+twice, a press apart) — and the `screenId + 1 >= SCREEN_COUNT` guard that used to be implicit in
+`if (next < SCREEN_COUNT)` had to be written out explicitly, or walking off the right-hand edge of the Tech
+Park opens a card for a stage that does not exist. It does not hide the HUD (the plaques are already correct
+for the stage the card is about; taking them away for one press reads as the frame reloading). And it does
+not time out.
+
+**Both new cards needed their own press grace, and the reason is sharper than the briefing card's.** The
+briefing card's `TITLE_CARD_SKIP_AFTER` exists because the Start button both begins the run and opens the
+first card. These two open *while the player is holding a key down*: you reach the congratulations card by
+running into the exit, and you reach the death card by being hit mid-input. Without the grace each card
+would be dismissed by the press that earned it. Two tests hold that specifically, by feeding `anyPressed`
+on **every** frame of the beat and asserting nothing moves.
+
+### Set B, the death card: gated on data, not on a list of screens
+
+Four stages get one, and they are exactly the four with a powerup (`screenHasPowerup`, i.e.
+`data.badge != null`). That is not an accident to be tidied up later — it is the gate. Every death card's
+second line is "take the ANSR powerup to …", so on Head Office and the Tech Park the card would be advice
+the room cannot obey, which is the same argument that already governed the retry hint. Those two screens
+keep the older behaviour exactly: the impact beat, then the stage restarts by itself. `step()` reads the
+same getter as the host, so the sim's decision to wait and the host's decision to paint cannot disagree.
+
+**`lifeLost.retryHint` is deleted, surface and all.** One generic orange line ("TAKE THE ANSR POWERUP") on
+the briefing card of a retry, in a slot a player had no reason to look at. Keeping it alongside the death
+card would have printed the instruction on two consecutive surfaces, the second quieter and vaguer than the
+first. Deleting the *element* rather than the string matters: that line leaked onto every later briefing
+card once already (the `[hidden]` cascade defect), and a surface that does not exist cannot regress.
+
+### Set A, the controls: the legend is now a lesson, twice
+
+Off the title screen, onto the cards. `LEGEND_ON_SCREEN` in `Game.ts` is a sparse array indexed by screen
+id — `moveJump` on 0, `fire` on 3, nothing on the other four — because "where is fire relevant" is a fact
+about the levels (screen 3's powerup is the first that arms a *tool*), not a preference.
+
+**The fire lesson is one cap on its own.** Re-showing move and jump beside it would bury the one control
+that is news in two the player has been using for three stages. This is also what the move finally fixes
+about that row: on the title screen it had to teach three controls at once, one of which does nothing for
+the first three stages — a legend for a game nobody had played yet. A written legend has been cut from that
+screen twice for reading as a manual; the caps were the third attempt at the same problem and moving them
+is the first answer that changes the problem rather than the typography.
+
+**Two pre-built rows toggled by `hidden` was the obvious shape and the wrong one, and the test caught it.**
+`display: none` removes an element from the accessibility tree but **not from `textContent`** — so every
+briefing card in the game contained "Arrow keys move. Space jumps. F fires an ANSR tool…" as far as anything
+reading the DOM was concerned, and `ui.test.ts`'s standing assertion that a card never says SPACE failed on
+the *Compliance* card. It is one row, filled per card and emptied when there is none; cost is irrelevant
+because it sits behind the card's repaint key (twice per run, not sixty times a second). Same family as the
+retry hint, found for free by a test written for a different reason four passes ago.
+
+The card's SPACE assertion had to be re-scoped rather than dropped: the word may appear as a **key cap** and
+never as prose, so the check now runs on a card with no legend and additionally asserts the legend row is
+empty there.
+
+**A divider over the legend was drawn and cut in its own raster.** The row is chrome about the machine
+rather than another line about the place, so a rule over it looked right — until the picture: the rule spans
+the card (560px) and the row it encloses is ~300px on level 0 and **~100px on level 3**, where the legend is
+a single F cap. A full-width rail over one small button is a border drawn round nothing, which is the same
+finding that took the out-of-lives panel from 560 to 440. The caps carry their own bevel and dark fill, so
+they already read as buttons; the separation only has to be a pause.
+
+### Set A3, the level number: an eyebrow, and that is a measurement
+
+"LEVEL 3" is its own line above the stage name, not folded into it. The title is painted as **one unwrapped
+bitmap line** (`paintPixelSvg` is handed a single-element array), so "LEVEL 2: THE COMPLIANCE MAZE" — 28
+characters — would either overflow its share of the frame or shrink every stage name in the game to match
+the longest one. An eyebrow also gives the number its own job: it says where you are in the run, which the
+name does not. Five entries, not six — the Tech Park is the arrival, not a level, and numbering it would
+promise a sixth test after the one the player just passed.
+
+Stage names went to `levels.json`'s `copy.titleCard` (the label), keeping `name` for analytics, the HUD
+plaque and the receipt: **The Head Office · Setup Delays · The Compliance Maze · The Fit-Out Trap · Hire
+Under Fire**. Measured unwrapped against the 72% title cap: 37/30/48/40/37%, and the Tech Park's existing
+60% is still the widest thing on any card.
+
+### The copy, and the three places the owner's own words could not be set
+
+Every line is the owner's except where the font or the measure made it impossible, and each exception is
+recorded here because "slightly more descriptive" is how they come back.
+
+- **No apostrophe, anywhere.** The 5×7 font has none. "Now let's get real" → **"Now it gets real."**;
+  "don't let the paperwork flatten you" → **"Do not let the paperwork flatten you."** (which at this measure
+  also balances better, 24/12 rather than a widow).
+- **The final death screen's advice was 68 characters and needed three lines**, the third a single word over
+  the button. "Next time" is already carried by the cap under it ("Start again") and "your GCC setup" by the
+  four screens just played, so both came out: **"Catch the ANSR powerups and breeze through."** (23/19).
+- **Level 3 is ours** ("for this level think of a line"), written to the owner's pattern rather than ours:
+  name what the room does to you, in the room's vocabulary, no B2B word in it. **The Fit-Out Trap** /
+  "Paid for the space. Nobody can work in it." The trap on that floor is the one nobody budgets for —
+  nothing is *missing*, it is all there and none of it is usable — so the money and the uselessness go in
+  the same breath, and it names nobody, which is what keeps it true a screen before there is anybody to
+  name.
+
+Every new string was measured before it was set, with a throwaway script (`/tmp/brrender/measure.mts`) that
+prints the wrap, the line lengths and the width as a % of the frame against each role's own cap. All 30-odd
+lines fit; the widest is a death headline at 50% of a 72% cap. **Do this before rasterising, not after** —
+it is seconds and it catches the widow and the overflow, leaving the raster to answer the question a
+measurement cannot, which is whether the thing looks designed.
+
+The congratulations cards split headline from line deliberately, and the split does two different jobs: the
+headline is the **credit** (short, an exclamation — the only place in the game allowed one) and the line
+under it is the **hand-off** to the next stage ("Legal is happy. Facilities has questions."). That is what
+makes the pair a *beat* — you won, and it is not over — rather than a second briefing card.
+
+### Set C1: the stamps stop saying the same thing four times
+
+DENIED moved to the **rubber die**, and the index label above it carries what this stamp is refusing:
+**ENTITY · BANKING · TAX IDS · DIR KYC**, authored in `levels.json` (drawn content, so it survives
+`strip-level-notes` — verified by grepping both built bundles).
+
+Worth more than it looks. Four identical stamps shouting one word is one piece of information repeated four
+times; four stamps each refusing a *different* approval is the screen's argument — setup is not one gate, it
+is four, and every one of them comes back. And DENIED belongs on the die because that is where a real
+stamp's message lives: the label on the body is the index (what it is for), the die is the impression (what
+it says). The two are drawn in inverse values — dark on the pale plate, light on the near-black die — which
+is what stops them reading as one block of signage.
+
+**The label plate had to be widened, and that is arithmetic.** It ran 20 authored cells (80px) inset inside
+the pale body frame; the longest label is 7 characters and the font sets 7 at scale 2 in **82px**. It now
+runs the full 22 cells between the keylines (88px). Losing the frame on those seven rows costs nothing — the
+plate is still boxed by the `B`/`b` courses above and below and by the near-black keyline either side — and
+it reads *better*, because a paper index label glued across the full width of the body is what the real
+object has. Rejected on the way: `letter: 0` spacing (7 chars in 70px, and the glyphs touch, because this
+font has content in columns 0 and 4), and six-character labels, which forced "Director Forms" to "FORMS".
+
+`STAMP_LABEL_INNER` is exported so the test measures every **authored** label against the plate rather than
+one literal against a number typed twice. A fifth stamp or a longer label now fails the build.
+
+### Set C1: the permits file, and a column that was chosen with the wrong tile size
+
+**The tile is 40px, not 32.** The first cut reasoned that the clock at `W*0.5 + 20` = 660 sat on the gx-20
+stamp column and moved the pair left to 540 — and the raster showed the file behind the gx-12 stamp with
+PERMITS reading as **"ITS"**. The stamps are at gx 7/12/20/25, so at a 40px tile they occupy 252–348,
+452–548, 772–868 and 972–1068, leaving three gaps in the sky: 348–452, **548–772** and 868–972. Only the
+middle one takes a 104px file, and its centre is 660 — which is where the clock already was. The prop sits
+at y 246–318, and a parked stamp covers 202–330, so the column is the *only* thing keeping it visible; there
+is a test for that specifically, and it fails if the file is moved back to 540.
+
+Three things the picture forced: the word sets the width (PERMITS is 82px at scale 2, so the body cannot be
+under ~100px, and scale 1 would be 7px tall — below the size anything in this game is legible at); grey is a
+**range**, and the file sits a value *below* the stamps, which are deliberately the lightest objects on this
+screen; and a ruled grey rectangle needs a **dog-eared corner** or it reads as a second window.
+
+### Set C2 and C3: five filings, two rewordings, one deletion
+
+TAX / GST / LEGAL / ENTITY / AUDIT → **EXIM · INTERCO · NOTARY · BOARD · TP PACT**. The old set named the
+*departments* a filing goes through; the new set names the **filings**, which is the thing that actually
+comes back. Length is a constraint, not a preference: these are set at scale 2 on a plaque over a creature
+5 tiles wide, the long forms are 18+ characters, and five of those shoulder to shoulder on the landing is
+exactly the unreadable block the plaque is *dropped* to avoid. Seven characters is the ceiling the old set
+established (ENTITY was six) and `screen2.test.ts` now holds the new set to it, uppercase and
+apostrophe-free. Rasterised: the five plaques read at size and none of them collide, including EXIM and
+INTERCO, which are adjacent horizontally and separated by a row.
+
+CANDIDATE DECLINED → **OFFER DROPOUT** (a candidate who declines is a no; a dropout is somebody who had
+already said yes, which is the thing that actually costs a GCC build a quarter) and NOTICE PERIOD →
+**90-DAY NOTICE**, because the number *is* the problem — "notice period" is a neutral HR term. The setback
+tag `OFFER DECLINED` was deliberately left alone: it is the delay-log row, it is a different string in a
+different register, and the owner's own death-card headline for that stage is "Declined!".
+
+**ROAR is deleted.** The concentric arcs off the jaw were always the cue and the word was a caption on them,
+at scale 3 in the hottest colour on a frame that already carries a name plate, a costume pip row and a taunt
+printed on the fire. It was also the only string in the game that described a *sound* rather than naming a
+problem. The `roar` **phase** is untouched — it is the guaranteed-safe opening beat and the only window the
+boss cannot be hit in — and the rewritten test now asserts the phase's arcs are present *and* that no 3×3
+cell is painted in `FIRE_HOT`, which is what a scale-3 glyph in that colour would be.
+
+### Every new test was proved by breaking the thing it tests
+
+Four of them, and all four were run against a deliberately broken build before being kept: re-adding the
+ROAR `drawText` (fails), swapping the stamp's two words (fails), deleting `drawPermitFile` (fails), and
+moving the file back to x 540 (fails the column test, passes the presence test — which is why both exist).
+This is the discipline the Godzilla pass wrote down after discovering a "rectangularity test" the header had
+claimed for two passes and that did not exist.
+
+### Rasters
+
+`/tmp/brrender`: `shot.mts` → `screen1.png`, `screen1-assisted.png` (the four labelled stamps, the clock and
+the permits file); `world.mts` → `screen2.png` (the five renamed plaques); `cards.mts` → `card-start.png`,
+`card-level0.png`, `card-level3.png`, `card-clear0..4.png`, `card-death1..4.png`. `cards.mts` is new and
+worth keeping in the next session's kit: it draws the DOM cards on canvas from the **real** copy, the real
+`wrapPixelLabel` and the real 5×7 font at the real `PX_TYPE` units resolved against a 1280 frame. It is not
+the shipped cascade, so it cannot answer questions about CSS — but it answers the two the DOM overlays have
+always been hardest to check, which are hierarchy and balance, and it is what killed the legend's divider.
+
+### Green
+
+**627 tests (48 files)** — five added, four rewritten — typecheck, lint, build, build:site, validate:levels
+all green. IIFE **81.94 KB** gzip (80.62 → 81.94), site payload **84.99 KB** (83.89 → 84.99): **+1.32 KB**
+for two new overlay surfaces, a seventh state and about forty new authored strings, against **~8.1 KB of
+headroom**. `analyze` still reads over budget for the documented reason (`docs/OPEN.md` §1: it sums both
+output formats).
+
+- **The shape of the box, and a real pad for the phone: the control band stops being a portrait
+  layout, auto-run stops being the default on touch, and four thumb targets are made to fit a 390px
+  frame.** Owner, three asks in one note — "the game looks a different aspect ratio on different screen
+  sizes and OSes, check whether that is real and fix it if so" · "add buttons to play on mobile and
+  tablet, and turn off auto going forward on mobile" · "give appropriate buttons in the right places,
+  learning from how good games do it". All presentation and host wiring; `world/` and `Simulation.ts`
+  are untouched, and no gameplay number moved.
+
+  **The aspect-ratio report was half wrong and half a real defect, and the half that was wrong is worth
+  writing down because it is where the instinct goes first.** The *world* has never been distorted and
+  could not be: `computeViewport` is a uniform `contain` fit — one `scale` in both slots of
+  `setTransform`, centred offsets, clipped to 1280×720 — with `Renderer.test.ts` pinning it at six
+  container sizes including a portrait phone, the backing store is always CSS size × a DPR clamped to 2
+  so device pixels stay square, and there is no `transform: scale()` or `object-fit` on the canvas
+  anywhere (grepped: the only other `setTransform` is `DebugOverlay.ts:16`, also uniform). So an audit
+  of the renderer would have found nothing, which is the trap. What changed shape was the **box**. The
+  control band — `aspect-ratio: auto` plus height grown into `--beam-run-portrait-band`, which is what
+  keeps the thumb buttons off the gameplay on a phone — was gated on `@media (orientation: portrait)`,
+  and orientation is not a test for "this device has thumbs". Any desktop window taller than it was wide
+  matched it: a browser docked to half a 16:9 screen, a rotated monitor, a Mac window dragged narrow.
+  Those all got the phone box — the stage stopped being 16:9, the game shrank to a strip centred between
+  two large bands, and **nothing was ever drawn in those bands**, because a mouse device has no thumb
+  controls. Worked example: an 800×1000 window became an 800×1000 stage holding an 800×450 frame with
+  275px of empty teal above and below, against the 800×450 it should have been. And the same query
+  excluded the device that needed the band most — a tablet in landscape is ~4:3, so a full-width 16:9
+  frame filled it edge to edge and the buttons were drawn straight onto the play area. One query, wrong
+  in both directions. It is now `stageClassName(isTouch)`, exported from `styles.ts` and fed the same
+  `isTouchDevice()` result that decides whether `TouchControls` are ever built, so the box and its
+  contents cannot disagree; it is a *function* rather than a media query specifically so there is a
+  test, and a second test walks every `@media (orientation: …)` block in the sheet and fails if any of
+  them mentions `aspect-ratio`. Measured after: an 1180×820 iPad in landscape goes from a 1180×664 frame
+  with the buttons fully inside it to an 1180×820 stage with 78px bands and ~68px of corner overlap left;
+  a 390×844 phone is unchanged; every desktop window is 16:9 again.
+
+  **Auto-run off on touch (owner call, reversing the original).** It shipped on, on the argument that an
+  executive should not have to drive a virtual d-pad to hear the message. The cost of that is what the
+  owner is now reversing: forward motion is the only thing a player controls *between* obstacles, so
+  auto-run carried them into every hazard on a timer they had no part in setting, and "walk up to it,
+  look at it, then jump" — which is the whole verb of this game — was unavailable on the platform most of
+  this audience is on. One constant (`ASSIST.AUTO_RUN_DEFAULT_ON_TOUCH`, mirrored into the root
+  `tuning.config.ts`), the override wiring untouched, and the one-tap layout kept intact as an assist
+  option, still hiding *forward* only because the Compliance badge is reached by jumping backwards. Two
+  comments in `badgeReach.test.ts` that described one-tap as "the default there" were corrected rather
+  than deleted — those probes still drive the worst case, they are just no longer describing the
+  common one.
+
+  **The pad, and the three things measuring it turned up.** Bottom-left the move pad, bottom-right the
+  act cluster with jump as the largest target lowest-right where a thumb rests, the armed tool **lifted**
+  up-left of it onto a diagonal, pause in the top band, and a 12px invisible hit ring on every target.
+  The diagonal replaced a baseline-aligned row, which is a 76px circle touching a 104px circle at the
+  same height — two targets one thumb-width apart on the same arc, so the smaller reads as a mis-tap of
+  the bigger.
+  *One:* **four targets did not fit a phone.** Back, forward, tool, jump at the hand-tuned sizes demand
+  `2×14 + 3×76 + 104 + 3×16 = 396px` against a **390px** iPhone frame — so on the most likely device in
+  this audience's pocket the move pad and the tool button overlapped, and with the hit rings they
+  overlapped by more than they looked like they did. It had shipped like that, and nothing caught it
+  because a stylesheet cannot sum its own literals and jsdom cannot lay anything out. The sizes are now
+  `clamp(min, N × --beam-run-u, max)` specs in a new `ui/touchGeometry.ts`, `styles.ts` generates the CSS
+  from them and the test sums the row at 280/320/360/390/430/560/768: 378 of 390 on an iPhone, 276 of 280
+  on a Galaxy Fold cover screen, and the ceilings (the tuned 76/108) are reached at ~430px so nothing
+  changed on a normal phone. On a 390px frame there is no headroom for four *bigger* circles at all,
+  which makes "larger controls" mostly a wider hit ring there — the honest version of the option, and
+  pretending otherwise is how the row overflowed in the first place.
+  *Two:* **the tallest thing in a cluster is not the biggest one.** The band is 180px, a home indicator
+  takes 34 and the zone inset 16, leaving 130 — and the top of the act cluster is `lift + pad`
+  (50 + 76 = 126), not `jump` (108). A lift picked by eye at 58px put the tool button 4px **outside the
+  band**, i.e. back over the gameplay, which is the one thing the band exists to prevent. Caught by the
+  new `clusterHeightPx` assertion failing at 430px on the first run, not by looking at it. The one-tap
+  large jump came down 132 → 128 for the same reason.
+  *Three:* **"the corners are taken, so put it in the middle" is an answer about the size of the gap and
+  not about where the gap is** — and this one the arithmetic passed and the **raster** caught. Pause went
+  top-centre because the two HUD plaques own the top corners; the sum said the gap between them is 96px
+  on a 390px frame, plenty for a 44px button, and the picture showed the button sitting on top of the
+  stage plaque. The plaques are very different widths (184 and 93), so the free space runs x 193→288 and
+  a centred button sits at 173→217. Anchored past the lives plaque instead — and the *first* anchor
+  reserved that plaque's `maxShare`, 26% of the frame, when the hearts are 25 authored cells at 0.34 of a
+  frame unit, i.e. ~8.5%: reserving 23px more than the thing needs pushed the button back onto its
+  neighbour, so a safe bound is not a tight one. `LIVES_PLAQUE` restates the real clamp, guarded against
+  `HUD_PX.lives` and `pipCells` by a test. Under 340px of frame there is no horizontal slot at all (31px
+  on a 280px screen for a 44px minimum target) so it drops below the plaque row via a **container**
+  query — container and not media, because the number that matters is the width of the letterboxed
+  *frame*, which is not the width of the window. The test now asserts the button's **edges** against the
+  plaques' **edges** at nine widths, which is the assertion that would have caught the centred version.
+
+  **Pause is also the first route a touch player has ever had to the pause menu, the assist options or
+  the way out**, because a phone has no Escape key and nothing else opened that surface. That forced one
+  accessibility correction: `aria-hidden` was on the whole touch layer (right — the pads duplicate keys a
+  screen-reader user presses), which would have hidden the one control that duplicates nothing. It moved
+  onto the two pad zones and pause keeps a real label. It raises the same `pause` **edge** the Escape key
+  does rather than calling `setPaused`, so `handleFrameInput`'s guard stays the single decision point,
+  and since the layer is hidden while the overlay is up the button can only ever pause — resuming is the
+  overlay's own focusable cap.
+
+  **The backtick trap collected its toll again.** A CSS comment written with `` `ui/touchGeometry.ts` ``
+  in it terminated the template literal and produced ten unrelated syntax errors 200 lines away; the
+  invariant says write CSS comments in prose and this pass is why it says it twice.
+
+  **Verification.** All five behavioural guards and both arithmetic guards were proved by breaking what
+  they test: reshaping the box from an orientation query again, dropping the diagonal's lift, putting
+  `aria-hidden` back on the root, flipping auto-run back on, cutting the pause callback, restoring the
+  original fixed pad sizes (which reports 412 of 280 and confirms the overflow was real), and restoring
+  the 58px lift. Layouts were rasterised at five device sizes from the real geometry module and the real
+  `computeViewport` (`/tmp/brpads/pads.mts`), which is what found the pause collision. **638 tests**
+  (48 files, +6), IIFE **82.48 KB** gzip (+0.54), site **85.70 KB** (+0.71), budget gate and
+  `validate:levels` green. Two items left for the owner rather than decided here: `docs/OPEN.md` §32, the
+  tablet-landscape trade (a full band costs ~14% of the frame's width on an iPad and ~27% on a landscape
+  phone, so the cheap half — a 10px rather than 16px zone inset — is taken and the expensive half is
+  priced and left), and §33, that the art is upscaled by a **fractional** factor on any screen wider than
+  1280 because `index.html` lifts the display cap, which is now the only remaining reason the same build
+  looks different on two machines and is a look rather than a bug.

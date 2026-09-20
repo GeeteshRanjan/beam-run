@@ -79,6 +79,17 @@ export interface StampSpec {
   gx: number;
   phase: number;
   zone?: Zone;
+  /**
+   * What this stamp is refusing, printed on its index label (owner call: each stamp
+   * names one of the four setup approvals instead of all four saying the same thing).
+   *
+   * **Drawn content, not a note** — so it must survive `scripts/strip-level-notes.ts`,
+   * uppercase only, no apostrophe, and **at most 7 characters**: the label plate is 22
+   * authored cells wide (88px) and the 5x7 font sets 7 characters at scale 2 in 82px.
+   * `stamps.test.ts` measures every authored label against that plate rather than
+   * trusting this comment.
+   */
+  label?: string;
 }
 
 /**

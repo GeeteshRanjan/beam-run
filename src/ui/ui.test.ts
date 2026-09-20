@@ -330,7 +330,9 @@ describe('Overlays', () => {
     expect(start.querySelector('.beam-run__stake')).toBeNull();
     const title = start.querySelector('.beam-run__title')!;
     // One clean sentence for assistive tech, two centred bitmap lines on screen.
-    expect(title.textContent).toBe(COPY.start.tagline);
+    expect(title.textContent).toBe(COPY.start.headline);
+    // …and the offer under it, at body size, not as a second headline.
+    expect(start.querySelector('.beam-run__brief')!.textContent).toBe(COPY.start.tagline);
     const art = title.querySelector('svg.beam-run__pixels')!;
     expect(art.getAttribute('aria-hidden')).toBe('true');
     expect(Number(art.getAttribute('viewBox')!.split(' ')[3])).toBeGreaterThan(14); // 2 lines
@@ -338,32 +340,59 @@ describe('Overlays', () => {
     expect(start.textContent).not.toContain(String(JOURNEY.BASELINE_MONTHS));
   });
 
-  it('draws the controls as key caps, fire included', () => {
+  it('teaches the controls on the briefing cards, a stage at a time', () => {
     /*
-     * Owner: show the buttons instead of text, and the fire button was missing. So the
-     * legend is three groups of caps — move, jump, fire — each cap an 8-bit key with a
-     * drawn glyph in it, and the row carries ONE hidden sentence rather than a label per
-     * cap ("left right move space jump f fire" is not a sentence).
+     * Owner call: the controls copy moved off the opening screen onto the game screens,
+     * "like a play through", with F introduced "when it is relevant". So the legend is
+     * caps on the cards — move + jump on level 0, the fire cap alone on level 3 — and
+     * each row carries ONE hidden sentence rather than a label per cap ("left right move
+     * space jump" is not a sentence).
+     *
+     * The title screen has none of it: that is the assertion that stops the row growing
+     * back there, which it has already done twice.
      */
     overlays.show('start');
-    const keys = visible(parent).querySelector('.beam-run__keys')!;
-    const groups = keys.querySelectorAll('.beam-run__key-group');
-    expect(groups).toHaveLength(3);
-    // Move takes two caps (both arrows), jump and fire one each: four buttons.
-    expect(keys.querySelectorAll('.beam-run__key')).toHaveLength(4);
-    expect(groups[0]!.querySelectorAll('.beam-run__key')).toHaveLength(2);
+    expect(visible(parent).querySelector('.beam-run__keys')).toBeNull();
+
+    // Level 0: two groups, three caps (both arrows, then Space).
+    overlays.show('titlecard', { levelLabel: 'Head Office', legend: 'moveJump' });
+    const keys = visible(parent).querySelector('.beam-run__keys') as HTMLElement;
+    expect(keys.hidden).toBe(false);
+    expect(keys.querySelectorAll('.beam-run__key-group')).toHaveLength(2);
+    expect(keys.querySelectorAll('.beam-run__key')).toHaveLength(3);
+    expect(keys.textContent).toBe(COPY.legend.moveJumpKeys);
+    expect(keys.querySelectorAll('.beam-run__sr')).toHaveLength(1);
     // Every cap is decorative pixel artwork, never a font character from the host.
     for (const cap of Array.from(keys.querySelectorAll('.beam-run__key svg'))) {
       expect(cap.getAttribute('aria-hidden')).toBe('true');
       expect(cap.querySelector('path')!.getAttribute('shape-rendering')).toBe('crispEdges');
     }
-    // One sentence for assistive tech, and it names the fire key.
-    expect(keys.textContent).toBe(COPY.start.controlsKeys);
-    expect(keys.querySelectorAll('.beam-run__sr')).toHaveLength(1);
-    // The left arrow is a real glyph now: the font gained '<' for this row, so a cap
+    // The left arrow is a real glyph: the font gained '<' for this row, so a cap
     // cannot render as a hole.
     expect(FONT['<']).toBeTruthy();
     expect(normalizeForPixels('\u2190 \u2192')).toBe('< >');
+
+    // Level 3: the fire cap ON ITS OWN. Re-showing move and jump here would bury the
+    // one control that is news in two the player has used for three stages.
+    overlays.show('start');
+    overlays.show('titlecard', { levelLabel: 'The Fit-Out Trap', legend: 'fire' });
+    const fire = visible(parent).querySelector('.beam-run__keys') as HTMLElement;
+    expect(fire.hidden).toBe(false);
+    expect(fire.querySelectorAll('.beam-run__key-group')).toHaveLength(1);
+    expect(fire.textContent).toBe(COPY.legend.fireKeys);
+
+    /*
+     * …and a card that teaches nothing is EMPTY, not merely hidden. `display: none` does
+     * not take text out of `textContent`, so a row left in place would put the whole
+     * control guide on every briefing card in the game — the same defect as the retry
+     * hint that stayed on every card with `hidden` set and doing nothing.
+     */
+    overlays.show('start');
+    overlays.show('titlecard', { levelLabel: 'Compliance' });
+    const none = visible(parent).querySelector('.beam-run__keys') as HTMLElement;
+    expect(none.hidden).toBe(true);
+    expect(none.textContent).toBe('');
+    expect(visible(parent).textContent).not.toMatch(/SPACE/i);
   });
 
   it('brands the start and end screens with the ANSRcade lockup', () => {
@@ -392,7 +421,7 @@ describe('Overlays', () => {
     // nothing above it, so it is set as the title like every other screen's is.
     overlays.show('start');
     const tagline = visible(parent).querySelector('.beam-run__title')!;
-    expect(tagline.textContent).toBe(COPY.start.tagline);
+    expect(tagline.textContent).toBe(COPY.start.headline);
     const art = tagline.querySelector('svg')!;
     expect(art.getAttribute('aria-hidden')).toBe('true');
     expect(art.querySelector('path')!.getAttribute('shape-rendering')).toBe('crispEdges');
@@ -607,11 +636,18 @@ describe('Overlays', () => {
       COPY.summary.cta,
       COPY.summary.resume,
       COPY.start.play,
+      COPY.start.headline,
       COPY.start.tagline,
-      ...Object.values(COPY.start.legend),
-      COPY.lifeLost.retryHint,
+      ...Object.values(COPY.legend.caps),
       COPY.titleCard.begin,
+      ...Object.values(COPY.titleCard.tag),
       ...Object.values(COPY.titleCard.brief),
+      COPY.clearCard.begin,
+      ...Object.values(COPY.clearCard.title),
+      ...Object.values(COPY.clearCard.line),
+      COPY.deathCard.retry,
+      ...Object.values(COPY.deathCard.title),
+      ...Object.values(COPY.deathCard.line),
       COPY.gameOver.title,
       COPY.gameOver.costLabel,
       COPY.gameOver.fromDelays(3),
@@ -634,29 +670,109 @@ describe('Overlays', () => {
     // Owner call: with lives left the stage just starts again. The overlay that
     // used to coach mid-attempt is gone, and so is its name.
     expect(parent.querySelector('.beam-run__overlay--lifelost')).toBeNull();
-    // Six surfaces left: start, titlecard, pause, gameover, summary, win.
-    expect(parent.querySelectorAll('.beam-run__overlay')).toHaveLength(6);
+    /*
+     * EIGHT surfaces now: start, clearcard, titlecard, deathcard, pause, gameover,
+     * summary, win. The two cards added are the owner's two-card transition (well done
+     * for the stage behind you, then what the stage ahead is) and the per-stage death
+     * card — which is a *card*, not the old life-lost dialog: nothing is painted until
+     * the impact beat on the world has finished.
+     */
+    expect(parent.querySelectorAll('.beam-run__overlay')).toHaveLength(8);
   });
 
-  it('carries the badge instruction on a retry title card, and only there', () => {
-    // The one thing the deleted life-lost screen said that mattered.
-    overlays.show('titlecard', { levelLabel: 'Compliance' });
-    const hint = visible(parent).querySelector('.beam-run__advice') as HTMLElement;
-    expect(hint.hidden).toBe(true);
-    overlays.show('start');
-    overlays.show('titlecard', { levelLabel: 'Compliance', hint: COPY.lifeLost.retryHint });
-    expect(hint.hidden).toBe(false);
-    expect(hint.textContent).toBe(COPY.lifeLost.retryHint);
+  it('puts the powerup instruction on a per-stage death card, not on a briefing card', () => {
     /*
-     * …and it comes back OFF on the next stage. The line only makes sense on the card
-     * of the stage that just took a life; a player who dies once on screen 1 was being
-     * told to take the powerup on the introduction to every screen after it (owner
-     * note). The bug was not here — this assignment was always made — it was in the
-     * stylesheet, which is what the next test guards.
+     * Owner call: a lost life shows a screen again, and it is written per stage — the
+     * system's own word for what just happened, then the powerup that answers it.
+     *
+     * It replaced `lifeLost.retryHint`, one generic orange line ("TAKE THE ANSR
+     * POWERUP") on the briefing card of a retry. The assertion that it is *gone* from
+     * that card matters as much as the new card working: the line leaked onto every
+     * later briefing card once already, and deleting the surface is the only fix that
+     * cannot regress.
      */
-    overlays.show('titlecard', { levelLabel: 'Workplace', brief: COPY.titleCard.brief[3] });
-    expect(hint.hidden).toBe(true);
-    expect(hint.textContent).toBe('');
+    overlays.show('titlecard', { levelLabel: 'Compliance', brief: COPY.titleCard.brief[2] });
+    const card = visible(parent);
+    expect(card.querySelector('.beam-run__advice')).toBeNull();
+    expect(card.textContent).not.toContain('POWERUP');
+
+    overlays.show('deathcard', {
+      death: { title: COPY.deathCard.title[2]!, line: COPY.deathCard.line[2]! },
+    });
+    const death = visible(parent);
+    expect(overlays.current).toBe('deathcard');
+    // Something happened TO the player and they have to acknowledge it.
+    expect(death.getAttribute('role')).toBe('alertdialog');
+    expect(death.querySelector('.beam-run__title')!.textContent).toBe(COPY.deathCard.title[2]);
+    expect(death.querySelector('.beam-run__advice')!.textContent).toBe(COPY.deathCard.line[2]);
+    // One cap, and it says where it goes: back into the same stage, not onwards.
+    const btns = buttons(parent);
+    expect(btns).toHaveLength(1);
+    expect(btns[0]!.textContent).toBe(COPY.deathCard.retry);
+    btns[0]!.click();
+    expect(cb.onAdvance).toHaveBeenCalled();
+    expect(parent.ownerDocument.activeElement).toBe(btns[0]);
+    // Every stage that carries a powerup has copy, and no stage without one does: the
+    // second line is "take the ANSR powerup to ...", which Head Office cannot obey.
+    for (const screen of SCREENS) {
+      const has = screen.badge != null;
+      expect(Boolean(COPY.deathCard.title[screen.id]), `screen ${screen.id}`).toBe(has);
+      expect(Boolean(COPY.deathCard.line[screen.id]), `screen ${screen.id}`).toBe(has);
+    }
+  });
+  it('congratulates the stage behind before briefing the stage ahead', () => {
+    /*
+     * Owner call: every transition is two screens, not one — congratulations for the
+     * level cleared, then information about the next one.
+     *
+     * The card names the stage BEHIND the player, which is why the model is passed in
+     * rather than derived from a screen id here: see `Simulation.clearedScreenId`.
+     */
+    overlays.show('clearcard', {
+      clear: { title: COPY.clearCard.title[1]!, line: COPY.clearCard.line[1]! },
+    });
+    const el = visible(parent);
+    expect(overlays.current).toBe('clearcard');
+    expect(el.getAttribute('role')).toBe('dialog');
+    expect(el.getAttribute('aria-label')).toContain(COPY.clearCard.line[1]!);
+    expect(el.querySelector('.beam-run__title')!.textContent).toBe(COPY.clearCard.title[1]);
+    expect(el.querySelector('.beam-run__brief')!.textContent).toBe(COPY.clearCard.line[1]);
+    const btns = buttons(parent);
+    expect(btns).toHaveLength(1);
+    expect(btns[0]!.textContent).toBe(COPY.clearCard.begin);
+    btns[0]!.click();
+    expect(cb.onAdvance).toHaveBeenCalled();
+    // Five cleared stages get a card; the Tech Park does not — a congratulations card
+    // in front of the win receipt is the receipt's own headline said twice.
+    for (const screen of SCREENS) {
+      const last = screen.id === SCREENS.length - 1;
+      expect(Boolean(COPY.clearCard.title[screen.id]), `screen ${screen.id}`).toBe(!last);
+      expect(Boolean(COPY.clearCard.line[screen.id]), `screen ${screen.id}`).toBe(!last);
+    }
+    // Both lines fit the measures they are set at: the credit as a title (20), the
+    // hand-off at the card measure (26), two balanced bitmap lines at most.
+    for (const [id, line] of Object.entries(COPY.clearCard.line)) {
+      const lines = wrapPixelLabel(line, 26);
+      expect(lines.length, `clear ${id}`).toBeLessThanOrEqual(2);
+      if (lines.length === 2) {
+        const [a, b] = [lines[0]!.length, lines[1]!.length];
+        expect(Math.min(a, b) * 2, `clear ${id}`).toBeGreaterThanOrEqual(Math.max(a, b));
+      }
+    }
+    for (const [id, t] of Object.entries(COPY.clearCard.title)) {
+      expect(wrapPixelLabel(t, 20).length, `clear title ${id}`).toBe(1);
+    }
+    for (const [id, line] of Object.entries(COPY.deathCard.line)) {
+      const lines = wrapPixelLabel(line, 26);
+      expect(lines.length, `death ${id}`).toBeLessThanOrEqual(2);
+      if (lines.length === 2) {
+        const [a, b] = [lines[0]!.length, lines[1]!.length];
+        expect(Math.min(a, b) * 2, `death ${id}`).toBeGreaterThanOrEqual(Math.max(a, b));
+      }
+    }
+    for (const [id, t] of Object.entries(COPY.deathCard.title)) {
+      expect(wrapPixelLabel(t, 20).length, `death title ${id}`).toBeLessThanOrEqual(2);
+    }
   });
 
   it('makes the hidden attribute beat a display rule, or a hidden line stays on screen', () => {
@@ -678,7 +794,7 @@ describe('Overlays', () => {
     // to be the shipped one.
     parent.classList.add('beam-run');
     overlays.show('titlecard', { levelLabel: 'Compliance' });
-    for (const cls of ['beam-run__brief', 'beam-run__advice']) {
+    for (const cls of ['beam-run__eyebrow', 'beam-run__brief', 'beam-run__keys']) {
       const el = visible(parent).querySelector(`.${cls}`) as HTMLElement;
       // Driven by the attribute, not by a class of its own.
       expect(el.hidden, cls).toBe(true);
@@ -696,11 +812,18 @@ describe('Overlays', () => {
     // when the player presses. So the card carries a line about the stage and a
     // control that starts it — it is not a caption on a timer any more.
     const brief = COPY.titleCard.brief[2]!;
-    overlays.show('titlecard', { levelLabel: 'Compliance', brief });
+    overlays.show('titlecard', { levelLabel: 'Compliance', levelTag: 'Level 2', brief });
     const card = visible(parent);
     // A stop, not a status message going past.
     expect(card.getAttribute('role')).toBe('dialog');
     expect(card.getAttribute('aria-label')).toContain(brief);
+    // The level is called out (owner call), as an eyebrow over the name rather than
+    // folded into it: the title is painted as ONE unwrapped bitmap line.
+    const eyebrow = card.querySelector('.beam-run__eyebrow') as HTMLElement;
+    expect(eyebrow.hidden).toBe(false);
+    expect(eyebrow.textContent).toBe('Level 2');
+    expect(card.querySelector('.beam-run__title')!.textContent).toBe('Compliance');
+    expect(card.getAttribute('aria-label')).toContain('Level 2: Compliance');
     // The brief is bitmap art plus the real sentence, like every other line.
     const line = card.querySelector('.beam-run__brief') as HTMLElement;
     expect(line.hidden).toBe(false);
@@ -715,7 +838,14 @@ describe('Overlays', () => {
     expect(btns).toHaveLength(1);
     expect(btns[0]!.textContent).toBe(COPY.titleCard.begin);
     expect(card.querySelector('.beam-run__hint')).toBeNull();
+    /*
+     * …and no keyboard prompt. The check has to be made on a card with **no legend on
+     * it**, which is five of the six: the level-0 card legitimately draws a cap labelled
+     * SPACE now (owner call: the controls moved onto the cards), and a cap is a button,
+     * not a caption on one. So the word may appear as a KEY and never as prose.
+     */
     expect(card.textContent).not.toMatch(/SPACE/i);
+    expect(card.querySelectorAll('.beam-run__keys:not([hidden])')).toHaveLength(0);
     btns[0]!.click();
     expect(cb.onAdvance).toHaveBeenCalled();
     // The button takes focus: the card is waiting on it, so a keyboard player must
@@ -1031,17 +1161,17 @@ describe('Overlays', () => {
   it('keeps the title screen to the offer, the buttons and one route', () => {
     overlays.show('start');
     const start = visible(parent);
-    // Three things in one order: what the game is, how to play it, play.
+    // Three things in one order: the hook, the offer, play. The row of key caps that
+    // used to sit between them is on the briefing cards now (owner call).
     const stack = start.querySelector('.beam-run__stack')!;
     expect(Array.from(stack.children).map((n) => n.className)).toEqual([
       'beam-run__title',
-      'beam-run__keys',
+      'beam-run__brief',
       'beam-run__actions',
     ]);
-    // The legend sits ABOVE the cap: a line of chrome under a button reads as a
-    // caption on the button (the briefing card paid for that one twice).
     expect(start.textContent).not.toContain(COPY.meta.estimatedTime);
-    expect(start.textContent).not.toContain(COPY.start.controlsTap);
+    expect(start.textContent).not.toContain(COPY.legend.moveJumpTap);
+    expect(start.textContent).not.toContain(COPY.legend.fireKeys);
     // The controls also still reach screen-reader users via the canvas description,
     // the act key included.
     expect(COPY.a11y.canvasLabel).toContain('Space');
@@ -1051,18 +1181,28 @@ describe('Overlays', () => {
 
   it('shows the on-screen pads instead of keys on a touch device', () => {
     // A phone player has no arrow keys and gets one-tap play by default, so the legend
-    // draws the pads they will actually see: two arrows, a round jump, an act button.
+    // draws the pads they will actually see: two arrows and a round jump, then — three
+    // stages later — the smaller act disc on its own.
     const host = document.createElement('div');
     document.body.appendChild(host);
     const touch = new Overlays(host, cb, { touch: true });
-    touch.show('start');
-    const start = host.querySelector('.beam-run__overlay--visible')!;
-    const keys = start.querySelector('.beam-run__keys')!;
-    expect(keys.textContent).toBe(COPY.start.controlsTap);
-    expect(start.textContent).not.toContain(COPY.start.controlsKeys);
-    // Round caps, and still four of them — the pads are the same three controls.
-    expect(keys.querySelectorAll('.beam-run__key--pad')).toHaveLength(4);
+    touch.show('titlecard', { levelLabel: 'Head Office', legend: 'moveJump' });
+    const card = host.querySelector('.beam-run__overlay--visible')!;
+    const keys = card.querySelector('.beam-run__keys') as HTMLElement;
+    expect(keys.textContent).toBe(COPY.legend.moveJumpTap);
+    expect(card.textContent).not.toContain(COPY.legend.moveJumpKeys);
+    // Round caps: three of them, the same three controls the pads draw.
+    expect(keys.querySelectorAll('.beam-run__key--pad')).toHaveLength(3);
     expect(CSS).toContain('.beam-run__key--pad { border-radius: 50%; }');
+    // The act pad is the SMALL disc, which is how it is told apart from jump: both are
+    // discs, so size is the only difference available.
+    touch.show('start');
+    touch.show('titlecard', { levelLabel: 'The Fit-Out Trap', legend: 'fire' });
+    const fireRow = host.querySelector(
+      '.beam-run__overlay--visible .beam-run__keys',
+    ) as HTMLElement;
+    expect(fireRow.querySelectorAll('.beam-run__key--small')).toHaveLength(1);
+    expect(fireRow.textContent).toBe(COPY.legend.fireTap);
     touch.destroy();
     host.remove();
   });

@@ -155,9 +155,10 @@ describe('badge reachability', () => {
       });
 
       it('IS taken by a player who holds under the column and waits for it to come down', () => {
-        // The inputs a one-thumb touch player has: forward, BACK (`TouchControls.setAutoRun`
-        // keeps it in the auto-run layout for exactly this) and one jump. Arrive, hold
-        // yourself under the rail, and tap every time you are on the ground.
+        // The inputs a one-thumb touch player has: forward, BACK (the auto-run layout keeps
+        // that button for exactly this — `TouchControls.setAutoRun`) and one jump. Arrive,
+        // hold yourself under the rail, and tap every time you are on the ground. Auto-run
+        // is opt-in now, so this is the worst case rather than the default one.
         const sim = driveToScreen(screen.id);
         const cx = badgeLowestBox(badge).x + RESOLUTION.TILE / 2;
         let took = false;
@@ -317,10 +318,11 @@ describe('badge reachability', () => {
 
     it('IS taken by a player who turns round and jumps the other way', () => {
       /*
-       * And optional must not mean impossible on a phone. One-tap auto-run is the default
-       * there, which is why that layout keeps a BACK button (`TouchControls.setAutoRun`):
-       * the inputs used below — forward, one tap, then left plus a held tap — are exactly
-       * the ones a one-thumb player has.
+       * And optional must not mean impossible on a phone. One-tap auto-run is no longer the
+       * default there (`ASSIST.AUTO_RUN_DEFAULT_ON_TOUCH`), but it is still an option, and
+       * it is why that layout keeps a BACK button (`TouchControls.setAutoRun`): the inputs
+       * used below — forward, one tap, then left plus a held tap — are exactly the ones a
+       * one-thumb player has, which is the worst case either way.
        */
       for (const screen of perchScreens) {
         const sim = driveToScreen(screen.id);
