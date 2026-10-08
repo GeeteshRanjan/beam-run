@@ -69,6 +69,13 @@ export interface PixelTextOptions {
   color?: string;
   /** Hard 8-bit drop shadow, offset by one authored pixel. */
   shadow?: string;
+  /**
+   * Centre the glyph ink, not ink + shadow, in the SVG box. The shadow adds a cell to
+   * the right and bottom only, so a label centred by its box sits a cell up and left of
+   * the box's middle; on a key cap that read as a glyph that was not centred in its
+   * cap. Set, the box gets a matching empty cell on the left and top as well.
+   */
+  centreInk?: boolean;
   /** Extra class on the <svg>. */
   className?: string;
   /**
@@ -123,9 +130,12 @@ export function paintPixelSvg(
   const lineGap = 3; // cells between baselines
   const cols = Math.max(1, ...rows.map(lineCells));
   const cells = rows.length * GLYPH_H + Math.max(0, rows.length - 1) * lineGap;
-  const w = cols + (opts.shadow ? 1 : 0);
-  const h = Math.max(1, cells) + (opts.shadow ? 1 : 0);
-  svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+  // A centred-ink box pads the left and top by the same cell the shadow takes on the
+  // right and bottom (see `centreInk`), so the glyphs sit on the box's own middle.
+  const pad = opts.shadow && opts.centreInk ? 1 : 0;
+  const w = cols + (opts.shadow ? 1 : 0) + pad;
+  const h = Math.max(1, cells) + (opts.shadow ? 1 : 0) + pad;
+  svg.setAttribute('viewBox', `${-pad} ${-pad} ${w} ${h}`);
   svg.setAttribute('width', `${w * scale}`);
   svg.setAttribute('height', `${h * scale}`);
   // Frame-relative sizing: one authored pixel = `unit`% of the frame width, so
@@ -135,7 +145,10 @@ export function paintPixelSvg(
   if (opts.unit) {
     const ideal = `calc(var(--beam-run-u) * ${(w * opts.unit).toFixed(2)})`;
     const floor = `${(w * (opts.minPx ?? 2)).toFixed(0)}px`;
-    const ceil = `${(w * (opts.maxPx ?? 12)).toFixed(0)}px`;
+    // The ceiling is in design pixels (`--beam-run-px`: 1px up to a 1280 frame, then
+    // growing with it), so text keeps scaling with the art on a big screen. See P() in
+    // styles.ts; the 1px fallback keeps surfaces outside the stage unchanged.
+    const ceil = `calc(var(--beam-run-px, 1px) * ${(w * (opts.maxPx ?? 12)).toFixed(0)})`;
     const cap = opts.maxShare ? `calc(var(--beam-run-u) * ${opts.maxShare})` : '96%';
     svg.style.width = `min(${cap}, clamp(${floor}, ${ideal}, ${ceil}))`;
   }

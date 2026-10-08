@@ -32,8 +32,9 @@
  *    motion is a constant rather than a special case.
  */
 import { drawPixels, pxRect, drawBricks, hash2 } from './PixelArt';
-import { drawText, drawLabelPlaque, measureText } from './PixelText';
+import { drawText, measureText } from './PixelText';
 import { drawAnsrBadgeMark, markSpin } from './badge';
+import { drawActPrompt } from './actPrompt';
 import { BONUS, RESOLUTION } from '../data/tuning.config';
 import type {
   BallState,
@@ -47,7 +48,6 @@ import type { AABB } from '../world/Physics';
 
 const R = BONUS.ROOM;
 const C = BONUS.CANNON;
-const BEAT = BONUS.BEAT;
 const WALL_RIGHT = RESOLUTION.WIDTH - R.WALL;
 const MOUTH_L = R.TUNNEL_CX - R.TUNNEL_W / 2;
 const MOUTH_R = R.TUNNEL_CX + R.TUNNEL_W / 2;
@@ -101,25 +101,15 @@ const LABEL_INK = '#0C1428';
 const SHATTER_TIME = 0.26;
 
 /**
- * The stage's name and the one line under it, drawn on the frame rather than on a
- * briefing card: this stage is a *secret*, and a card that stops the run to introduce
- * it would announce the thing the player has just discovered for themselves.
+ * The stage's name as the frame paints it: the floor stencil, once the briefing card
+ * has been dismissed. The card itself (owner call: the hidden level gets transition
+ * screens like every other stage) prints `COPY.bonus.name` and `COPY.bonus.brief` —
+ * "LIVE IS DAY ONE, NOT THE FINISH", which used to be painted here for three seconds.
  *
- * The line names the argument and shares no word over three characters with the name
- * above it, which is the rule the six briefs follow.
- *
- * Both were rewritten when the owner rejected the old name (the reasoning is on
- * `COPY.bonus.name`, which this has to match — `brickBreaker.test.ts` says so, because
- * the HUD plaque reads the copy object and this literal is what the frame paints, and
- * two sources for one name is a name that eventually disagrees with itself).
- *
- * The line is the whole of what the stage argues, in seven words: go-live is a start
- * date, not a finish line. It replaced "LIVE IS WHERE THE WORK STARTS", which said the
- * same thing with a subordinate clause in the middle of it and no second half to land
- * on — and the comma is doing real work here, because the sentence is a contrast.
+ * `brickBreaker.test.ts` holds this literal to `COPY.bonus.name`: two sources for one
+ * name is a name that eventually disagrees with itself.
  */
 export const STAGE_NAME = 'THE ENGINE ROOM';
-export const STAGE_LINE = 'LIVE IS DAY ONE, NOT THE FINISH';
 
 /** The prompt on the Tech Park's hatch. A verb, and the key beside it. */
 const HATCH_PROMPT = 'DROP IN';
@@ -176,7 +166,9 @@ export function drawEngineRoom(ctx: CanvasRenderingContext2D, v: EngineRoomView)
   shaft(ctx, v);
   cannons(ctx, v);
   wall(ctx, v);
-  titles(ctx, v);
+  // The kit he leaves behind on the way out is scenery by then, so it goes *behind*
+  // the hero and he is visibly lifted out of it (see `leftBehindKit`).
+  if (v.carrying && v.equipped) leftBehindKit(ctx, v);
 }
 
 function backWall(ctx: CanvasRenderingContext2D): void {
@@ -315,23 +307,24 @@ function shell(ctx: CanvasRenderingContext2D): void {
  * The stage's name, stencilled on the floor plates.
  *
  * It is here because **the HUD is hidden in this room** (nothing down here can cost a
- * life or a month, so a lives plaque and a delay log would be furniture that lies),
- * and with the big title gone at 3.6s the player would otherwise have nothing that
- * says where they are. Stencilled paint on a plant-room floor is what that looks like
- * in a place like this — and it sits *below* the walking line, so it never competes
- * with the wall or the mark.
+ * life or a month, so a lives plaque and a delay log would be furniture that lies), so
+ * once the briefing card is dismissed the player would otherwise have nothing that says
+ * where they are. Stencilled paint on a plant-room floor is what that looks like in a
+ * place like this — and it sits *below* the walking line, so it never competes with the
+ * wall or the mark.
+ *
+ * The big on-frame title it used to take over from is gone: the room is introduced by a
+ * briefing card now (owner call), which says the name and the line under it.
  */
 function floorStencil(ctx: CanvasRenderingContext2D, clock: number): void {
   /*
-   * It **takes over from the title, it does not sit under it**: rasterised together,
-   * the frame printed the stage name twice, once at scale 4 in the middle and once at
-   * scale 2 on the floor beneath it. Same defect as CONTINUE on the briefing card's cap
-   * and the word under it — invisible in the source, obvious in the picture — so the
-   * stencil fades up exactly as the title fades out.
+   * It **comes up as the card goes, it does not sit under it**: the room's clock is held
+   * at 0 while the briefing card is up, so the stencil is absent there and the card is
+   * the only place the name is printed. Rasterised together, the old frame printed the
+   * name twice — the same defect as CONTINUE on a cap and the word under it.
    */
-  const in0 = BEAT.BRICKS_AT - 0.6;
-  if (clock < in0) return;
-  const alpha = Math.min(1, (clock - in0) / 0.6);
+  if (clock <= 0) return;
+  const alpha = Math.min(1, clock / 0.6);
   drawText(ctx, STAGE_NAME, RESOLUTION.WIDTH / 2, R.FLOOR_Y + 26, {
     scale: 2,
     color: '#3B5187',
@@ -738,63 +731,63 @@ export function wrapLabel(label: string, chars: number): string[] {
 }
 
 // ---------------------------------------------------------------------------
-// Titles
-// ---------------------------------------------------------------------------
-
-/**
- * The stage names itself for the first few seconds and then gets out of the way — it
- * is gone by the time the wall is up, because from then on the words that matter are
- * the ones on the blocks.
- */
-function titles(ctx: CanvasRenderingContext2D, v: EngineRoomView): void {
-  const out = BEAT.BRICKS_AT;
-  if (v.clock > out) return;
-  const alpha = v.clock > out - 0.6 ? Math.max(0, (out - v.clock) / 0.6) : 1;
-  const cx = RESOLUTION.WIDTH / 2;
-  drawText(ctx, STAGE_NAME, cx, 352, {
-    scale: 4,
-    color: PALE,
-    align: 'center',
-    outline: 'rgba(6,11,24,0.9)',
-    alpha,
-  });
-  // The rule under the name, in the value orange: the one warm mark on the frame
-  // besides the ANSR mark itself, and it is the same rule every title in the game has.
-  pxRect(ctx, `rgba(255,84,0,${(alpha * 0.9).toFixed(2)})`, cx - 60, 396, 120, 4, 2);
-  drawText(ctx, STAGE_LINE, cx, 416, {
-    scale: 2,
-    color: '#9FC8D2',
-    align: 'center',
-    outline: 'rgba(6,11,24,0.9)',
-    alpha,
-  });
-}
-
-// ---------------------------------------------------------------------------
 // The kit, in front of the hero
 // ---------------------------------------------------------------------------
 
 export function drawEngineRoomProps(ctx: CanvasRenderingContext2D, v: EngineRoomView): void {
   if (v.lost) lostMark(ctx, v.lost);
-  if (v.equipped && !v.carrying) skateboard(ctx, v);
-  tray(ctx, v);
+  if (v.equipped && !v.carrying) skateboard(ctx, v.heroX, v.heroFeetY, v.reduced);
+  // Once the draught has him, the tray is drawn with the rest of the kit behind him.
+  if (!(v.carrying && v.equipped)) tray(ctx, v);
   if (v.ball) mark(ctx, v.ball, v.phaseT);
+}
+
+/** Posts from the hero's hands (or the board) up to the tray's underside. */
+const ARM_DX = [-14, 10] as const;
+const ARM_W = 5;
+const ARM_INK = '#0F5A6C';
+/** Top of the skateboard deck above the floor it rolls on. */
+const BOARD_DECK = 12;
+
+/**
+ * The whole kit, left standing where he let go of it when the draught takes him: the
+ * skateboard on the floor, the two posts rising off it and the tray on top.
+ *
+ * Before this (owner note) only the tray stayed — it hung at bounce height in mid-air
+ * with nothing under it, because the board and the arms were drawn off the hero and
+ * went up the shaft with him. The tray has not moved (the room stops updating it once
+ * he is carried), so the board is set under its centre and the posts run the full
+ * height between them: a free-standing rig, not a plank floating in the room.
+ */
+function leftBehindKit(ctx: CanvasRenderingContext2D, v: EngineRoomView): void {
+  const t = v.tray;
+  skateboard(ctx, t.x, R.FLOOR_Y, true);
+  const top = t.y + t.h;
+  const bottom = R.FLOOR_Y - BOARD_DECK;
+  for (const dx of ARM_DX) pxRect(ctx, ARM_INK, t.x + dx, top, ARM_W, bottom - top, 1);
+  tray(ctx, v);
 }
 
 /**
  * The skateboard. Its wheels turn **off the hero's position, never off a clock** — a
  * board that spins while he stands still is the same defect as a projectile that
- * flickers on the wall clock.
+ * flickers on the wall clock. `still` holds the spokes (reduced motion, or the board
+ * left behind on the floor).
  */
-function skateboard(ctx: CanvasRenderingContext2D, v: EngineRoomView): void {
-  const y = v.heroFeetY - 10;
+function skateboard(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  feetY: number,
+  still: boolean,
+): void {
+  const y = feetY - 10;
   const w = 58;
-  const x = v.heroX - w / 2;
+  const x = cx - w / 2;
   pxRect(ctx, INK, x - 2, y - 2, w + 4, 10, 2);
   pxRect(ctx, '#B9C7E8', x, y, w, 6, 2);
   pxRect(ctx, PALE, x, y, w, 2, 1);
   // Two trucks and two wheels, the wheels' spokes stepping with distance covered.
-  const roll = v.reduced ? 0 : Math.floor(Math.abs(v.heroX) / 10) % 2;
+  const roll = still ? 0 : Math.floor(Math.abs(cx) / 10) % 2;
   for (const wx of [x + 10, x + w - 16]) {
     pxRect(ctx, '#7F90B8', wx + 1, y + 6, 4, 3, 1);
     pxRect(ctx, INK, wx - 1, y + 8, 8, 8, 2);
@@ -819,8 +812,8 @@ function tray(ctx: CanvasRenderingContext2D, v: EngineRoomView): void {
   if (held && !v.carrying) {
     // Arms: two posts from the shoulders to the tray's underside, so the thing above
     // his head is visibly his rather than floating there.
-    for (const dx of [-14, 10]) {
-      pxRect(ctx, '#0F5A6C', v.heroX + dx, t.y + t.h, 5, v.heroFeetY - 44 - (t.y + t.h), 1);
+    for (const dx of ARM_DX) {
+      pxRect(ctx, ARM_INK, v.heroX + dx, t.y + t.h, ARM_W, v.heroFeetY - 44 - (t.y + t.h), 1);
     }
   }
   pxRect(ctx, INK, x - 3, t.y - 3, t.w + 6, t.h + 6, 1);
@@ -985,21 +978,8 @@ export function drawTunnelHatch(ctx: CanvasRenderingContext2D, v: TunnelHatchVie
    * cap at all, because there is no key; the act pad appears instead and carries the
    * same words in its own label.
    */
-  const cap = v.keyCap;
-  const promptY = groundY - 118;
-  const capW = cap ? 26 : 0;
-  const plaqueW = measureText(HATCH_PROMPT, 2, 1) + 16;
-  const shift = cap ? (capW + 8) / 2 : 0;
-  if (cap) keyCap(ctx, cx - shift - plaqueW / 2, promptY, cap, capW);
-  drawLabelPlaque(ctx, HATCH_PROMPT, cx + shift, promptY, {
-    scale: 2,
-    fg: '#DCE8FF',
-    bg: 'rgba(4,20,26,0.82)',
-    frame: 'rgba(127,216,232,0.65)',
-    padX: 8,
-    padY: 6,
-    alpha: 0.96,
-  });
+  // Shared with the tool prompts over the hero's head (`render/actPrompt.ts`).
+  drawActPrompt(ctx, { cx, y: groundY - 118, cap: v.keyCap, label: HATCH_PROMPT });
   // A down chevron under the plaque, so the direction is said without words too.
   drawPixels(ctx, DOWN_CHEVRON, { C: 'rgba(127,216,232,0.9)' }, cx - 7.5, groundY - 84 + lift, {
     scale: 3,
@@ -1007,28 +987,6 @@ export function drawTunnelHatch(ctx: CanvasRenderingContext2D, v: TunnelHatchVie
 }
 
 const DOWN_CHEVRON: readonly string[] = ['CC.CC', '.CCC.', '..C..'];
-
-/**
- * One 8-bit key cap, in the same treatment as the title screen's control legend and the
- * overlay buttons: solid fill, a light bevel on two sides, a dark rail on the other two,
- * no radius. 26px tall, which is exactly the plaque beside it.
- */
-function keyCap(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  label: string,
-  w: number,
-): void {
-  const h = 26;
-  pxRect(ctx, 'rgba(4,20,26,0.9)', x - 2, y - 2, w + 4, h + 4, 1);
-  pxRect(ctx, '#12414F', x, y, w, h, 1);
-  pxRect(ctx, '#8FE0EE', x, y, w, 3, 1);
-  pxRect(ctx, '#8FE0EE', x, y, 3, h, 1);
-  pxRect(ctx, '#062A34', x, y + h - 3, w, 3, 1);
-  pxRect(ctx, '#062A34', x + w - 3, y, 3, h, 1);
-  drawText(ctx, label, x + w / 2, y + 6, { scale: 2, color: '#DCE8FF', align: 'center' });
-}
 
 /** Exported for the render test: the label a block would set, wrapped. */
 export function labelLines(label: string): string[] {

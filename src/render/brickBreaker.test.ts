@@ -17,7 +17,6 @@ import {
   labelLines,
   labelWidth,
   STAGE_NAME,
-  STAGE_LINE,
   type EngineRoomView,
 } from './brickBreaker';
 import { FONT, measureText } from './PixelText';
@@ -84,29 +83,31 @@ describe('The Engine Room — its name', () => {
   it('paints the same name the HUD plaque reads, in type the font has', () => {
     /*
      * Two sources for one name, and no way for a reader to see both at once: this
-     * literal is what the frame paints (title, then floor stencil) and `COPY.bonus.name`
-     * is what the HUD's stage plaque shows while the player is down there. The owner
-     * renamed the stage this pass — "The Growth Floor" said nothing and borrowed office
-     * vocabulary for a plant room — and a rename that lands on one of the two is a room
-     * that disagrees with its own label.
+     * literal is what the frame paints (the floor stencil) and `COPY.bonus.name` is what
+     * the briefing card and the HUD's stage plaque show. The owner renamed the stage
+     * once — "The Growth Floor" said nothing and borrowed office vocabulary for a plant
+     * room — and a rename that lands on one of the two is a room that disagrees with its
+     * own label. (The card's own rules — the brief's wrap and its no-echo — are in
+     * `ui.test.ts`, with the six stages'.)
      */
     expect(STAGE_NAME).toBe(COPY.bonus.name.toUpperCase());
-    for (const ch of STAGE_NAME + STAGE_LINE) expect(FONT[ch], ch).toBeDefined();
-    // Both are drawn as ONE unwrapped line — the name at scale 4, the line under it at
-    // scale 2 — so their widths are a hard constraint: the frame is 1280 and the room's
-    // own walls take 40 off each end.
-    expect(measureText(STAGE_NAME, 4, 1)).toBeLessThan(RESOLUTION.WIDTH - 80);
-    expect(measureText(STAGE_LINE, 2, 1)).toBeLessThan(RESOLUTION.WIDTH - 80);
-    /*
-     * And the line may not echo a word from the name over it — the same rule the six
-     * briefing cards follow, for the same reason: a heading and the sentence under it
-     * saying the same word reads as a mistake, and it is invisible in the source because
-     * the two strings sit 10 lines apart.
-     */
-    for (const word of STAGE_NAME.split(' ')) {
-      if (word.length <= 3) continue;
-      expect(STAGE_LINE, word).not.toContain(word);
-    }
+    for (const ch of STAGE_NAME) expect(FONT[ch], ch).toBeDefined();
+    // The stencil is ONE unwrapped line at scale 2 inside the room's 40px walls.
+    expect(measureText(STAGE_NAME, 2, 1)).toBeLessThan(RESOLUTION.WIDTH - 80);
+  });
+
+  it('leaves the name to the briefing card while it is up, then stencils it', () => {
+    // The room's clock is held at 0 under the card, and nothing on the frame may print
+    // the name the card is printing: the old three-second title did, twice over.
+    const stage = new BrickBreaker();
+    const held = recorder();
+    drawEngineRoom(held.ctx, viewOf(stage, { clock: 0 }));
+    const running = recorder();
+    drawEngineRoom(running.ctx, viewOf(stage, { clock: 2 }));
+    const stencil = (cells: Cell[]): number =>
+      cells.filter((c) => c.fill === '#3B5187' && c.y > BONUS.ROOM.FLOOR_Y).length;
+    expect(stencil(held.cells)).toBe(0);
+    expect(stencil(running.cells)).toBeGreaterThan(0);
   });
 });
 
@@ -236,5 +237,47 @@ describe('The Engine Room — the hatch in the plaza', () => {
     const touch = recorder();
     drawTunnelHatch(touch.ctx, { ...base, active: true, keyCap: null });
     expect(touch.cells.length).toBeLessThan(withKey.cells.length);
+  });
+});
+
+describe('The Engine Room — the kit he leaves behind', () => {
+  it('stands the tray on its posts and the skateboard when the draught takes him', () => {
+    /*
+     * Owner note: on the lift out only the tray stayed, hanging at bounce height with
+     * nothing under it, because the board and the arms were drawn off the hero and went
+     * up the shaft with him. Carried, the whole rig is scenery: board on the floor under
+     * the tray, two posts between them, all of it behind the hero (the room pass), and
+     * none of it in the props pass that draws over him.
+     */
+    const stage = new BrickBreaker();
+    const P = BONUS.PADDLE;
+    const tray = { phase: 'held' as const, x: 300, y: P.TOP, w: P.W, h: P.H };
+    const view = viewOf(stage, {
+      tray,
+      equipped: true,
+      carrying: true,
+      heroX: BONUS.ROOM.TUNNEL_CX,
+      heroFeetY: 200,
+    });
+    const room = recorder();
+    drawEngineRoom(room.ctx, view);
+    const near = (c: Cell): boolean => c.x > tray.x - 80 && c.x < tray.x + 80;
+    // The deck, on the floor under the tray (not at the hero's feet high in the shaft).
+    const deck = room.cells.filter((c) => c.fill === '#B9C7E8' && near(c) && c.y > 560);
+    expect(deck.length).toBeGreaterThan(0);
+    for (const c of deck) expect(c.y + c.h).toBeLessThanOrEqual(BONUS.ROOM.FLOOR_Y);
+    // Two posts running from the tray's underside down to the deck.
+    const posts = room.cells.filter((c) => c.fill === '#0F5A6C' && near(c));
+    expect(posts).toHaveLength(2);
+    for (const c of posts) {
+      expect(c.y).toBeLessThanOrEqual(tray.y + tray.h + 1);
+      expect(c.y + c.h).toBeGreaterThanOrEqual(BONUS.ROOM.FLOOR_Y - 14);
+    }
+    // The tray face itself is in the room pass too.
+    expect(room.cells.some((c) => c.fill === '#8FA3CE' && near(c))).toBe(true);
+
+    const props = recorder();
+    drawEngineRoomProps(props.ctx, view);
+    expect(props.cells.some((c) => ['#8FA3CE', '#B9C7E8', '#0F5A6C'].includes(c.fill))).toBe(false);
   });
 });

@@ -2,7 +2,8 @@
 
 This was §7 and §8 of `HANDOFF.md`. Nothing here is a bug to go and fix unprompted — each item is
 either a decision the owner owes, or a thing only a hand on a real device can answer. When one is
-resolved, delete it from here and record the resolution in `docs/JOURNAL.md`.
+resolved, delete it from here and record the resolution as one line in `HANDOFF_LOG.md` (plus the
+rule in `docs/INVARIANTS.md` or `docs/MODEL.md` if it is still true going forward).
 
 **New this pass:** §32 (on a **tablet in landscape** the thumb buttons still overlay the bottom corners of
 the frame, and closing that costs ~14% of the frame's width — a trade only the owner can price) · §33
@@ -209,8 +210,8 @@ Then §32, which is the same "hand on a device" question for the tablet.
    keep one cap, or make the legend cap a pair. It is a copy call, not a code one; the keys already work.
    (Related: §21, which is the same legend's other unanswered question.)
 26. **The Head Office name is now on the frame twice, and that was accepted rather than solved.** The wall
-   sign says HEAD OFFICE (owner call, replacing "MARKET ENTRY: ON PAPER") and the HUD's stage plaque says
-   Head Office over it for as long as the screen is playing. Every other duplication of this kind in the
+   sign says HEADQUARTERS (owner call, replacing "MARKET ENTRY: ON PAPER", then HEAD OFFICE) and the HUD's stage plaque says
+   Headquarters over it for as long as the screen is playing. Every other duplication of this kind in the
    build was treated as a defect — COMPLIANCE over "compliance does not run in a straight line", CONTINUE
    under a cap labelled Continue — and the argument for leaving this one is that a directory board is an
    *object in a room* rather than chrome, it is 100px up a back wall behind the play, and a lobby whose sign

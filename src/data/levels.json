@@ -10,7 +10,7 @@
       "exit": "reaching this x (right edge trigger) advances to next screen",
       "badge": "ANSR capability pickup; anchored early in the screen and levitating vertically around gy (see POWERUPS in tuning.config.ts for how the band is derived). On a rail the mark starts at the MIDDLE of the band, rises to the top and then comes down (owner call), which makes it a pickup you stop for rather than one you take on the way past - see badgeFloat.ts and docs/OPEN.md. 'delivery' switches that off: with \"airdrop\" (Hire Under Fire only, owner call) the badge is not on a rail at all - a flying ANSR supply drone crosses the screen along row 'gy', releases it over one of the 'drops' columns in turn, and the badge comes to rest on the floating brick at row 'restGy' there for POWERUPS.DROP.LIFETIME seconds before it is gone (omit 'restGy' and it rests on the floor). Miss it and the next drone comes with the next column, so the screen is never unanswerable; stand still and you get nothing, which is the point on the one screen where standing still is how you get burnt. 'gx'/'gy' are still authored because everything structural reads them: gx is the column the badge belongs to for the badge-before-obstacle rule, and gy is the drone's flight row. With \"perch\" (Compliance) the mark simply stands on the top course of a floating brick deck at 'gx'/'restGy'. With \"ceiling\" (the Workplace, owner call) it hangs in the beam of a ceiling spotlight at 'gx'/'gy', drops straight down onto the floating cabinet at 'restGy' after POWERUPS.CEILING.HOLD seconds, rests there for LIFETIME and is gone until the next cycle - the only delivery that is visible before it is takeable.",
       "pedestal": "a solid with role \"pedestal\" is a floating block, drawn as its screen's own prop rather than as level material (on Hire Under Fire, the single brick the badge is dropped onto). It is real geometry - it collides, it can be landed on, and the physics validator has to prove the badge on top of it is reachable - and it replaced the old \"hurdle\" role, which was a one-tile step in the middle of the same screen and was removed (owner call: it added nothing to a boss screen). A pedestal has to leave the corridor under it walkable: at row 12 its underside is 36px clear of a standing head.",
-      "dragons": "the hiring dragon on Hire Under Fire - the screen's only obstacle, and it wears glasses and nothing else (owner call: no jacket and no tie). Exactly one is authored; it is a list because every other hazard family here is one. 'from'/'to' are the columns of the ground it STANDS ON at the far end of the screen - on two feet, so there is no hover row to author: its height comes from HAZARDS.DRAGON.BODY_H and the ground band. Its BODY IS NOT A HITBOX: the only lethal thing on the screen is one straight, growing, slightly diverging cone of fire thrown from its jaw along the floor in front of it, so nothing can cost a life without a telegraph in front of it and nothing on the screen travels. It opens every attempt with a roar it cannot attack during (HAZARDS.DRAGON.ROAR_TIME), which is the guaranteed safe beat the level starts on. 'seed' picks its rhythm without Math.random, and 'taunts' are the strings painted on the burst's own plaque, one per burst - drawn content, so uppercase and apostrophe-free, and NOT stripped from the bundle.",
+      "dragons": "the hiring dragon on Hire Under Fire - the screen's only obstacle, and it wears glasses and nothing else (owner call: no jacket and no tie). Exactly one is authored; it is a list because every other hazard family here is one. 'from'/'to' are the columns of the ground it STANDS ON at the far end of the screen - on two feet, so there is no hover row to author: its height comes from HAZARDS.DRAGON.BODY_H and the ground band. Its BODY IS NOT A HITBOX but IS A WALL until beaten, and up close it STOMPS; at range the lethal thing is one straight, growing, slightly diverging cone of fire thrown from its jaw along the floor in front of it, so nothing can cost a life without a telegraph in front of it and nothing on the screen travels. It opens every attempt with a roar it cannot attack during (HAZARDS.DRAGON.ROAR_TIME), which is the guaranteed safe beat the level starts on. 'seed' picks its rhythm without Math.random, and 'taunts' are the strings painted on the burst's own plaque, one per burst - drawn content, so uppercase and apostrophe-free, and NOT stripped from the bundle.",
       "monsters": "a compliance monster patrolling one corridor of the Compliance maze. 'from'/'to' are the grid columns it may wander between and 'gy' is the surface row it stands on at 'from'; 'slope' (-1 rising to the right, 0 flat, 1 falling) steps that row per tread and 'slopeRun' is how many columns make up one tread (default 1, and 2 on this screen's flights), so a monster can walk a staircase without ever standing half a row inside it. Its name is drawn on a framed plaque above it and is the ONLY signage on the screen - the five names are the five filings, so a second copy of them on boards in the sky is a duller label layer competing with this one (owner call, twice). It re-rolls direction and speed at every junction from its own seeded generator - unpredictable, never hunting. Touch one unassisted and the stage stalls. 'route' is the way home once the badge is taken: a list of surface cells it walks through, corner by corner, to reach the gather cell - the monsters use the player's own staircases rather than drifting through the geometry, which is the whole point of the picture.",
       "lift": "a moving platform. 'gx'/'gy'/'w' are where it PARKS (top of the plate at gy) and 'toGy' the row whose top it descends to. It carries the player down while they stand on it and returns when they step off. It is not in 'solids' on purpose: it moves, so the hazard owns the live box and nothing derives its position twice.",
       "mummies": "the figure wrapped in caution tape on the Workplace screen. 'from'/'to' are the grid columns it walks between and 'gy' the surface row it stands on. Unlike a compliance monster it NEVER turns around: it trudges from 'from' to 'to' at one constant speed and then loops straight back to 'from', so its path is a metronome the player can read from the far side of the frame rather than a chase. Touch it while it is still wrapped and the stage stalls. Three hits from the badge's cutter strip its three tape layers.",
@@ -24,7 +24,7 @@
   "screens": [
     {
       "id": 0,
-      "name": "Head Office",
+      "name": "Headquarters",
       "type": "intro",
       "hazard": "none",
       "monthsBase": 1,
@@ -38,7 +38,7 @@
       ],
       "note": "Head Office has NO BADGE (owner call). It carried a SAFE_PASSAGE mark as a tutorial - collect it and nothing happens - and that is exactly why it went: the first ANSR badge a player ever sees taught them that taking one changes nothing, one screen before the badge that saves their life. The first mark in the run is now 1Wrk on Setup Delays, where taking it is the difference between walking through the DENIED stamps and being flattened by them. The three labelled steps are the tutorial: they teach the jump, and they are the only thing on this screen that has to be learnt.",
       "copy": {
-        "titleCard": "The Head Office",
+        "titleCard": "The Headquarters",
         "hint": "Move: \u2190 \u2192  \u00b7  Jump: Space / \u2191",
         "onClear": "Approved on paper."
       }
@@ -79,11 +79,11 @@
           "phase": 0.0,
           "zone": "struggle",
           "label": "ENTITY",
-          "note": "Each stamp names ONE of the four setup approvals on its index label, and every one of them prints DENIED on its rubber die (owner call: 'where denied is written it needs to convey these, 1 for each', and 'denied can be shifted onto the black/bottom part of the stamp'). Legal Entity Formation -> ENTITY, Banking Account Setup -> BANKING, PAN/TAN/GST Registration -> TAX IDS, Director Forms -> DIR KYC, left to right in the order a real setup hits them. Four identical stamps shouting one word was one piece of information repeated four times; four stamps each refusing a different approval is the screen's argument. These labels are DRAWN content, so: uppercase only, no apostrophe, and at most 7 CHARACTERS - the label plate is 22 authored cells (88px) and the 5x7 font sets 7 characters at scale 2 in 82px. stamps.test.ts measures every authored label against the plate, so a longer one fails the build rather than silently falling off the label onto the body."
+          "note": "Each stamp names ONE of the four setup approvals on its index label, and every one of them prints DENIED on its rubber die (owner call: 'where denied is written it needs to convey these, 1 for each', and 'denied can be shifted onto the black/bottom part of the stamp'). The four labels are the owner's exact terms: ENTITY (Legal Entity Formation), BANKING (Banking Account Setup), TAX (PAN/TAN/GST Registration) and MCA (Director Forms, filed with the Ministry of Corporate Affairs), left to right in the order a real setup hits them. Four identical stamps shouting one word was one piece of information repeated four times; four stamps each refusing a different approval is the screen's argument. These labels are DRAWN content, so: uppercase only, no apostrophe, and at most 7 CHARACTERS - the label plate is 22 authored cells (88px) and the 5x7 font sets 7 characters at scale 2 in 82px. stamps.test.ts measures every authored label against the plate, so a longer one fails the build rather than silently falling off the label onto the body."
         },
         { "gx": 12, "phase": 0.5, "zone": "struggle", "label": "BANKING" },
-        { "gx": 20, "phase": 0.25, "zone": "relief", "label": "TAX IDS" },
-        { "gx": 25, "phase": 0.75, "zone": "relief", "label": "DIR KYC" }
+        { "gx": 20, "phase": 0.25, "zone": "relief", "label": "TAX" },
+        { "gx": 25, "phase": 0.75, "zone": "relief", "label": "MCA" }
       ],
       "badge": {
         "type": "PLACE_TILE",
@@ -136,13 +136,13 @@
       },
       "monsters": [
         {
-          "name": "EXIM",
+          "name": "TRADE REG.",
           "from": 7,
           "to": 8,
           "gy": 15,
           "seed": 11,
           "zone": "struggle",
-          "note": "THE FIVE NAMES ARE THE OWNER'S, and they replace TAX / GST / LEGAL / ENTITY / AUDIT: Export-Import Registration -> EXIM, Inter-company Agreement -> INTERCO, Notarisation -> NOTARY, Board Meetings -> BOARD, Transfer Pricing Agreement -> TP PACT. The old set named the DEPARTMENTS a filing goes through; this one names the FILINGS themselves, which is the thing that actually comes back. Each is set on a plaque at bitmap scale 2 over a creature 5 tiles wide, so LENGTH IS A CONSTRAINT: the long forms are 18+ characters of near-white lying across half the maze, and five of those shoulder to shoulder on the landing is the unreadable block the plaque is dropped to avoid. Seven characters is the ceiling the old set established (ENTITY was six) and screen2.test.ts holds the new set to it. Uppercase, no apostrophe - these are drawn in the 5x7 font, which has neither lower case nor an apostrophe.",
+          "note": "THE FIVE NAMES ARE THE OWNER'S: Trade Reg. / IC Terms / Notary / Governance / TP Docs (trade registration, inter-company terms, notarisation, board governance, transfer pricing documentation). They replace EXIM / INTERCO / NOTARY / BOARD / TP PACT, and with them the old 7-character ceiling: GOVERNANCE and TRADE REG. are 10. Length still costs width - each is a scale-2 plaque over a creature 35px wide - so the renderer (render/maze.ts layoutNamePlaques) resolves collisions instead of truncating: a plate that would touch one already placed steps up a row while walking, or drops under the feet onto the landing's face once settled, and the plates stay on after the powerup. Uppercase because the 5x7 font has no lower case (drawText upper-cases anyway); every character must have a glyph in PixelText FONT, which screen2.test.ts checks.",
           "route": [
             { "gx": 9, "gy": 14 },
             { "gx": 11, "gy": 13 },
@@ -153,7 +153,7 @@
           ]
         },
         {
-          "name": "INTERCO",
+          "name": "IC TERMS",
           "from": 9,
           "to": 15,
           "gy": 14,
@@ -183,7 +183,7 @@
           ]
         },
         {
-          "name": "BOARD",
+          "name": "GOVERNANCE",
           "from": 17,
           "to": 22,
           "gy": 10,
@@ -192,7 +192,7 @@
           "route": [{ "gx": 20, "gy": 10 }]
         },
         {
-          "name": "TP PACT",
+          "name": "TP DOCS",
           "from": 20,
           "to": 23,
           "gy": 5,
@@ -290,7 +290,7 @@
           "taunts": ["OFFER DROPOUT", "POOL TOO NARROW", "COUNTER OFFER", "90-DAY NOTICE"],
 
           "zone": "struggle",
-          "note": "It STANDS ON THE GROUND on two feet (owner call, third pass - it used to hover over row 9, and before that it roamed the whole frame holding a standoff from the player). There is no hover row here any more: HAZARDS.DRAGON.BODY_H and the ground band decide its height, and columns 23-29 are the patch of floor it holds, drifting only inside HAZARDS.DRAGON.ROOST_DRIFT of the centre of them. Its BODY IS NOT A HITBOX: the only lethal thing on the screen is one straight, growing, slightly diverging CONE of fire thrown from its jaw down the lane in front of it (HAZARDS.DRAGON.CONE_*). Nothing travels - the fireballs and the rolling flame fronts are gone - so the dangerous floor is a fixed strip with a rhythm, telegraphed for BURST_WINDUP along the ground before it lights. Each burst carries ONE of the taunts on a plaque that stays put over the lane; the next burst brings the next one. TWO of them are the owner's rewording: CANDIDATE DECLINED -> OFFER DROPOUT (a candidate who declines is a no; a dropout is somebody who had already said yes, which is the thing that actually costs a GCC build a quarter) and NOTICE PERIOD -> 90-DAY NOTICE, because the number IS the problem - 'notice period' is a neutral HR term and '90-day' is the delay. The word ROAR that used to be painted off the beast's jaw is gone with them (owner call): the concentric arcs were always the cue and the word was a caption on them. The taunts are drawn content rather than notes: uppercase only, no apostrophes, short enough to read while the floor in front of you is on fire."
+          "note": "It STANDS ON THE GROUND on two feet (owner call, third pass - it used to hover over row 9, and before that it roamed the whole frame holding a standoff from the player). There is no hover row here any more: HAZARDS.DRAGON.BODY_H and the ground band decide its height, and columns 23-29 are the patch of floor it holds, drifting only inside HAZARDS.DRAGON.ROOST_DRIFT of the centre of them. Its BODY IS NOT A HITBOX, but it IS A WALL until it is beaten (HAZARDS.DRAGON.BARRIER_X - owner call: it cannot be walked past), and whoever reaches it is STOMPED (STOMP_*). At range the lethal thing is one growing, slightly diverging JET of fire thrown from its jaw (HAZARDS.DRAGON.CONE_*). Nothing travels - the fireballs and the rolling flame fronts are gone. What it throws is a JET AIMED AT THE PLAYER (owner call, HAZARDS.DRAGON.AIM_*/FLAME_*): held for BURST_WINDUP while it draws breath, then straight from the jaw at the player's centre, easing after them as they move (capped, so a dash in under the head outruns it), bending like a hose when it swings, landing and splashing along the floor when aimed down, and holding rather than turning once the player is behind the jaw. It never reaches past CONE_REACH, and FLAME_LENGTH keeps it short of the badge's brick. Each burst carries ONE of the taunts, written along the jet; the next burst brings the next one. TWO of them are the owner's rewording: CANDIDATE DECLINED -> OFFER DROPOUT (a candidate who declines is a no; a dropout is somebody who had already said yes, which is the thing that actually costs a GCC build a quarter) and NOTICE PERIOD -> 90-DAY NOTICE, because the number IS the problem - 'notice period' is a neutral HR term and '90-day' is the delay. The word ROAR that used to be painted off the beast's jaw is gone with them (owner call): the concentric arcs were always the cue and the word was a caption on them. The taunts are drawn content rather than notes: uppercase only, no apostrophes, short enough to read while the floor in front of you is on fire."
         }
       ],
       "badge": {
@@ -300,7 +300,7 @@
         "delivery": "airdrop",
         "drops": [10],
         "restGy": 12,
-        "note": "The one badge that is DELIVERED (owner call): no levitating rail on this screen. An ANSR supply drone crosses row 5 and drops the badge over ONE column - gx10 (moved closer to spawn for better accessibility, spawn is at gx1, previously gx16) - and it lands on a FLOATING BRICK at row 12 rather than on the floor (owner call, second pass), so taking it is a jump as well as a journey. It lies up there for POWERUPS.DROP.LIFETIME seconds and then it is gone, and the next drone brings another one to the same brick. Talent500 then does two things at once: a teal halo makes the fire harmless, and the same badge puts a water cannon in the player's hands. Water beats the fire first - jets crossing the burning cone cut the burst short - and only between bursts does a jet reach the dragon and take a hit off the one thing it is wearing. Four hits and the glasses wash off, the beast TOPPLES to the floor, its costume unzips down one side and the five candidates who were inside it walk out one by one stamped HIRED, and the empty suit lies there and then vanishes (HAZARDS.DRAGON.COSTUME_*): the screen is won on a hire rather than on a kill, and the environment comes good with them (Dragon.relief). Skip every drop and the dragon cannot be answered at all: the stage is a dodge from the spawn to the exit."
+        "note": "The one badge that is DELIVERED (owner call): no levitating rail on this screen. An ANSR supply drone crosses row 5 and drops the badge over ONE column - gx10 (moved closer to spawn for better accessibility, spawn is at gx1, previously gx16) - and it lands on a FLOATING BRICK at row 12 rather than on the floor (owner call, second pass), so taking it is a jump as well as a journey. It lies up there for POWERUPS.DROP.LIFETIME seconds and then it is gone, and the next drone brings another one to the same brick. Talent500 then does two things at once: a teal halo makes the fire harmless, and the same badge puts a water cannon in the player's hands. Water beats the fire first - jets crossing the burning cone cut the burst short - and only between bursts does a jet reach the dragon and take a hit off the one thing it is wearing. Four hits and the glasses wash off, the beast TOPPLES to the floor, its costume unzips down one side and the five candidates who were inside it walk out one by one stamped HIRED, and the empty suit lies there and then vanishes (HAZARDS.DRAGON.COSTUME_*): the screen is won on a hire rather than on a kill, and the environment comes good with them (Dragon.relief). Skip every drop and the dragon cannot be answered at all - and it cannot be walked past (owner call), so the powerup is the only way through to the exit."
       },
       "copy": { "titleCard": "Hire Under Fire", "onClear": "Talent secured." }
     },

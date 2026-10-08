@@ -438,8 +438,9 @@ export const HAZARDS = {
    *    beast is planted on the ground like a Godzilla, and what comes out of it is
    *    one **cone** — a jet of fire that leaves the jaw, grows out along a straight
    *    line towards the player and diverges slightly as it goes (`CONE_*`). Nothing
-   *    travels *past* the end of that cone, so the lane it threatens is a fixed
-   *    piece of the floor the player can read once and then plan around.
+   *    travels *past* the end of that cone. It is **aimed at the player** and
+   *    eases after them as they move (`AIM_*`, owner call), bending like a hose
+   *    when it swings, and it never reaches past `CONE_REACH`.
    *  - **Water beats fire before it beats the wearer.** Assisted, the badge is a
    *    water cannon: a jet crossing the cone quenches it, and a jet that reaches
    *    the dragon *between* bursts cracks and then washes off the one thing it is
@@ -486,7 +487,8 @@ export const HAZARDS = {
      * px it shifts along the ground either side of its roost centre, and px/s of
      * that shift.
      *
-     * It does not roam and it does not chase (owner call): `from`/`to` in level data
+     * It does not roam and its body does not chase (owner call; its *fire* does, see
+     * `AIM_*`): `from`/`to` in level data
      * are the patch of ground it holds, and it only ever shifts its weight inside
      * `ROOST_DRIFT` of the middle of them. 40px at 60 px/s is a 1.3s sweep each way,
      * which stops the sprite looking pinned without ever moving the fire lane
@@ -494,6 +496,50 @@ export const HAZARDS = {
      */
     ROOST_DRIFT: 40,
     ROOST_SPEED: 60,
+    /**
+     * s for its gait to come up to a full stride once it starts shifting its weight, and to
+     * settle back onto both feet once it stops (owner call: "the feet of the Godzilla don't
+     * move and that makes it look weird"). Presentation only — it moves no hitbox. Eased
+     * rather than switched so the frame a burst commits does not snap a lifted foot flat.
+     */
+    GAIT_EASE: 0.25,
+    /**
+     * **The stomp** (owner call: "when the player reaches the Godzilla, it should stomp on
+     * the player like an animal would, and the player should flatten and die").
+     *
+     * Its body is still not a wall and its torso is still not a hitbox; what can kill you
+     * up close is its **front foot coming down**, and that foot telegraphs like everything
+     * else on this screen. When the player's centre comes within `STOMP_TRIGGER` px of
+     * the front foot (which stands `STOMP_FOOT_X` px ahead of the body's centre, read off
+     * the drawn grid), and they are low enough to be stood on, it lifts that foot for
+     * `STOMP_WINDUP` s over **where they were** (clamped to `STOMP_REACH` px of the
+     * foot's home, which is as far as a leg can be sheared on the 3px grid without
+     * breaking), brings it down over `STOMP_SLAM` s — lethal for exactly that fall, over a
+     * `STOMP_W`×`STOMP_H` footprint on the floor — then stands on it for `STOMP_RECOVER` s
+     * before it can stomp again.
+     *
+     * It is escapable **backwards**, and that is the fairness: the body is a wall until the
+     * beast is beaten (`BARRIER_X`), so a player who reaches it is standing in the trigger,
+     * and one who turns and runs covers 117px in the wind-up — clear of the committed
+     * footprint from anywhere it could have been lifted over. One who stays is flattened.
+     * Never during the roar and never once it is beaten. It **does** stomp a haloed player
+     * (owner call) — harmlessly: the halo that stops the fire stops the foot.
+     */
+    STOMP_FOOT_X: 51,
+    STOMP_TRIGGER: 60,
+    STOMP_REACH: 21,
+    STOMP_WINDUP: 0.45,
+    STOMP_SLAM: 0.08,
+    STOMP_RECOVER: 0.7,
+    STOMP_W: 84,
+    STOMP_H: 60,
+    /**
+     * px either side of the body's centre that is a **wall until it is beaten** (owner call:
+     * "without killing the Godzilla the player should not be able to cross it"). 75 is the
+     * front of its toes on the drawn grid, so a player held there is 38px from the front
+     * foot — inside `STOMP_TRIGGER`, i.e. whoever reaches it is stood on.
+     */
+    BARRIER_X: 75,
     /**
      * s of quiet between the end of one burst and the wind-up of the next.
      *
@@ -507,140 +553,115 @@ export const HAZARDS = {
      */
     BURST_GAP: 0.95,
     /**
-     * s of telegraph before a burst becomes lethal, with the tell along the FLOOR:
-     * a cream scorch lane running from the dragon's jaw out to the end of the cone's
-     * reach — exactly the ground that is about to be on fire. Where the player is
-     * looking, not where the hazard lives, which is the lesson the parked stamps
-     * taught.
+     * s of telegraph before a burst becomes lethal. The tell is on the animal (its jaw
+     * opens, the throat charges, embers fall — `render/dragon.ts`; the floor marks went,
+     * owner call), and the aim is **held** for all of it, so the flame lights where the
+     * beast was looking when it drew breath.
      */
     BURST_WINDUP: 0.65,
     /**
      * s the jaw throws fire. **Continuous** (owner call): one unbroken jet for the
-     * whole beat rather than a shot, so the lethal geometry is a cone standing in
-     * one place for every frame of it.
+     * whole beat rather than a shot, following the player for every frame of it.
      */
     BURST_TIME: 1.2,
     /**
-     * px the cone reaches, measured horizontally from the jaw towards the player.
+     * px: the furthest the fire can ever be from the jaw, measured horizontally. A hard cap,
+     * applied to every point of the stream.
      *
-     * This one number is the level design, and it is measured from both ends.
-     *
-     * The beast stands over gx 23–29, so with a 200px body its jaw is at x≈968 and
-     * 161px off the floor (`MOUTH_Y_FRACTION` — it is a Godzilla, so the skull is the top
-     * of the silhouette). 620px puts the far end of the fire at x≈348, which still leaves
-     * the spawn 280px clear as the place the pattern is read from.
-     *
-     * The part of that lane which is lethal to a *standing* player starts where the
-     * cone's lower edge drops past a standing head. Solve it: the axis falls from 438 to
-     * 580 over the reach and the flame's half-thickness grows from 35 to 60, so
-     * `438.5 + 141.5f + 35 + 25f ≥ 556` → **f ≥ 0.495**. Everything before that passes
-     * overhead, so the dangerous floor is x 348–661: 313px, or ~1.31s to walk clear of
-     * with the player's own width. Against 1.60s of safe floor per cycle (`BURST_GAP` +
-     * `BURST_WINDUP`) plus the 0.3s the flame takes to grow, that is a dash a reading
-     * player wins and a blind sprint loses — the balance two earlier tunings of this
-     * screen failed in the other direction, clearing it 8/8 with no delays.
-     *
-     * **This number went UP (560 → 620) as the fire got NARROWER**, which is the whole
-     * arithmetic in one line: a thinner cone meets a standing head later along the axis,
-     * so a shorter lane would have handed the screen back to the sprinter. **A high jaw
-     * makes the lane shorter, not longer** for the same reason — move `MOUTH_Y_FRACTION`,
-     * `CONE_NEAR_H` or `CONE_FAR_H` and all of this has to be solved again together.
-     *
-     * **…and then DOWN to 510, because the flame now reaches the floor and runs along
-     * it** (`CONE_TOUCHDOWN`). Same chain, solved again from the top, and this time the
-     * new number let the lane get *shorter* rather than longer:
-     *
-     *   axis, descending:  438.5 + 234.2f   (jaw → the ground-run height, over 0..0.55)
-     *   half thickness:    14 + 34f         (CONE_NEAR_H 28 → CONE_FAR_H 96)
-     *   lethal when the lower edge passes a standing head (556):
-     *     438.5 + 234.2f + 14 + 34f ≥ 556 → **f ≥ 0.386**
-     *
-     * So 0.614 of the reach is lethal where 0.505 of it used to be — a flame that comes
-     * down to the floor is dangerous over more of its own length, which is the whole
-     * point of it. 510 × 0.614 = **313px of lethal floor**, the same figure the screen
-     * was balanced on: ~1.31s to walk clear with the player's own width, against 1.60s
-     * of safe floor per cycle (`BURST_GAP` + `BURST_WINDUP`) plus the 0.3s the flame
-     * takes to grow.
-     *
-     * Two things the shorter reach bought, and both matter more than the pixels: the far
-     * end of the fire is now at x≈458 rather than 348, which leaves the spawn **418px**
-     * clear instead of 280 — and that is the room the badge's brick moved into when the
-     * owner asked for it "closer to the spawn point" (`levels.json`). The fire's reach
-     * and the drop column are measured against each other; they always were.
+     * **It is the spawn's guarantee, and nothing else now.** It used to be the whole level
+     * design (a fixed lane whose lethal strip was solved against it); since the fire is a
+     * jet aimed at the player (`AIM_*`), what decides where it burns is the aim, and this
+     * number only has to keep the far end of the frame out of it. The jaw sits at x
+     * 928–1008 (it drifts), so 510 keeps every flame right of x 418: the spawn is 380px
+     * clear. The pedestal the badge lands on (x 400–440) is covered by `FLAME_LENGTH`,
+     * which is shorter than this, so today the cap is a backstop: it binds only if the
+     * length is ever raised past it.
      */
     CONE_REACH: 510,
     /**
-     * Fraction of the reach at which the flame's axis has come DOWN to the floor. After
-     * it, the axis runs level and the fire lies along the ground.
+     * s for the flame to grow from the jaw to its full length — which also makes it the
+     * **speed of the fire**: `FLAME_LENGTH / CONE_GROW` ≈ 1330 px/s.
      *
-     * Owner call: "make the flame look more realistic". A jet whose axis descends in one
-     * straight line all the way to the far end is a *ramp* — it is thickest and lowest at
-     * exactly the same moment, so it reads as a girder leaned against the floor. Real
-     * fire thrown downwards hits the ground and then **runs**, and that is two segments:
-     * a throw and a floor run.
-     *
-     * 0.55 is measured, not felt. It has to leave the beast a safe pocket at its own feet
-     * (the invariant that a beast which sets fire to its own shoes is a beast nobody
-     * believes) — lethal starts at f 0.386, i.e. 197px in front of the jaw — and it has to
-     * put the flame on the floor for enough of the lane that "the floor is on fire" is the
-     * read. It also has to stay **above** the lethal threshold, or the fire touches a
-     * standing head before it has finished descending, which would make the touchdown
-     * invisible.
-     */
-    CONE_TOUCHDOWN: 0.55,
-    /**
-     * s for the cone to grow from the jaw to its full reach.
-     *
-     * The fire **grows** rather than appearing (owner call), and the growth is a
-     * fairness mechanism as much as a picture: it ignites next to the dragon first
-     * and arrives at the far end 0.3s later, so a player caught at the outer end of
-     * the lane when the burst starts still has a beat to leave. Any slower and the
-     * jet reads as a lamp warming up.
+     * That second reading is what makes the jet follow the player *naturally* (owner call:
+     * "it should be more natural"). Every point of the stream is fire that left the jaw a
+     * moment ago, travelling along the direction the jaw was pointing *then*, so when the
+     * beast swings its aim the stream bends like water from a hose and catches up — it does
+     * not rotate as a rigid bar. The growth is still a fairness beat: it ignites at the
+     * beast first and reaches the far end 0.3s later.
      */
     CONE_GROW: 0.3,
     /**
-     * px: the flame's thickness at the jaw and at full reach.
+     * px: the length of the stream along its own path, and px it may run along the floor
+     * after it lands.
      *
-     * **28 → 96, down from 70 → 120, which was down from 120 → 190.** Three passes, one
-     * note each time, and the third one said what the first two had not: "reduce the
-     * thickness of the flame — it is of uniform thickness; make the flame thinner near
-     * the Godzilla's mouth and wider at the end, so it looks natural."
+     * The flame is **aimed straight at the player** (owner call: "the fire need not be in
+     * the angle it is in right now") — a straight jet from the jaw towards them, rather than
+     * the old fixed throw that dropped at one angle and lay along the floor. Where the jet
+     * meets the floor it splashes and runs on for up to `FLAME_SPLASH`, so a jet aimed at
+     * somebody's feet puts fire on the ground round them, and a jet aimed across the frame
+     * simply ends in the air.
      *
-     * 70 → 120 *was* thinner at the mouth. It read as uniform because a 1.7× spread over
-     * 620px is 25px of growth in a shape 35px deep to begin with — arithmetically a cone
-     * and visually a pipe. What reads as a cone is the **ratio**: 28 → 96 is 3.4×, i.e. the
-     * flame is 14px off its own axis where it leaves the jaw and 48px at the far end, which
-     * is a shape whose two ends are plainly different. And it is *thinner overall*: the
-     * widest the fire ever gets is 96px where it used to be 120, and where it leaves the
-     * mouth it is 28 where it used to be 70.
+     * 400 is measured against the badge's brick: a player standing on it (x 386–454, feet
+     * at 480) is well above the floor, so the jet aimed at them flies nearly level, and a
+     * level jet — *including the half-thickness of its last square* — has to end short of
+     * them from the nearest the jaw ever gets (x 928): 928 − 400 − 48 = 480 > 454. 440
+     * looked right on the centre line and burnt him (a test caught it: count the square,
+     * not the axis). Each burst rolls its own length in 0.88–1.0 of this, from the seed,
+     * so bursts are not pixel-identical — downwards only, for the same reason.
+     */
+    FLAME_LENGTH: 400,
+    FLAME_SPLASH: 150,
+    /**
+     * How the aim follows the player (owner call: "make the fire follow the player … it
+     * should be more natural").
      *
-     * Narrowing it is a **fairness** change before it is a picture: a thinner cone meets a
-     * standing head later along its axis, which shortens the lethal strip. Twice now that
-     * has been paid for by lengthening `CONE_REACH`; this time `CONE_TOUCHDOWN` paid for it
-     * instead — a flame that comes down to the floor and runs along it is lethal over more
-     * of its length, so the reach could come *down* to 510. The far figure still has to
-     * cover a standing player (44px) with margin, or a burst could be walked through: 96 is
-     * 2.2× that.
+     * The jaw aims at the player's **centre**, so a jumping player is followed up and a
+     * player on the floor is followed along it. It gets there by easing, not by snapping:
+     * its turn is `AIM_EASE × the angle still to go`, capped at `AIM_TURN_RATE` rad/s — so it
+     * swings hard towards somebody it has lost and settles gently onto somebody it has
+     * found. That cap is the counterplay, and it is geometric rather than arbitrary: a
+     * player's angle from the jaw changes slowly far away and fast up close
+     * (`v·h / (d² + h²)` with the jaw h ≈ 140px up), so the aim keeps up with anybody across
+     * the lane and loses somebody who dashes in under the head. That is what keeps "get in
+     * close" a meaning on a screen whose body is not a hitbox.
      *
-     * The near figure is also why the strip under the jaw is safe. The axis starts 161px up
-     * and does not reach the floor until `CONE_TOUCHDOWN`, so the near end of the cone
-     * passes over a standing head — and that pocket is deliberate. A beast that sets fire to
-     * its own feet is a beast whose fire nobody believes, and it gives "get in close" a
-     * meaning on a screen whose body is not a hitbox.
+     * Edge cases the numbers are held to (each has a test):
+     *  - **The aim only moves while it is waiting or burning.** It is committed for the
+     *    wind-up — the breath is drawn in one direction — so the flame lights where the
+     *    player *was* and then chases, and the assist's `extraTelegraph` stays "more
+     *    warning, same fight" rather than more time to aim.
+     *  - **It never turns round.** A player behind the jaw (under the beast, where there has
+     *    never been fire) makes the aim hold, and `AIM_DOWN` stops it pointing at its own
+     *    feet: at 60° the jet lands ~80px in front of the jaw.
+     *  - **`AIM_UP` lets it lift to a jumping player** without ever pointing at the sky.
+     *  - The crossing without the badge still exists: a run begun as a burst ends reaches
+     *    the jaw before the aim can swing down onto it (`screen4.test.ts` plays it).
+     */
+    AIM_TURN_RATE: 0.7,
+    /** rad/s the aim may creep during the wind-up (0 = held for the whole breath). */
+    AIM_WINDUP_RATE: 0,
+    AIM_EASE: 5,
+    AIM_UP: 0.2,
+    AIM_DOWN: 1.05,
+    /**
+     * px: the flame's thickness at the jaw and at the end of its length.
+     *
+     * **28 → 96**, after three owner passes ("make the flame thinner near the Godzilla's
+     * mouth and wider at the end, so it looks natural"). What reads as a cone is the
+     * **ratio** — 3.4× — not either end. The far figure has to cover a standing player
+     * (44px) with margin, or a jet aimed at somebody could be stood inside: 96 is 2.2× that.
      */
     CONE_NEAR_H: 28,
     CONE_FAR_H: 96,
     /**
-     * Segments the cone's hitbox is cut into, and therefore exactly what is drawn.
+     * Points the stream is sampled at, and therefore the boxes it burns with and paints.
      *
-     * A cone is not an AABB, and the two dishonest ways to handle that both cost the
-     * player: one box round the whole thing is lethal where there is no flame, and a
-     * box round the axis only is flame that cannot hurt anybody. Eight stepped boxes
-     * are within 8px of the drawn silhouette everywhere, and `Dragon.coneBoxes` is
-     * the single function the simulation collides against and the renderer paints —
-     * the `badgeFloat` rule applied to a hazard.
+     * Each point is a square as wide as the flame there, and the renderer paints inside
+     * exactly those squares (`Dragon.streamBoxes`) — the `badgeFloat` rule applied to a
+     * hazard. 24 over 400px is a point every ~16px, which the narrowest part of the flame
+     * (28px at the jaw) still overlaps, so there is no gap along the jet at any angle.
      */
-    CONE_SEGMENTS: 8,
+    CONE_SEGMENTS: 24,
     /**
      * px/s the water jet travels, and its hitbox.
      *
@@ -840,8 +861,15 @@ export const HAZARDS = {
      * px between monsters once they are huddled on the landing. Wider than
      * MONSTER_W on purpose: shoulder to shoulder they overlapped, and five
      * overlapping name plates rendered as one unreadable word.
+     *
+     * 60, not 40, since the plates stay on at rest (owner call) and two of the names
+     * are 10 characters. At 40 `layoutNamePlaques` needed three rows under the feet
+     * and the names ran down the plinth as a staircase nobody could match to a
+     * creature; at 60 it is three over the heads and two under the feet. It is the
+     * most the landing holds: 4 × 60 + MONSTER_W = 275 of the 280px between the
+     * landing's lip (x 680) and the room's wall (x 960).
      */
-    GATHER_SPACING: 40,
+    GATHER_SPACING: 60,
     /**
      * The clearance lift at the end of the maze (its parked position and span are
      * authored in `levels.json`).
@@ -1251,8 +1279,9 @@ export const BONUS = {
     TOP: 540,
     /**
      * The skateboard, as a number: the tray comes with wheels, so the player is quicker
-     * in here than anywhere else in the game — **260 → 520 px/s** (owner call: "make the
-     * character faster, it's too slow to catch up with the ANSR ball we have").
+     * in here than anywhere else in the game — **260 → 624 px/s** (owner calls: "make the
+     * character faster, it's too slow to catch up with the ANSR ball we have", then 2.0 → 2.4,
+     * "the speed of the character after getting skates can increase a bit").
      *
      * 2.0, and the number it is measured against is **the mark's own horizontal pace**:
      * at the 620 cap off a 55-degree edge hit that is 508 px/s, so the board now matches
@@ -1261,7 +1290,7 @@ export const BONUS = {
      * what this room is for. It scales acceleration too (`Player.update` applies the
      * multiplier to `GROUND_ACCEL`), so the answer off a standing start moved with it.
      */
-    SKATE_SPEED_MULT: 2.0,
+    SKATE_SPEED_MULT: 2.4,
     /**
      * **Shallowest** deflection, in degrees from vertical — i.e. the mark is never
      * returned straight up.

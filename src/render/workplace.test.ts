@@ -322,7 +322,9 @@ describe('the broken office', () => {
     const cans = (r: number): Rect[] => {
       const { ctx, rects } = recorder();
       drawOffice(ctx, CLUTTER, r, 1, true);
-      return rects.filter((x) => x.fill.toUpperCase() === '#123F4C' && x.h === 10);
+      // The can's metal follows the room: dark teal broken, the lobby's steel once fixed.
+      const body = r >= 1 ? '#6A737A' : '#123F4C';
+      return rects.filter((x) => x.fill.toUpperCase() === body && x.h === 10);
     };
     const courses = cans(1).filter((r) => Math.abs(r.x + r.w / 2 - CEILING.LIGHTS[0]!) < 4);
     expect(courses.length).toBeGreaterThanOrEqual(4);

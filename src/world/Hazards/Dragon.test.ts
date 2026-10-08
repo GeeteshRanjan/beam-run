@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { Dragon, coneBoxes } from './Dragon';
+import { Dragon, flameStream, streamBoxes, type FlamePoint } from './Dragon';
 import { Player } from '../Player';
 import type { AABB } from '../Physics';
 import { LOOP, HAZARDS, RESOLUTION, PLAYER } from '../../data/tuning.config';
@@ -211,23 +211,147 @@ describe('the hiring dragon', () => {
     });
   });
 
-  describe('its fire is the hazard, and the dragon is not', () => {
-    it('cannot cost anything by being touched: a minute inside its body is free', () => {
-      // The screen's central rule, and the thing that licenses a boss with no
-      // telegraph on its own movement: the body is not a hitbox. Sit *inside* it for a
-      // minute, unassisted, and nothing is ever charged.
+  describe('its fire is the hazard, and so is its foot — never its body', () => {
+    it('its body is a WALL, not a hitbox: it shoves you back and costs nothing', () => {
+      // The body telegraphs nothing, so it may not hurt — but it may block (owner call:
+      // "without killing the Godzilla the player should not be able to cross it"). Push
+      // into its chest, above the height a foot can come down on, for a minute, unassisted:
+      // nothing is ever charged, and every frame he is put back in front of it.
+      // Pressed against its toes he is in front of the jaw, so its FIRE can still reach him
+      // — that is the fire's business and is audited as such; what may never happen is a
+      // charge the fire does not explain.
       const d = dragon();
       const p = stander(24);
-      let cause: string | null = null;
+      let unexplained = 0;
       for (let i = 0; i < Math.ceil(60 / DT); i += 1) {
         const box = d.dragonState().box;
-        p.box.x = box.x + box.w / 2;
-        p.box.y = box.y + box.h / 2;
-        cause = d.update(DT, p, CTX) ?? cause;
+        const cx = box.x + box.w / 2;
+        p.box.x = cx - D.BARRIER_X - p.box.w + 10;
+        p.box.y = box.y + 20;
+        p.vx = PLAYER.WALK_SPEED;
+        const cause = d.update(DT, p, CTX);
+        if (cause && !(cause === 'fire' && fireOn(d, p))) unexplained += 1;
+        expect(p.box.x + p.box.w).toBeLessThanOrEqual(d.dragonState().box.x + box.w / 2 - D.BARRIER_X);
+        expect(p.vx).toBe(0);
       }
-      expect(cause).toBeNull();
+      expect(unexplained).toBe(0);
+      expect(p.box.y + p.box.h).toBeLessThan(GROUND_TOP - D.STOMP_H);
       // …and it was busy the whole time, so this is not a test of a docile dragon.
       expect(d.dragonState().phase).not.toBe('roar');
+    });
+
+    it('stops being a wall the moment it goes down', () => {
+      const d = dragon();
+      beat(d, stander(14));
+      const s = d.dragonState();
+      const p = stander(4);
+      p.box.x = s.box.x + s.box.w / 2;
+      d.update(DT, p, CTX);
+      expect(p.box.x).toBe(s.box.x + s.box.w / 2);
+    });
+
+    describe('the stomp (owner call: "stomp on the player like an animal would")', () => {
+      /** Past the roar, with the player parked at its front foot. */
+      const atItsFeet = () => {
+        const d = dragon();
+        const p = stander(4);
+        expect(until(d, p, () => !d.isRoaring)).toBe(true);
+        return { d, p };
+      };
+      const home = (d: Dragon) => {
+        const s = d.dragonState();
+        return s.box.x + s.box.w / 2 + s.dir * D.STOMP_FOOT_X;
+      };
+
+      it('flattens a player who stands at its feet — and lifts the foot first', () => {
+        const { d, p } = atItsFeet();
+        p.box.x = home(d) - p.box.w / 2;
+        let cause: string | null = null;
+        let lifted = 0;
+        for (let i = 0; i < Math.ceil(3 / DT) && !cause; i += 1) {
+          cause = d.update(DT, p, CTX);
+          if (d.dragonState().stomp?.phase === 'lift') lifted += DT;
+        }
+        expect(cause).toBe('stomp');
+        // The telegraph: the whole wind-up was spent with the foot in the air.
+        expect(lifted).toBeGreaterThanOrEqual(D.STOMP_WINDUP - DT);
+        // …and what hit him was the falling foot, on the floor where he stood.
+        const box = d.dragonState().stomp?.box;
+        expect(box).toBeTruthy();
+        expect(box!.y + box!.h).toBe(GROUND_TOP);
+      });
+
+      it('reaching its wall puts you under the foot — and turning to run gets you out', () => {
+        // The body is a wall until it is beaten, so the place a player ends up is pressed
+        // against its toes; that has to be inside the trigger, or "reach it and be stood on"
+        // is not what happens. And the foot is committed at the lift, so a player who turns
+        // and runs as it rises is clear when it lands: the stomp is a warning, not a trap.
+        const { d, p } = atItsFeet();
+        const dir = d.dragonState().dir;
+        p.box.x = home(d);
+        p.vx = -dir * PLAYER.WALK_SPEED;
+        d.update(DT, p, CTX);
+        const cx = d.dragonState().box.x + d.dragonState().box.w / 2;
+        expect(Math.abs(p.box.x + p.box.w / 2 - cx)).toBeGreaterThanOrEqual(D.BARRIER_X);
+        expect(d.dragonState().stomp?.phase).toBe('lift');
+        // Running back out means running back into the fire lane, which is the fire's
+        // business; the claim here is only that the foot misses.
+        let stomped = false;
+        let landed = false;
+        for (let i = 0; i < Math.ceil(1.2 / DT); i += 1) {
+          p.box.x += dir * PLAYER.WALK_SPEED * DT;
+          if (d.update(DT, p, CTX) === 'stomp') stomped = true;
+          if (d.dragonState().stomp?.phase === 'slam') landed = true;
+        }
+        expect(landed).toBe(true);
+        expect(stomped).toBe(false);
+      });
+
+      it('never stomps during the roar or once it is beaten; stomps a haloed player HARMLESSLY', () => {
+        const r = dragon();
+        const q = stander(4);
+        // The roar: parked on its foot, nothing moves while it lasts.
+        while (r.isRoaring) {
+          q.box.x = home(r) - q.box.w / 2;
+          expect(r.update(DT, q, CTX)).toBeNull();
+          if (r.isRoaring) expect(r.dragonState().stomp).toBeNull();
+        }
+        // Haloed (owner call): it still stomps — the animal is not docile — but the halo
+        // that stops the fire stops the foot, so nothing is ever booked.
+        const d = dragon();
+        const p = stander(4);
+        let landed = false;
+        for (let i = 0; i < Math.ceil(6 / DT); i += 1) {
+          p.box.x = home(d) - p.box.w / 2;
+          expect(d.update(DT, p, ASSISTED)).toBeNull();
+          if (d.dragonState().stomp?.phase === 'slam') landed = true;
+        }
+        expect(landed).toBe(true);
+        // Beaten: the screen is safe for good.
+        const w = stander(14);
+        beat(d, w);
+        for (let i = 0; i < Math.ceil(5 / DT); i += 1) {
+          p.box.x = home(d) - p.box.w / 2;
+          expect(d.update(DT, p, CTX)).toBeNull();
+        }
+      });
+
+      it('stands still on one foot: no drift and no turning while a foot is up', () => {
+        const { d, p } = atItsFeet();
+        p.box.x = home(d) - p.box.w / 2;
+        expect(until(d, p, () => d.dragonState().stomp?.phase === 'lift')).toBe(true);
+        const s0 = d.dragonState();
+        // Run round behind it while the foot is up: it neither follows nor turns.
+        p.box.x = s0.box.x + s0.box.w + 40;
+        while (d.dragonState().stomp && d.dragonState().phase !== 'stripping') {
+          d.update(DT, p, CTX);
+          const s = d.dragonState();
+          if (!s.stomp) break;
+          expect(s.box.x).toBe(s0.box.x);
+          expect(s.dir).toBe(s0.dir);
+          expect(s.gait).toBeLessThanOrEqual(s0.gait);
+        }
+      });
     });
 
     it('only ever books a delay for a flame that was on the player', () => {
@@ -288,23 +412,21 @@ describe('the hiring dragon', () => {
       expect(run(d, p, D.CONE_GROW + 0.1)).toBe('fire');
     });
 
-    it('telegraphs on the floor, along the whole lane the fire will cover', () => {
+    it('telegraphs on the animal: nothing lethal during the wind-up, and it points at him', () => {
       const d = dragon();
       const p = stander(2);
       expect(until(d, p, () => d.fireState()?.phase === 'windup')).toBe(true);
       const f = d.fireState()!;
-      // The lane runs from the jaw towards the player and ends just above the floor,
-      // which is where the flame will be running.
+      // The jet it is about to throw runs from the jaw towards the player.
       expect(f.target.x).toBeLessThan(f.mouth.x);
-      expect(f.target.y).toBeGreaterThan(GROUND_TOP - T);
-      expect(f.target.y).toBeLessThan(GROUND_TOP);
-      // Nothing is lethal yet: there is no cone during a wind-up at all.
+      // Nothing is lethal yet: there is no jet during a wind-up at all.
       expect(f.extent).toBe(0);
+      expect(f.points).toHaveLength(0);
       expect(f.boxes).toHaveLength(0);
       expect(d.isBreathing).toBe(false);
     });
 
-    it('throws the lane clear of its own body, and does not move it', () => {
+    it('throws the lane clear of its own body, and does not move it during the wind-up', () => {
       const d = dragon();
       const p = stander(2);
       expect(until(d, p, () => d.fireState() !== null)).toBe(true);
@@ -346,27 +468,17 @@ describe('the hiring dragon', () => {
 
     it('diverges: the flame is thicker at the far end than at the jaw', () => {
       const d = dragon();
-      const p = stander(2);
+      const p = stander(16);
       expect(until(d, p, () => (d.fireState()?.extent ?? 0) >= 1, 30, ASSISTED)).toBe(true);
-      const boxes = d.fireState()!.boxes;
-      expect(boxes.length).toBeGreaterThan(4);
-      const near = boxes[0]!;
-      const far = boxes[boxes.length - 1]!;
-      // The flame gets thicker as it goes — measured on the widest segment rather than
-      // on the last one, because the outer end of the cone is **clipped by the floor**
-      // and so is physically shorter than the middle of it. (That clipping is the
-      // point: it is what makes the fire look like it is running along the ground.)
-      const thickest = Math.max(...boxes.map((b) => b.h));
-      expect(thickest).toBeGreaterThan(near.h);
-      // "Slightly" diverging: a jet, not a fan.
-      expect(thickest / near.h).toBeLessThan(2);
-      // The far end sits on the floor and reaches up past a standing player, so
-      // anybody in the outer part of the lane is in it.
-      expect(far.y + far.h).toBe(GROUND_TOP);
-      expect(far.y).toBeLessThan(GROUND_TOP - PLAYER.HEIGHT);
-      // …and the top edge falls as it travels: the flame starts high at the jaw and
-      // comes down to the floor, which is why the strip under the jaw is safe.
-      expect(far.y).toBeGreaterThan(near.y);
+      const pts = d.fireState()!.points;
+      expect(pts.length).toBeGreaterThan(8);
+      const thickest = Math.max(...pts.map((q) => q.half));
+      expect(thickest).toBeGreaterThan(pts[0]!.half * 2);
+      // Aimed at a standing player it comes down to the floor and reaches up past him,
+      // so standing where it lands is standing in it.
+      const landed = d.fireState()!.boxes.filter((b) => b.y + b.h >= GROUND_TOP - 1e-6);
+      expect(landed.length).toBeGreaterThan(0);
+      expect(Math.min(...landed.map((b) => b.y))).toBeLessThan(GROUND_TOP - PLAYER.HEIGHT);
     });
 
     it('carries one taunt per burst, and it does not move', () => {
@@ -383,8 +495,10 @@ describe('the hiring dragon', () => {
       }
       // Two bursts, two different taunts, in the authored order.
       expect(labels).toEqual(SPEC.taunts.slice(0, 2));
-      // The caption is pinned for the whole burst (owner call): each burst contributes
-      // exactly one position, so two bursts can only ever have produced two.
+      // The caption does not ride the growing flame (owner call): with the player out of
+      // reach the aim never moves, so each burst contributes exactly one position and two
+      // bursts can only ever have produced two. (When the aim sweeps, the words go with the
+      // flame — see "the fire follows the player".)
       expect(spots.size).toBeLessThanOrEqual(labels.length);
     });
 
@@ -438,13 +552,15 @@ describe('the hiring dragon', () => {
       expect(trace()).toBe(trace());
     });
 
-    it('a different seed reaches somewhere else with its fire', () => {
+    it('a different seed throws a different length of jet', () => {
+      // The roll varies each burst's length inside a band below FLAME_LENGTH, so
+      // successive bursts are not pixel-identical — and the roll comes from the seed.
       const marks = (seed: number): string => {
         const d = dragon({ seed });
-        const p = stander(12);
+        const p = stander(2);
         const xs: number[] = [];
         for (let i = 0; i < Math.ceil(30 / DT); i += 1) {
-          d.update(DT, p, CTX);
+          d.update(DT, p, ASSISTED);
           const f = d.fireState();
           if (f && !xs.includes(Math.round(f.target.x))) xs.push(Math.round(f.target.x));
         }
@@ -454,33 +570,262 @@ describe('the hiring dragon', () => {
     });
   });
 
-  describe('the cone geometry (one source for what burns and what is painted)', () => {
-    it('is empty until the flame has started to grow', () => {
-      expect(coneBoxes({ x: 900, y: 480 }, { x: 500, y: 580 }, 0)).toHaveLength(0);
-      expect(coneBoxes({ x: 900, y: 480 }, { x: 500, y: 580 }, -1)).toHaveLength(0);
+  describe('the fire is a jet aimed at the player, and it follows them (owner call)', () => {
+    const aimOf = (d: Dragon) => (d as unknown as { aim: number }).aim;
+    /** Angle from the committed jaw to the player's centre, below horizontal. */
+    const angleTo = (d: Dragon, p: Player) => {
+      const f = d.fireState()!;
+      const ahead = f.dir * (p.box.x + p.box.w / 2 - f.mouth.x);
+      return Math.atan2(p.box.y + p.box.h / 2 - f.mouth.y, ahead);
+    };
+    /** Put the player's centre `ahead` px in front of the committed jaw, on the floor. */
+    const place = (d: Dragon, p: Player, ahead: number, lift = 0) => {
+      const f = d.fireState()!;
+      p.box.x = f.mouth.x + f.dir * ahead - p.box.w / 2;
+      p.box.y = GROUND_TOP - PLAYER.HEIGHT - lift;
+    };
+
+    it('points the jet at him: a straight line from the jaw, at his angle', () => {
+      const d = dragon();
+      const p = stander(14);
+      // Stand still through a whole burst, haloed, so the aim has settled.
+      expect(until(d, p, () => (d.fireState()?.extent ?? 0) >= 1, 30, ASSISTED)).toBe(true);
+      run(d, p, 0.5, ASSISTED);
+      const f = d.fireState()!;
+      expect(Math.abs(aimOf(d) - angleTo(d, p))).toBeLessThan(0.02);
+      // The airborne part of the jet is one straight line (no fixed throw-then-floor
+      // shape): every point before it lands lies on the ray at that angle.
+      const air = f.points.filter((q) => !q.onFloor);
+      expect(air.length).toBeGreaterThan(5);
+      for (const q of air) {
+        const along = Math.atan2(q.y - f.mouth.y, f.dir * (q.x - f.mouth.x));
+        expect(Math.abs(along - aimOf(d))).toBeLessThan(0.02);
+      }
+      // …and it goes through him.
+      expect(fireOn(d, p)).toBe(true);
     });
 
-    it('steps along the axis, and never past the extent it was given', () => {
-      const mouth = { x: 900, y: 480 };
-      const target = { x: 500, y: 580 };
-      const half = coneBoxes(mouth, target, 0.5);
-      const all = coneBoxes(mouth, target, 1);
-      expect(all.length).toBeGreaterThan(half.length);
-      // Half grown, nothing exists past the half-way point of the axis.
-      const tip = Math.min(...half.map((b) => b.x));
-      expect(tip).toBeGreaterThanOrEqual((mouth.x + target.x) / 2 - 1);
-      // …and the segments are contiguous: a gap in a cone is a safe square nobody
-      // could see.
-      const sorted = [...all].sort((a, b) => b.x - a.x);
-      for (let i = 1; i < sorted.length; i += 1) {
-        const prev = sorted[i - 1]!;
-        expect(Math.abs(sorted[i]!.x + sorted[i]!.w - prev.x)).toBeLessThan(1);
+    it('eases after him rather than snapping: capped turn, and it settles', () => {
+      const d = dragon();
+      const p = stander(10);
+      expect(until(d, p, () => d.isBreathing, 30, ASSISTED)).toBe(true);
+      place(d, p, 180);
+      let last = aimOf(d);
+      const turns: number[] = [];
+      while (d.isBreathing) {
+        d.update(DT, p, ASSISTED);
+        const a = aimOf(d);
+        turns.push(Math.abs(a - last));
+        expect(Math.abs(a - last)).toBeLessThanOrEqual(D.AIM_TURN_RATE * DT + 1e-9);
+        last = a;
+      }
+      // It moved towards him, and it was still moving at the end of a long swing…
+      expect(turns.some((t) => t > 0)).toBe(true);
+      // …but slows as it arrives: the last steps of a settled aim are smaller than the
+      // hardest steps of the swing.
+      const hardest = Math.max(...turns);
+      const settled = new Dragon([SPEC]);
+      const q = stander(10);
+      expect(until(settled, q, () => settled.isBreathing, 30, ASSISTED)).toBe(true);
+      run(settled, q, 0.9, ASSISTED);
+      const before = aimOf(settled);
+      settled.update(DT, q, ASSISTED);
+      expect(Math.abs(aimOf(settled) - before)).toBeLessThan(hardest);
+    });
+
+    it('bends like a hose when it swings: the far end still points where he was', () => {
+      const d = dragon();
+      const p = stander(8);
+      expect(until(d, p, () => (d.fireState()?.extent ?? 0) >= 1, 30, ASSISTED)).toBe(true);
+      run(d, p, 0.3, ASSISTED);
+      // Step in under the jet: the aim swings down, and the fire already in the air
+      // keeps the direction it left with.
+      place(d, p, 150);
+      run(d, p, 0.12, ASSISTED);
+      const f = d.fireState()!;
+      const dirOf = (a: FlamePoint, b: FlamePoint) =>
+        Math.atan2(b.y - a.y, f.dir * (b.x - a.x));
+      const air = f.points.filter((q) => !q.onFloor);
+      expect(air.length).toBeGreaterThan(4);
+      const near = dirOf(air[0]!, air[1]!);
+      const far = dirOf(air[air.length - 2]!, air[air.length - 1]!);
+      // Near the jaw it already points steeper (towards him) than out at the end.
+      expect(near).toBeGreaterThan(far + 0.03);
+    });
+
+    it('follows a jump up, but never points at the sky', () => {
+      const d = dragon();
+      const p = stander(14);
+      expect(until(d, p, () => d.isBreathing, 30, ASSISTED)).toBe(true);
+      const onFloor = aimOf(d);
+      place(d, p, 260, 150);
+      run(d, p, 0.8, ASSISTED);
+      expect(aimOf(d)).toBeLessThan(onFloor - 0.1);
+      // Way up (above the jaw): clamped at AIM_UP.
+      const e = dragon();
+      const q = stander(14);
+      expect(until(e, q, () => e.isBreathing, 30, ASSISTED)).toBe(true);
+      place(e, q, 200, 400);
+      run(e, q, 1.1, ASSISTED);
+      expect(aimOf(e)).toBeGreaterThanOrEqual(-D.AIM_UP - 1e-9);
+    });
+
+    it('lands on the floor and splashes along it, then burns out', () => {
+      const d = dragon();
+      const p = stander(19);
+      expect(until(d, p, () => (d.fireState()?.extent ?? 0) >= 1, 30, ASSISTED)).toBe(true);
+      run(d, p, 0.6, ASSISTED);
+      const f = d.fireState()!;
+      const floor = f.points.filter((q) => q.onFloor);
+      expect(floor.length).toBeGreaterThan(1);
+      // On the floor it lies on the floor: underside on the ground, never through it.
+      for (const b of f.boxes) expect(b.y + b.h).toBeLessThanOrEqual(GROUND_TOP + 1e-9);
+      for (const q of floor) expect(q.y + q.half).toBeCloseTo(GROUND_TOP, 6);
+      // …and it runs on no further than FLAME_SPLASH past where it came down.
+      const landX = floor[0]!.x;
+      const endX = floor[floor.length - 1]!.x;
+      expect(Math.abs(endX - landX)).toBeLessThanOrEqual(D.FLAME_SPLASH + 20);
+    });
+
+    it('holds its aim once the player is behind the jaw, rather than burning its own feet', () => {
+      const d = dragon();
+      const p = stander(12);
+      expect(until(d, p, () => d.isBreathing, 30, ASSISTED)).toBe(true);
+      run(d, p, 0.2, ASSISTED);
+      const held = aimOf(d);
+      place(d, p, -60);
+      for (let i = 0; i < 20 && d.isBreathing; i += 1) {
+        d.update(DT, p, ASSISTED);
+        expect(aimOf(d)).toBe(held);
+      }
+      expect(d.fireState()!.dir).toBe(-1);
+      // And even aimed at somebody right under the snout it lands in front of the body.
+      const e = dragon();
+      const q = stander(12);
+      expect(until(e, q, () => e.isBreathing, 30, ASSISTED)).toBe(true);
+      place(e, q, 8);
+      run(e, q, 1.0, ASSISTED);
+      expect(aimOf(e)).toBeLessThanOrEqual(D.AIM_DOWN + 1e-9);
+      const body = e.dragonState().box;
+      for (const b of e.fireState()?.boxes ?? []) {
+        if (b.y + b.h >= GROUND_TOP - 1) expect(b.x + b.w).toBeLessThan(body.x + 30);
       }
     });
 
-    it('is clipped by the floor rather than drawn through it', () => {
-      const boxes = coneBoxes({ x: 900, y: 480 }, { x: 500, y: GROUND_TOP - 20 }, 1);
-      for (const b of boxes) expect(b.y + b.h).toBeLessThanOrEqual(GROUND_TOP);
+    it('does not aim during the wind-up, even with extra reaction time', () => {
+      const d = dragon();
+      const p = stander(2);
+      const ctx: HazardContext = { assisted: false, extraTelegraph: 0.6 };
+      expect(until(d, p, () => d.fireState()?.phase === 'windup', 30, ctx)).toBe(true);
+      const a0 = aimOf(d);
+      place(d, p, 120);
+      while (d.fireState()?.phase === 'windup') {
+        d.update(DT, p, ctx);
+        if (d.fireState()?.phase === 'windup') expect(aimOf(d)).toBe(a0);
+      }
+    });
+
+    it('never reaches past CONE_REACH, however he moves', () => {
+      const d = dragon();
+      const p = stander(2);
+      let checked = 0;
+      for (let i = 0; i < Math.ceil(40 / DT); i += 1) {
+        p.box.x = 40 + ((i * 7) % 900);
+        p.box.y = GROUND_TOP - PLAYER.HEIGHT - ((i * 3) % 160);
+        d.update(DT, p, ASSISTED);
+        const f = d.fireState();
+        for (const q of f?.points ?? []) {
+          expect(Math.abs(q.x - f!.mouth.x)).toBeLessThanOrEqual(D.CONE_REACH + 1e-6);
+          checked += 1;
+        }
+      }
+      expect(checked).toBeGreaterThan(200);
+    });
+
+    it('cannot reach somebody standing on the badge brick, even from the nearest roost', () => {
+      // The brick at gx 10 is the one raised place in reach, and the jet aimed at
+      // somebody on it flies nearly level — so FLAME_LENGTH is what keeps it clear.
+      const d = dragon();
+      const p = stander(10);
+      let cause: string | null = null;
+      for (const x of [10 * T - PLAYER.WIDTH / 2 + 2, 11 * T - PLAYER.WIDTH / 2 - 2]) {
+        for (let i = 0; i < Math.ceil(20 / DT); i += 1) {
+          p.box.x = x;
+          p.box.y = 12 * T - PLAYER.HEIGHT;
+          cause = d.update(DT, p, CTX) ?? cause;
+        }
+      }
+      expect(cause).toBeNull();
+    });
+
+    it('carries its taunt with it: the words stay on the jet while it swings', () => {
+      const d = dragon();
+      const p = stander(14);
+      expect(until(d, p, () => (d.fireState()?.extent ?? 0) >= 1, 30, ASSISTED)).toBe(true);
+      place(d, p, 140);
+      const spots = new Set<number>();
+      while (d.isBreathing) {
+        d.update(DT, p, ASSISTED);
+        const f = d.fireState();
+        if (!f || f.extent < 1) continue;
+        expect(f.boxes.some((b) => overlaps(b, { x: f.labelAt.x, y: f.labelAt.y, w: 1, h: 1 }))).toBe(
+          true,
+        );
+        // Never upside down.
+        expect(Math.abs(f.labelAngle)).toBeLessThanOrEqual(Math.PI / 2);
+        spots.add(Math.round(f.labelAt.y));
+      }
+      expect(spots.size).toBeGreaterThan(1);
+    });
+
+    it('is still deterministic with a moving player', () => {
+      const trace = (): string => {
+        const d = dragon();
+        const p = stander(2);
+        const out: string[] = [];
+        for (let i = 0; i < Math.ceil(20 / DT); i += 1) {
+          p.box.x = 300 + ((i * 5) % 600);
+          d.update(DT, p, ASSISTED);
+          const f = d.fireState();
+          if (f && i % 10 === 0) out.push(`${f.target.x.toFixed(3)},${f.target.y.toFixed(3)}`);
+        }
+        return out.join('|');
+      };
+      expect(trace()).toBe(trace());
+    });
+  });
+
+  describe('the jet geometry (one source for what burns and what is painted)', () => {
+    const mouth = { x: 900, y: 440 };
+    it('is empty until the flame has started to grow', () => {
+      expect(flameStream(mouth, -1, () => 0.3, 0, 500)).toHaveLength(0);
+      expect(streamBoxes([])).toHaveLength(0);
+    });
+
+    it('grows out of the jaw, and never past the length it was given', () => {
+      const half = flameStream(mouth, -1, () => 0.1, D.FLAME_LENGTH / 2, 500);
+      const all = flameStream(mouth, -1, () => 0.1, D.FLAME_LENGTH, 500);
+      expect(all.length).toBeGreaterThan(half.length);
+      const tip = Math.min(...half.map((q) => q.x));
+      expect(mouth.x - tip).toBeLessThanOrEqual(D.FLAME_LENGTH / 2 + 1);
+    });
+
+    it('has no gaps along it at any angle: neighbouring squares overlap', () => {
+      for (const a of [-0.2, 0, 0.3, 0.7, 1.05]) {
+        const boxes = streamBoxes(flameStream(mouth, -1, () => a, D.FLAME_LENGTH, 500));
+        for (let i = 1; i < boxes.length; i += 1) expect(overlaps(boxes[i - 1]!, boxes[i]!)).toBe(true);
+      }
+    });
+
+    it('is clipped by the floor rather than drawn through it, and diverges', () => {
+      const pts = flameStream(mouth, -1, () => 0.35, D.FLAME_LENGTH, 500);
+      for (const b of streamBoxes(pts)) expect(b.y + b.h).toBeLessThanOrEqual(GROUND_TOP);
+      expect(pts[pts.length - 1]!.half).toBeGreaterThan(pts[0]!.half * 2);
+    });
+
+    it('never reaches past the reach it was given', () => {
+      const pts = flameStream(mouth, -1, () => 0, D.FLAME_LENGTH, 200);
+      for (const q of pts) expect(mouth.x - q.x).toBeLessThanOrEqual(200);
     });
   });
 
@@ -826,5 +1171,22 @@ describe('the hiring dragon', () => {
     const d = dragon();
     expect(d.solids()).toEqual([]);
     expect(d.speedMultAt()).toBe(1);
+  });
+
+  it('strides while it shifts its weight, and settles onto both feet to breathe fire', () => {
+    // Owner call: "the feet of the Godzilla don't move". The renderer steps the legs off
+    // `gait`; this is the guard that the dial follows the body — up while it walks between
+    // bursts, back to planted inside `GAIT_EASE` once it stops, and never on during a burst.
+    const d = dragon();
+    const p = stander(4);
+    expect(d.dragonState().gait).toBe(0);
+    expect(until(d, p, () => d.dragonState().phase === 'burning')).toBe(true);
+    expect(d.dragonState().gait).toBe(0);
+    expect(until(d, p, () => d.dragonState().phase === 'waiting')).toBe(true);
+    expect(until(d, p, () => d.dragonState().gait === 1, D.BURST_GAP)).toBe(true);
+    expect(until(d, p, () => d.dragonState().phase === 'charging')).toBe(true);
+    run(d, p, D.GAIT_EASE + DT);
+    expect(d.dragonState().phase).toBe('charging');
+    expect(d.dragonState().gait).toBe(0);
   });
 });

@@ -63,7 +63,10 @@ export function titleLayout(): TitleLayout {
     // Heights ramp towards the ANSR tower: the closer to the destination, the
     // more of the market is standing.
     const ramp = i / (count - 1);
-    const h = 60 + Math.round(ramp * 190 + n * 46);
+    // Kept below ~0.55 of the frame through the middle: the title copy sits in the
+    // open sky above it (styles.ts, title screen composition), so a tower that
+    // rises into the type is a tower the scrim has to darken.
+    const h = 54 + Math.round(ramp * 164 + n * 40);
     towers.push({ x, y: groundY - h, w, h, lit: 0.12 + ramp * 0.6 });
     x += w + 12 + Math.floor(hash2(i * 13 + 5, 29) * 24);
   }
@@ -75,7 +78,9 @@ export function titleLayout(): TitleLayout {
     towers,
     ansr,
     sun,
-    hero: { x: 214, feetY: groundY, scale: 4 },
+    // Scale 5, not 4: with the copy out of the middle of the frame the hero is the
+    // one figure in the picture, and at 4 he read as a detail of the skyline.
+    hero: { x: 214, feetY: groundY, scale: 5 },
   };
 }
 
@@ -213,5 +218,6 @@ export function drawTitleScene(
     l.hero.scale,
   );
   // Grounding shadow so he doesn't float on the brick.
-  pxRect(ctx, 'rgba(0,18,24,0.45)', l.hero.x - 30, l.hero.feetY + 2, 60, 5, 5);
+  const shadowW = l.hero.scale * 15;
+  pxRect(ctx, 'rgba(0,18,24,0.45)', l.hero.x - shadowW / 2, l.hero.feetY + 2, shadowW, 5, 5);
 }

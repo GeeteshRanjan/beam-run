@@ -10,7 +10,7 @@ import type { Player } from './Player';
  * game over. Each one books months on the journey clock and pushes the player
  * back a little; the run always continues.
  */
-export type SetbackCause = 'stamp' | 'fire' | 'monster' | 'mummy' | 'fall';
+export type SetbackCause = 'stamp' | 'fire' | 'stomp' | 'monster' | 'mummy' | 'fall';
 
 /** Per-step context passed to hazards from the Simulation. */
 export interface HazardContext {
@@ -68,12 +68,13 @@ export interface Hazard {
    * the **start** of this step.
    *
    * Two of the four contribute something. The Compliance maze owns the clearance
-   * lift and hoist, because they are the only moving geometry in the game and one
-   * object has to own their positions. The DENIED stamps contribute the pressing
-   * face of an *assisted* stamp, as a **one-way platform** — which is what the
-   * player argument is for: "one-way" means "only if you were above it", and the
-   * position that answers that is the one before this step's move, which is
-   * exactly what the simulation is holding when it asks.
+   * lift and hoist, because they are moving geometry and one object has to own their
+   * positions. The DENIED stamps contribute every head of an *assisted* stamp, as a
+   * plain two-way solid that moves (it carries a rider itself, in `update`); they use the
+   * player argument only to leave out a head he is already inside, which is the one
+   * a press has just come down onto. The position that answers "inside" honestly is
+   * the one before this step's move, which is exactly what the simulation is holding
+   * when it asks.
    *
    * What no hazard may contribute is a solid that blocks the only route: a solid
    * toll gate on the maze's single corridor would make that screen impossible

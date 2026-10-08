@@ -311,10 +311,14 @@ describe('the badge standing on a wall (the Compliance perch)', () => {
      * true and still the wrong device here — two cells flanking a logo are two dots.
      */
     expect(rects.filter((r) => r.color === MARK_TONES[1])).toHaveLength(0);
-    // What replaced them is what was always doing the work: a lit plinth under the mark.
-    expect(rects.some((r) => r.color.includes(MARK_LIT_RGB) && r.y < PERCH.surfaceY)).toBe(
-      true,
-    );
+  });
+
+  it('draws no orange plinth under the mark', () => {
+    // Owner call: "a weird orange line below the powerup — remove that." The lit plinth
+    // in the mark's own tone read as an underline, not as a ledge.
+    const { ctx, rects } = recorder();
+    drawBadgePerch(ctx, PERCH);
+    expect(rects.some((r) => r.color.includes(MARK_LIT_RGB))).toBe(false);
   });
 
   it('is a pure function of its view', () => {

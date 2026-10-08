@@ -3,6 +3,7 @@ import { Stamps } from './Stamps';
 import { Player } from '../Player';
 import { LOOP, HAZARDS, RESOLUTION } from '../../data/tuning.config';
 import type { HazardContext } from '../types';
+import { makeInput, type InputState } from '../../core/Input';
 
 const DT = LOOP.FIXED_DT;
 const T = RESOLUTION.TILE;
@@ -44,7 +45,6 @@ describe('Stamps (DENIED rubber stamps)', () => {
     expect(stamps().solids(underStamp())).toEqual([]);
     expect(stamps().speedMultAt()).toBe(1);
   });
-
   it('slams down from the top of the frame and returns to it', () => {
     const h = stamps();
     const clear = new Player(28 * T, 15 * T - 44); // nowhere near the column
@@ -233,70 +233,122 @@ describe('Stamps (DENIED rubber stamps)', () => {
      * way up, it would carry a rider to the parked row and hand him back on the next
      * slam.
      */
-    describe('and it can be stood on', () => {
-      const clear = () => new Player(28 * T, 15 * T - 44);
-      /** Assisted seconds into the stroke, with nobody in the column. */
-      const driveTo = (h: Stamps, e: number): void => {
-        const step = DT * S.ASSIST_TIME_SCALE;
-        const away = clear();
-        for (let i = 0; i < Math.ceil(e / step); i += 1) h.update(DT, away, ASSISTED);
-      };
-      /** A player whose feet are exactly on the col-8 head at the given press. */
-      const standingOn = (press: number): Player => {
-        const top = S.REST_BOTTOM + press * (15 * T - S.REST_BOTTOM) - S.HEAD_H;
-        return new Player(8 * T + T / 2 - 14, top - 44);
-      };
+  });
 
-      it('offers the pressing face as a platform once the head is down', () => {
-        const h = stamps();
-        driveTo(h, S.DROP_TIME + S.HOLD_TIME * 0.5); // held flat on the floor
-        const boxes = h.solids(standingOn(1));
-        expect(boxes).toHaveLength(1);
-        expect(boxes[0]!.w).toBe(S.WIDTH);
-        expect(boxes[0]!.h).toBe(S.HEAD_H);
-        // The platform IS the hitbox — the same face that would have flattened him.
-        expect(boxes[0]!.y + boxes[0]!.h).toBeCloseTo(15 * T, 0);
+  describe('assisted, the head is solid at every point of its stroke', () => {
+    const GROUND = 15 * T;
+    const ground = [{ x: 0, y: GROUND, w: 32 * T, h: 3 * T }];
+    const LEFT_FACE = 8 * T + T / 2 - S.WIDTH / 2;
+    const clear = () => new Player(28 * T, GROUND - 44);
+    /** Seconds into the stroke (at the given pace), with nobody in the column. */
+    const driveTo = (h: Stamps, e: number, ctx: HazardContext = CTX): void => {
+      const step = DT * (ctx.assisted ? S.ASSIST_TIME_SCALE : 1);
+      const away = clear();
+      for (let i = 0; i < Math.max(1, Math.ceil(e / step)); i += 1) h.update(DT, away, ctx);
+    };
+    const headTop = (h: Stamps): number => h.stampStates()[0]!.bottomY - S.HEAD_H;
+    /** A grounded player whose feet are exactly on the col-8 head as it stands now. */
+    const standingOn = (h: Stamps): Player => {
+      const p = new Player(8 * T + T / 2 - 14, headTop(h) - 44);
+      p.onGround = true;
+      return p;
+    };
+    /** One simulation step, in the order `Simulation.step` runs it. */
+    const tick = (
+      h: Stamps,
+      p: Player,
+      input: Partial<InputState> = {},
+      ctx: HazardContext = CTX,
+    ): string | null => {
+      p.update(DT, makeInput(input), ground.concat(h.solids(p)), 1);
+      return h.update(DT, p, ctx);
+    };
+    const STROKE = [
+      S.CYCLE * 0.8, // parked
+      S.DROP_TIME * 0.7, // slamming
+      S.DROP_TIME + S.HOLD_TIME * 0.5, // held on the floor
+      S.DROP_TIME + S.HOLD_TIME + S.LIFT_TIME * 0.5, // lifting
+    ];
+    for (const [name, ctx] of [['assisted', ASSISTED]] as const) {
+      it(`${name}: offers the head as a full-size box parked, slamming, held and lifting`, () => {
+        for (const e of STROKE) {
+          const h = stamps();
+          driveTo(h, e, ctx);
+          expect(h.solids(clear())).toEqual([
+            { x: LEFT_FACE, y: headTop(h), w: S.WIDTH, h: S.HEAD_H },
+          ]);
+        }
       });
-
-      it('is one-way: a player at ground level walks straight through it', () => {
+      it(`${name}: a held head stops a player walking into it, as a wall`, () => {
         const h = stamps();
-        driveTo(h, S.DROP_TIME + S.HOLD_TIME * 0.5);
-        // Standing on the floor in the stamp's own column — the walk-through the
-        // assisted screen has always promised.
-        expect(h.solids(underStamp())).toEqual([]);
+        driveTo(h, S.DROP_TIME + S.HOLD_TIME * 0.05, ctx);
+        const p = new Player(LEFT_FACE - 40, GROUND - 44);
+        for (let i = 0; i < 8; i += 1) expect(tick(h, p, { right: true }, ctx)).toBeNull();
+        expect(p.box.x + p.box.w).toBeCloseTo(LEFT_FACE, 3);
       });
-
-      it('is not a platform while the head is on its way back up', () => {
+      it(`${name}: can be stood on, and carries the rider up and back down`, () => {
         const h = stamps();
-        driveTo(h, S.DROP_TIME + S.HOLD_TIME + S.LIFT_TIME * 0.5);
-        expect(h.stampStates()[0]!.press).toBeGreaterThan(0);
-        expect(h.stampStates()[0]!.press).toBeLessThan(1);
-        expect(h.solids(standingOn(1))).toEqual([]);
-      });
-
-      it('is not a platform while it is backing off a shielded player', () => {
-        const h = stamps();
-        const p = underStamp();
-        run(h, p, Math.ceil(S.DROP_TIME / S.ASSIST_TIME_SCALE / DT) + 8, ASSISTED);
-        expect(h.retractingCount).toBe(1);
-        expect(h.solids(standingOn(0.9))).toEqual([]);
-      });
-
-      it('does not reverse the stroke when the rider drops off during the lift', () => {
-        /*
-         * The lift hands the platform back, so a rider overlaps the head for a frame or
-         * two on his way down. That used to read as "it touched the player", abort the
-         * stroke and send the head back DOWN — a stamp reversing under the person who
-         * had just stepped off it.
-         */
-        const h = stamps();
-        driveTo(h, S.DROP_TIME + S.HOLD_TIME + S.LIFT_TIME * 0.2);
-        const before = h.stampStates()[0]!.press;
-        const rider = standingOn(1); // now overlapping the rising head
-        for (let i = 0; i < 4; i += 1) h.update(DT, rider, ASSISTED);
+        driveTo(h, S.DROP_TIME + S.HOLD_TIME * 0.5, ctx);
+        const p = standingOn(h);
+        let highest = p.box.y;
+        for (let i = 0; i < CYCLE_STEPS * 2; i += 1) {
+          expect(tick(h, p, {}, ctx)).toBeNull();
+          // Always exactly on the head: never sunk into it, never left behind.
+          expect(p.box.y + p.box.h).toBeCloseTo(headTop(h), 3);
+          highest = Math.min(highest, p.box.y);
+        }
+        expect(highest).toBeCloseTo(S.REST_BOTTOM - S.HEAD_H - 44, 3); // rode it to the top
         expect(h.retractingCount).toBe(0);
-        expect(h.stampStates()[0]!.press).toBeLessThan(before);
       });
+    }
+    it('a player can jump from the floor onto a held head and land on it', () => {
+      const h = stamps();
+      driveTo(h, S.DROP_TIME + S.HOLD_TIME * 0.05, ASSISTED);
+      const p = new Player(LEFT_FACE - 30, GROUND - 44);
+      p.onGround = true;
+      tick(h, p, { jumpPressed: true, jumpHeld: true, right: true }, ASSISTED);
+      let landed = false;
+      for (let i = 0; i < 40 && !landed; i += 1) {
+        expect(tick(h, p, { jumpHeld: true, right: true }, ASSISTED)).toBeNull();
+        landed = p.onGround && Math.abs(p.box.y + p.box.h - headTop(h)) < 0.01;
+      }
+      expect(landed).toBe(true);
+    });
+    it('jumping into its underside bonks the player instead of passing through', () => {
+      const h = stamps();
+      driveTo(h, S.CYCLE * 0.8, ASSISTED); // parked: the head hangs at REST_BOTTOM
+      const p = new Player(8 * T + T / 2 - 14, S.REST_BOTTOM + 10);
+      p.vy = -800;
+      tick(h, p, { jumpHeld: true }, ASSISTED);
+      expect(p.box.y).toBeCloseTo(S.REST_BOTTOM, 3);
+      expect(p.vy).toBeGreaterThanOrEqual(0);
+    });
+    it('unassisted, walking into a held head still flattens you: it is not a wall without 1Wrk', () => {
+      const h = stamps();
+      driveTo(h, S.DROP_TIME + S.HOLD_TIME * 0.05);
+      const p = new Player(LEFT_FACE - 20, GROUND - 44);
+      let cause: string | null = null;
+      for (let i = 0; i < 12 && !cause; i += 1) cause = tick(h, p, { right: true });
+      expect(cause).toBe('stamp');
+    });
+    it('still flattens a player it comes down onto (unassisted)', () => {
+      const h = stamps();
+      const p = underStamp();
+      p.onGround = true;
+      let cause: string | null = null;
+      for (let i = 0; i < CYCLE_STEPS && !cause; i += 1) cause = tick(h, p);
+      expect(cause).toBe('stamp');
+    });
+    it('a head that came down onto a shielded player never snaps him out of it', () => {
+      const h = stamps();
+      const p = underStamp();
+      p.onGround = true;
+      const x0 = p.box.x;
+      const y0 = p.box.y;
+      for (let i = 0; i < CYCLE_STEPS; i += 1) expect(tick(h, p, {}, ASSISTED)).toBeNull();
+      expect(h.deflections).toBeGreaterThan(0);
+      expect(p.box.x).toBe(x0);
+      expect(p.box.y).toBeCloseTo(y0, 3);
     });
   });
 

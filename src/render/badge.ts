@@ -207,9 +207,13 @@ export function drawBadgePerch(
 ): void {
   // Contact shadow on the top course, so the mark is *on* the wall.
   pxRect(ctx, 'rgba(0,16,22,0.35)', v.cx - 14, v.surfaceY, 28, 3, 1);
-  // The course it stands on, lit: a plinth two cells deep, which is what tells the
-  // player the wall's top is a place they can be.
-  pxRect(ctx, `rgba(${RAY_LIT_RGB},0.55)`, v.cx - 18, v.surfaceY - 4, 36, 4, 2);
+  /*
+   * **No lit plinth under the mark** (owner call: "a weird orange line below the
+   * powerup — remove that"). It was a 36x4 strip of the mark's own lit tone on the top
+   * course, meant to say "the wall's top is a place you can be"; rasterised, it is an
+   * orange underline detached from the logo. The dark contact shadow above is what ties
+   * the mark to the masonry, and the deck's own lit top course says it can be stood on.
+   */
 
   /*
    * It turns here too, and on a perch that is the *only* motion the pickup has (owner
@@ -243,6 +247,7 @@ export function drawBadgePerch(
    * flare: the answer round this mark has been "nothing" every single time. What says
    * "pickup" on a perch is the lit plinth under it and the contact shadow that puts it
    * ON the masonry — both of which are on the wall, where a still object's read belongs.
+   * (The plinth has since gone too — see above; the shadow is what is left.)
    * `badge.test.ts` counts cells in the 24-34px annulus and now expects **zero** on a
    * perch, so the next thing added out here fails immediately. Do not add a seventh.
    */

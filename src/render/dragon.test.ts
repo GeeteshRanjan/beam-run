@@ -6,6 +6,7 @@ import {
   drawBurningHero,
   drawCone,
   drawDragon,
+  drawDragonFoot,
   drawFloatingBrick,
   drawHiredCandidates,
   drawScorchedGround,
@@ -14,7 +15,7 @@ import {
   drawWaterShots,
 } from './dragon';
 import { BRAND, HAZARDS, RESOLUTION } from '../data/tuning.config';
-import { coneAxisY, coneBoxes, CONE_LABEL_F } from '../world/Hazards/Dragon';
+import { flameStream, labelOnStream, streamBoxes } from '../world/Hazards/Dragon';
 import type {
   CandidateState,
   DragonState,
@@ -95,42 +96,47 @@ function dragon(over: Partial<DragonState> = {}): DragonState {
     dissolve: null,
     costume: null,
     jawOpen: 0,
+    gait: 0,
+    stomp: null,
     ...over,
   };
 }
 
+/**
+ * A burning jet aimed down the lane at `aim` rad below horizontal, built from the
+ * hazard's own functions — the points, the boxes and the taunt's anchor are the hazard's
+ * decisions, and a fixture that wrote them out by hand would quietly test a picture the
+ * game no longer draws.
+ */
+function jetAt(extent: number, aim = 0.3): Pick<FireState, 'points' | 'boxes' | 'target'> {
+  const mouth = { x: 940, y: GROUND_TOP - D.BODY_H + D.BODY_H * 0.15 };
+  const points = flameStream(mouth, -1, () => aim, extent * D.FLAME_LENGTH, D.CONE_REACH);
+  const end = points[points.length - 1]!;
+  return { points, boxes: streamBoxes(points), target: { x: end.x, y: end.y } };
+}
 function fire(over: Partial<FireState> = {}): FireState {
-  const mouth = { x: 940, y: GROUND_TOP - D.BODY_H + D.BODY_H * 0.21 };
-  const target = { x: mouth.x - D.CONE_REACH, y: GROUND_TOP - 20 };
+  const mouth = { x: 940, y: GROUND_TOP - D.BODY_H + D.BODY_H * 0.15 };
   const extent = over.extent ?? 1;
+  const full = flameStream(mouth, -1, () => 0.3, D.FLAME_LENGTH, D.CONE_REACH);
+  const label = labelOnStream(full, mouth);
+  const grown = extent > 0 ? jetAt(extent) : { points: [], boxes: [] };
+  const end = full[full.length - 1]!;
   return {
     phase: 'burning',
     progress: 0.4,
     mouth,
-    target,
+    target: { x: end.x, y: end.y },
     extent,
     dir: -1,
     quenched: 0,
     label: 'CANDIDATE DECLINED',
-    /*
-     * The taunt's anchor and angle come from the hazard's own functions, because they are
-     * the hazard's decision (owner call: the words sit ON the flame at the flame's angle).
-     * Written out by hand here, this fixture kept the old "44px above the whole shape"
-     * formula and quietly tested a picture the game no longer draws.
-     */
-    labelAngle: Math.atan2(
-      -(coneAxisY(mouth, target, D.CONE_TOUCHDOWN) - mouth.y),
-      Math.abs(target.x - mouth.x) * D.CONE_TOUCHDOWN,
-    ),
-    labelAt: {
-      x: mouth.x + (target.x - mouth.x) * CONE_LABEL_F,
-      y: coneAxisY(mouth, target, CONE_LABEL_F),
-    },
-    boxes: coneBoxes(mouth, target, extent),
+    labelAngle: label.angle,
+    labelAt: label.at,
+    points: grown.points,
+    boxes: grown.boxes,
     ...over,
   };
 }
-
 function jet(over: Partial<WaterState> = {}): WaterState {
   return { box: { x: 400, y: 480, w: D.WATER_W, h: D.WATER_H }, dx: 0.86, dy: -0.5, ...over };
 }
@@ -193,7 +199,7 @@ describe('the Godzilla', () => {
     expect(widths.size, `rows are ragged: ${[...widths].join(',')}`).toBe(1);
     expect(BEAST).toHaveLength(63);
     expect([...widths][0]).toBe(80);
-    const known = new Set('.KsSHBbfApmhc'.split(''));
+    const known = new Set('.KsSHBbFfdApmhc'.split(''));
     for (const row of BEAST) {
       for (const ch of row) expect(known.has(ch), `unknown cell '${ch}'`).toBe(true);
     }
@@ -222,14 +228,14 @@ describe('the Godzilla', () => {
     expect(highest).toBeGreaterThanOrEqual(d.box.y);
   });
 
-  it('is crimson, and wears nothing in the reserved value orange', () => {
+  it('is Godzilla charcoal, and wears nothing in the reserved value orange', () => {
     // Orange belongs to fire on this screen. A beast in any of it could be mistaken
     // for its own flame, which is the one confusion the screen cannot afford.
     const { ctx, rects } = recorder();
     drawDragon(ctx, dragon(), 1.2, true);
     const fills = upper(rects);
-    expect(fills).toContain('#9B2F38'); // scale
-    expect(fills).toContain('#E7D3A6'); // belly
+    expect(fills).toContain('#4A5650'); // scale
+    expect(fills).toContain('#9AA595'); // chest plates
     expect(fills).toContain('#EFE4C8'); // dorsal fins, teeth, claws
     for (const r of rects) {
       expect(r.fill.toUpperCase()).not.toContain(BRAND.ORANGE);
@@ -347,44 +353,139 @@ describe('the Godzilla', () => {
     for (const row of BEAST) expect(row.endsWith('.') || row.endsWith('K')).toBe(true);
   });
 
-  it('drops a JAW WITH MASS, not the lower edge of a hole', () => {
+  it('drops the JAW AS ONE PIECE: it moves down, it does not stretch', () => {
     /*
-     * The other half of the mouth note. The wedge puts the maw *outside* the skull's outline
-     * at the muzzle end — correct, that is where a lower jaw goes when it swings — but with
-     * nothing under the tooth line it read as a dark triangle bitten out of the head against
-     * the sky. So under the dropped teeth there must be hide, and under that a keyline.
+     * Owner call: "when it's throwing flame the lower jaw is getting elongated." The build
+     * before this painted a hole down from the lip, with a thin mandible under it, while the
+     * shut jaw stayed where it was — so an open mouth was the jaw's own depth plus the hole
+     * plus a second jaw, i.e. one jaw stretched to twice its size.
      *
-     * Measured as "the lowest thing painted on the head is not the maw": if the mandible is
-     * missing, the bottom of the jaw is `MAW`, and that is exactly the defect.
+     * Measured per column at the muzzle, which is the one part of the head drawn in front of
+     * `box.x` (the beast faces left here, and everything behind that line is chest, neck or
+     * forelimb): the lower jaw's cells below the lip must be **the same depth open as shut**,
+     * lower down, and still closed by a keyline. The maw and the throat's light are excluded —
+     * they are the gap, not the jaw.
      */
-    const { ctx, rects } = recorder();
     const d = dragon({ jawOpen: 1, phase: 'charging' });
-    drawDragon(ctx, d, 1.2, true);
-    /*
-     * The window is **in front of the box and immediately under the maw**, and both halves of
-     * that are load-bearing. The beast faces left here, so the muzzle is the one thing drawn
-     * outside `box.x`; anything at or behind that line is chest, neck or forelimb, and a first
-     * cut of this test that took the whole head band passed with the mandible deleted because
-     * it was reading the chest. The 12px depth keeps the forelimb out, which starts 15px lower.
-     */
-    const maw = rects.filter((r) => r.fill.toUpperCase() === '#2E070B' && r.y < d.box.y + 90);
-    const floorOfMaw = Math.max(...maw.map((r) => r.y + r.h));
-    const under = rects.filter(
-      (r) => r.x < d.box.x && r.y >= floorOfMaw - 3 && r.y <= floorOfMaw + 12,
-    );
-    // Hide, shade and keyline all present below the maw…
-    for (const tone of ['#9B2F38', '#5C1620', '#1A0A0E']) {
-      expect(upper(under), `${tone} is the mandible and it is missing`).toContain(tone);
+    const lip = d.box.y + 1 + 11 * 3; // the lower lip's resting row
+    const gap = ['#2E070B', '#FFF2D0', '#FF7A2A', '#FF5400'];
+    const jawColumns = (state: DragonState) => {
+      const { ctx, rects } = recorder();
+      drawDragon(ctx, state, 1.2, true);
+      const cols = new Map<number, { top: number; bottom: number; lowest: string }>();
+      for (const r of rects) {
+        if (r.x >= d.box.x || r.y < lip || r.y >= d.box.y + 90) continue;
+        if (gap.includes(r.fill.toUpperCase())) continue;
+        const c = cols.get(r.x);
+        if (!c) cols.set(r.x, { top: r.y, bottom: r.y + r.h, lowest: r.fill });
+        else {
+          c.top = Math.min(c.top, r.y);
+          if (r.y + r.h > c.bottom) {
+            c.bottom = r.y + r.h;
+            c.lowest = r.fill;
+          }
+        }
+      }
+      return cols;
+    };
+    const shut = jawColumns(dragon({ jawOpen: 0, phase: 'waiting' }));
+    const open = jawColumns(d);
+    expect(shut.size).toBeGreaterThan(3);
+    expect([...open.keys()].sort()).toEqual([...shut.keys()].sort());
+    for (const [x, s] of shut) {
+      const o = open.get(x)!;
+      expect(o.bottom - o.top, `the jaw at x=${x} changed depth as it opened`).toBe(s.bottom - s.top);
+      expect(o.top, `the jaw at x=${x} did not drop`).toBeGreaterThan(s.top);
+      // …and it is still a jaw with an edge, not the lower rim of a hole.
+      expect(o.lowest.toUpperCase()).toBe('#0C1110');
     }
-    // …and the keyline is the last thing down there, so the jaw has an edge.
-    const lowest = under.reduce((a, r) => (r.y + r.h > a.y + a.h ? r : a), under[0]!);
-    expect(lowest.fill.toUpperCase()).toBe('#1A0A0E');
-    // …and none of it is there when the mouth is shut.
-    const shut = recorder();
-    drawDragon(shut.ctx, dragon({ jawOpen: 0 }), 1.2, true);
-    expect(
-      shut.rects.filter((r) => r.x < d.box.x && r.y >= floorOfMaw - 3 && r.y <= floorOfMaw + 12),
-    ).toHaveLength(0);
+  });
+
+  it('STOMPS: the foot is up over the spot for the wind-up, down on it after, even reduced', () => {
+    // Owner call: "stomp on the player like an animal would". The raised foot is the
+    // telegraph, so like the jaw it is state and is drawn under reduced motion too.
+    const d0 = dragon();
+    const home = d0.box.x + d0.box.w / 2 - D.STOMP_FOOT_X; // it faces left here
+    const at = home - 15;
+    const stomp = (phase: 'lift' | 'slam' | 'recover', progress: number) => ({
+      phase,
+      progress,
+      x: at,
+      home,
+      box: null,
+    });
+    const onFloor = (over: Partial<DragonState>) => {
+      const { ctx, rects } = recorder();
+      drawDragon(ctx, dragon(over), 1.2, true);
+      return rects.filter((r) => r.y + r.h === GROUND_TOP && Math.abs(r.x - at) < 40);
+    };
+    const standing = onFloor({});
+    const up = onFloor({ stomp: stomp('lift', 1) });
+    const down = onFloor({ stomp: stomp('recover', 0.2) });
+    expect(standing.length).toBeGreaterThan(4);
+    // Up: the front foot has left the floor where it will land.
+    expect(up.length).toBeLessThan(standing.length - 4);
+    // Down: it is back on the floor, moved over the committed spot.
+    expect(down.length).toBeGreaterThan(4);
+    const mid = (rs: Rect[]) => rs.reduce((a, r) => a + r.x, 0) / rs.length;
+    expect(mid(down)).toBeLessThan(mid(standing));
+    // …and the foot painted over the flattened player is that leg alone.
+    const foot = recorder();
+    drawDragonFoot(foot.ctx, dragon({ stomp: stomp('slam', 0.5) }), true);
+    expect(foot.rects.length).toBeGreaterThan(20);
+    expect(foot.rects.length).toBeLessThan(260);
+    expect(Math.min(...foot.rects.map((r) => r.y))).toBeGreaterThan(d0.box.y + 140);
+  });
+
+  it('WALKS: the feet step while it shifts its weight, and a planted foot does not skate', () => {
+    /*
+     * Owner call: "the feet of the Godzilla don't move and that makes it look weird — make it
+     * move naturally." It shifts along its patch of floor between bursts, and a body that
+     * moves over feet that don't is a sprite being slid.
+     *
+     * So, with a full stride on and motion allowed: something is always on the floor, the two
+     * feet are not always in the same place relative to the body, one of them leaves the
+     * floor, and — the part that makes it walk rather than paddle — while a foot is planted it
+     * stays at the same place on the ground as the body moves over it.
+     */
+    const claws = (cx: number) => {
+      const { ctx, rects } = recorder();
+      const d = dragon({ box: body(cx), gait: 1 });
+      drawDragon(ctx, d, 1.2, false);
+      const floor = rects.filter((r) => r.y + r.h === GROUND_TOP && r.y > d.box.y + 150);
+      return { rects, floor, d };
+    };
+    const lowestAt = (rs: Rect[]) => Math.max(...rs.map((r) => r.y + r.h));
+    const standing = recorder();
+    const s = dragon({ gait: 0 });
+    drawDragon(standing.ctx, s, 1.2, false);
+    const bothFeet = standing.rects.filter((r) => r.y + r.h === GROUND_TOP && r.y > s.box.y + 150);
+    const shapes = new Set<string>();
+    let lifted = false;
+    for (let cx = 1040; cx < 1100; cx += 6) {
+      const { rects, floor, d } = claws(cx);
+      expect(lowestAt(rects)).toBe(GROUND_TOP);
+      // Nothing is lifted above the skull by a stride.
+      expect(Math.min(...rects.map((r) => r.y))).toBeGreaterThanOrEqual(d.box.y);
+      shapes.add(JSON.stringify(floor.map((r) => r.x - d.box.x).sort((a, b) => a - b)));
+      // A foot off the floor: fewer cells on the ground band than the two-footed stance.
+      if (floor.length < bothFeet.length - 4) lifted = true;
+    }
+    expect(shapes.size).toBeGreaterThan(3);
+    expect(lifted).toBe(true);
+    // A planted foot: over a short stretch of stance, a floor cell that is there at the start
+    // is still at the same WORLD x a few px later, however far the body has moved.
+    const a = claws(1062).floor.map((r) => r.x);
+    const b = claws(1068).floor.map((r) => r.x);
+    expect(a.filter((x) => b.includes(x)).length).toBeGreaterThan(4);
+    // …and with no stride the feet are the authored stance, whatever box.x is.
+    const still = (cx: number) => {
+      const { ctx, rects } = recorder();
+      const d = dragon({ box: body(cx), gait: 0 });
+      drawDragon(ctx, d, 1.2, false);
+      return JSON.stringify(rects.filter((r) => r.y > d.box.y + 120).map((r) => r.x - d.box.x));
+    };
+    expect(still(1041)).toBe(still(1077));
   });
   it('leaves an empty COSTUME on the floor once it is beaten, and nothing standing', () => {
     /*
@@ -404,7 +505,7 @@ describe('the Godzilla', () => {
       true,
     );
     const fills = upper(rects);
-    expect(fills).toContain('#9B2F38'); // its hide, on the floor
+    expect(fills).toContain('#4A5650'); // its hide, on the floor
     // Nothing is more than a heap high: the suit is 65px deep and it lies on the ground.
     const highest = Math.min(...rects.map((r) => r.y));
     expect(highest).toBeGreaterThan(GROUND_TOP - 90);
@@ -580,7 +681,7 @@ describe('the Godzilla', () => {
     // deliberately not mirrored — they always sit on the inside of the frame, away
     // from the HUD — so including them would compare a label position rather than an
     // anatomy, which is what made the first version of this test fail by 40px.
-    const flesh = ['#9B2F38', '#5C1620', '#C24A50', '#E7D3A6', '#EFE4C8', '#BCAE8C', '#1A0A0E'];
+    const flesh = ['#4A5650', '#28302D', '#77877D', '#9AA595', '#EFE4C8', '#BCAE8C', '#0C1110'];
     const beast = (rs: Rect[]) => rs.filter((r) => flesh.includes(r.fill.toUpperCase()));
     const span = (rs: Rect[]) => ({
       w: Math.max(...rs.map((r) => r.x + r.w)) - Math.min(...rs.map((r) => r.x)),
@@ -686,6 +787,30 @@ describe('the cone of fire', () => {
     for (const r of flame) expect(inside(r)).toBe(true);
   });
 
+  it('keeps inside its boxes at every angle it can be aimed at (it follows the player)', () => {
+    // The jet is aimed at the player now, so it can leave the jaw rising, level or steep;
+    // painting per x-column (the old pass) only held for a flame lying along the floor.
+    for (const aim of [-D.AIM_UP, 0, 0.5, D.AIM_DOWN]) {
+      const f = fire(jetAt(1, aim));
+      const { ctx, rects } = recorder();
+      drawCone(ctx, f, 1.2, true);
+      const flame = rects.filter(
+        (r) => r.fill.toUpperCase().startsWith('#FF') && (r.w > 6 || r.h > 6),
+      );
+      expect(flame.length).toBeGreaterThan(10);
+      for (const r of flame) {
+        const inside = f.boxes.some(
+          (b) =>
+            r.x >= b.x - 6 &&
+            r.x + r.w <= b.x + b.w + 6 &&
+            r.y >= b.y - 6 &&
+            r.y + r.h <= b.y + b.h + 6,
+        );
+        expect(inside).toBe(true);
+      }
+    }
+  });
+
   it('grows: a half-grown cone covers less ground than a full one', () => {
     const half = recorder();
     drawCone(half.ctx, fire({ extent: 0.4 }), 1.2, true);
@@ -716,7 +841,7 @@ describe('the cone of fire', () => {
     // It is rotated, and by the angle the hazard committed.
     expect(rotations).toContain(f.labelAngle);
     // The glyphs are ON the flame: inside the band, not above it. Measured against the
-    // segment the anchor falls in, because the cone's top edge is far higher at the jaw.
+    // square the anchor falls in, because the jet's top edge is far higher at the jaw.
     const under = f.boxes.find((b) => f.labelAt.x >= b.x && f.labelAt.x <= b.x + b.w)!;
     expect(under).toBeTruthy();
     const glyphs = rects.filter((r) => r.fill.toUpperCase() === '#FFF6E2');
@@ -729,7 +854,7 @@ describe('the cone of fire', () => {
     const half = recorder();
     drawCone(
       half.ctx,
-      { ...f, extent: 0.5, boxes: coneBoxes(f.mouth, f.target, 0.5) },
+      { ...f, extent: 0.5, ...jetAt(0.5), target: f.target },
       1.2,
       true,
     );

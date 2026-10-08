@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Hud, HUD_PX, HUD_PLAQUE_CHROME, pixelWidthPx } from './Hud';
 import { pixelArtWidthPx } from './Hud';
 import { pipCells, PIP_W, PIP_H } from './LivesPips';
-import { Overlays, type LifeLostModel, type ReceiptModel } from './Overlays';
+import { Overlays, briefMeasure, type LifeLostModel, type ReceiptModel } from './Overlays';
 import { injectStyles, STYLE_ELEMENT_ID, CSS } from './styles';
 import { COPY, CAPABILITIES } from '../data/copy';
 import { SCREENS } from '../data/levels';
@@ -355,7 +355,7 @@ describe('Overlays', () => {
     expect(visible(parent).querySelector('.beam-run__keys')).toBeNull();
 
     // Level 0: two groups, three caps (both arrows, then Space).
-    overlays.show('titlecard', { levelLabel: 'Head Office', legend: 'moveJump' });
+    overlays.show('titlecard', { levelLabel: 'Headquarters', legend: 'moveJump' });
     const keys = visible(parent).querySelector('.beam-run__keys') as HTMLElement;
     expect(keys.hidden).toBe(false);
     expect(keys.querySelectorAll('.beam-run__key-group')).toHaveLength(2);
@@ -499,15 +499,15 @@ describe('Overlays', () => {
     for (const sel of ['.beam-run__months', '.beam-run__matched', '.beam-run__receipt-delays']) {
       expect(cost.querySelector(sel), sel).not.toBeNull();
     }
-    // Opposite it: the caption, the rows, then the instruction as a footnote UNDER
-    // them. Between the heading and the rows it pushed the right-hand block a line and
-    // a half below the left-hand one, which is what stopped the two masses aligning.
+    // Opposite it: the caption and the rows, the same shape as caption + panel. The
+    // "pick one" hint that stood under the rows is gone (owner call), and the list
+    // grows to its column's height so the two blocks still end on one line.
     const list = win.querySelector('.beam-run__col--aside .beam-run__receipt')!;
     expect(Array.from(list.children).map((c) => c.className)).toEqual([
       'beam-run__receipt-title',
       'beam-run__receipt-list',
-      'beam-run__hint',
     ]);
+    expect(CSS).toContain('.beam-run__col--aside .beam-run__receipt-list { flex: 1 1 auto; }');
     // Equal columns, both blocks at full width — the symmetry is structural, not a
     // hand-tuned pair of widths.
     expect(CSS).toContain('.beam-run__cost {');
@@ -625,7 +625,6 @@ describe('Overlays', () => {
       COPY.win.verdictClean,
       COPY.win.verdictDelayed,
       COPY.win.receiptTitle,
-      COPY.win.receiptHint,
       COPY.win.delaysNone,
       COPY.win.delaysTitle,
       COPY.win.delayRow('RED TAPE', 2, 4),
@@ -645,6 +644,11 @@ describe('Overlays', () => {
       COPY.clearCard.begin,
       ...Object.values(COPY.clearCard.title),
       ...Object.values(COPY.clearCard.line),
+      COPY.bonus.name,
+      COPY.bonus.tag,
+      COPY.bonus.brief,
+      COPY.bonus.clear.title,
+      COPY.bonus.clear.line,
       COPY.deathCard.retry,
       ...Object.values(COPY.deathCard.title),
       ...Object.values(COPY.deathCard.line),
@@ -750,9 +754,10 @@ describe('Overlays', () => {
       expect(Boolean(COPY.clearCard.line[screen.id]), `screen ${screen.id}`).toBe(!last);
     }
     // Both lines fit the measures they are set at: the credit as a title (20), the
-    // hand-off at the card measure (26), two balanced bitmap lines at most.
+    // hand-off at the card measure (26, narrowed by `briefMeasure` when that leaves a
+    // lopsided pair), two balanced bitmap lines at most.
     for (const [id, line] of Object.entries(COPY.clearCard.line)) {
-      const lines = wrapPixelLabel(line, 26);
+      const lines = wrapPixelLabel(line, briefMeasure(line));
       expect(lines.length, `clear ${id}`).toBeLessThanOrEqual(2);
       if (lines.length === 2) {
         const [a, b] = [lines[0]!.length, lines[1]!.length];
@@ -886,7 +891,10 @@ describe('Overlays', () => {
       // Two bitmap lines at the card's 26-character measure, and balanced ones: a
       // third line is always a one-word widow over the button, and the point of a
       // brief is that it is brief.
-      const lines = wrapPixelLabel(brief!, 26);
+      // (at the measure the card actually uses, see `briefMeasure`).
+      const measure = briefMeasure(brief!);
+      expect(measure, `screen ${screen.id}`).toBeGreaterThanOrEqual(18);
+      const lines = wrapPixelLabel(brief!, measure);
       expect(lines.length, `screen ${screen.id}`).toBeLessThanOrEqual(2);
       if (lines.length === 2) {
         // No line shorter than half the other, or the centred pair reads as a slip.
@@ -894,6 +902,45 @@ describe('Overlays', () => {
         expect(Math.min(a, b) * 2, `screen ${screen.id}`).toBeGreaterThanOrEqual(Math.max(a, b));
       }
     }
+  });
+
+  it('gives the hidden level the same two cards, held to the same rules', () => {
+    const balanced = (lines: string[]): void => {
+      expect(lines.length).toBeLessThanOrEqual(2);
+      if (lines.length === 2) {
+        const [a, b] = [lines[0]!.length, lines[1]!.length];
+        expect(Math.min(a, b) * 2).toBeGreaterThanOrEqual(Math.max(a, b));
+      }
+    };
+    const { name, tag, brief, clear } = COPY.bonus;
+    // The brief at the measure Game.ts sets for it: two lines, broken on its comma.
+    expect(wrapPixelLabel(brief, 18).map((l) => l.toUpperCase())).toEqual([
+      'LIVE IS DAY ONE,',
+      'NOT THE FINISH',
+    ]);
+    for (const word of name.toUpperCase().split(/\s+/)) {
+      if (word.length <= 3) continue;
+      expect(brief.toUpperCase()).not.toContain(word);
+    }
+    // The credit on one line at the headline measure, the hand-off at the card's.
+    expect(wrapPixelLabel(clear.title, 20)).toHaveLength(1);
+    balanced(wrapPixelLabel(clear.line, briefMeasure(clear.line)));
+    for (const s of [tag, brief, clear.title, clear.line]) {
+      expect(s).not.toMatch(/['\u2018\u2019]/);
+      for (const cap of CAPABILITIES) {
+        expect(s.toLowerCase()).not.toContain(cap.product.toLowerCase());
+      }
+    }
+
+    overlays.show('titlecard', { levelLabel: name, levelTag: tag, brief, briefChars: 18 });
+    const card = visible(parent);
+    expect(card.getAttribute('aria-label')).toBe(`${tag}: ${name}. ${brief}`);
+    expect(card.querySelector('.beam-run__brief')!.textContent).toBe(brief);
+    expect(card.querySelector('.beam-run__keys')!.textContent).toBe('');
+    overlays.show('clearcard', { clear });
+    const done = visible(parent);
+    expect(done.textContent).toContain(clear.title);
+    expect(done.querySelector('.beam-run__brief')!.textContent).toBe(clear.line);
   });
 
   it('ends an attempt on three things and one route, not a ledger', () => {
@@ -1066,17 +1113,29 @@ describe('Overlays', () => {
     caps[0]!.click();
     expect(cb.onRestart).toHaveBeenCalled();
     expect(cb.onCta).not.toHaveBeenCalled();
-    // The instruction that now carries the conversion still points at the rows.
-    expect(visible(parent).querySelector('.beam-run__receipt')!.textContent).toContain(
-      COPY.win.receiptHint,
-    );
+    // The "pick one to talk about" instruction went with the clickable rows.
+    expect(visible(parent).querySelector('.beam-run__receipt .beam-run__hint')).toBeNull();
+    expect(visible(parent).textContent).not.toMatch(/talk about/i);
   });
 
-  it('marks engaged capabilities and leaves unreached ones dim but clickable', () => {
-    overlays.show('win', { receipt: receipt({ engaged: ['PLACE_TILE'] }) });
-    const rows = Array.from(
-      visible(parent).querySelectorAll<HTMLButtonElement>('.beam-run__receipt-row'),
+  it('carries the full lockup, ANSRcade The GCC Game, in the bitmap font', () => {
+    overlays.show('win', { receipt: receipt() });
+    const brand = visible(parent).querySelector('.beam-run__brand')!;
+    expect(brand.getAttribute('aria-label')).toBe(
+      `${COPY.meta.name} \u2014 ${COPY.meta.edition}`,
     );
+    for (const sel of ['.beam-run__brand-word', '.beam-run__brand-title']) {
+      const el = brand.querySelector(sel)!;
+      expect(el.querySelector('svg.beam-run__pixels'), sel).not.toBeNull();
+      expect(el.querySelector('.beam-run__sr')!.textContent, sel).toBe(el.textContent);
+    }
+    // No divider between the wordmark and the edition (owner call).
+    expect(brand.querySelector('.beam-run__brand-rule')).toBeNull();
+  });
+
+  it('marks engaged capabilities and leaves unreached ones dim, none of them clickable', () => {
+    overlays.show('win', { receipt: receipt({ engaged: ['PLACE_TILE'] }) });
+    const rows = Array.from(visible(parent).querySelectorAll<HTMLElement>('.beam-run__receipt-row'));
     expect(rows).toHaveLength(CAPABILITIES.length);
     const engaged = rows.filter((r) => r.classList.contains('beam-run__receipt-row--engaged'));
     expect(engaged).toHaveLength(1);
@@ -1087,16 +1146,20 @@ describe('Overlays', () => {
     expect(engaged[0]!.textContent).not.toMatch(/month/i);
     const dim = rows.find((r) => !r.classList.contains('beam-run__receipt-row--engaged'))!;
     expect(dim.textContent).toContain(COPY.win.notReached);
-    expect(dim.disabled).toBe(false);
   });
 
-  it('each capability row is its own Navigator route carrying a declared topic', () => {
+  it('the capability rows are read-only: list items, not buttons, and a click does nothing', () => {
+    // Owner call: "make the sections of what got you here unclickable".
     overlays.show('win', { receipt: receipt() });
-    const rows = Array.from(
-      visible(parent).querySelectorAll<HTMLButtonElement>('.beam-run__receipt-row'),
-    );
-    rows[2]!.click(); // the third capability in journey order
-    expect(cb.onCta).toHaveBeenCalledWith('win', CAPABILITIES[2]!.topic);
+    const rows = Array.from(visible(parent).querySelectorAll<HTMLElement>('.beam-run__receipt-row'));
+    expect(rows).toHaveLength(CAPABILITIES.length);
+    for (const row of rows) {
+      expect(row.tagName).toBe('LI');
+      expect(row.querySelector('button, a, [tabindex]')).toBeNull();
+      row.click();
+    }
+    expect(cb.onCta).not.toHaveBeenCalled();
+    expect(CSS).not.toContain('.beam-run__receipt-row:hover');
   });
 
   it('the mid-run summary reports where you got to and still routes onward', () => {
@@ -1163,14 +1226,19 @@ describe('Overlays', () => {
     const start = visible(parent);
     // Three things in one order: the hook, the offer, play. The row of key caps that
     // used to sit between them is on the briefing cards now (owner call).
+    // START sits outside the copy group so a portrait phone can put it in the band
+    // under the frame; the reading order is still hook, offer, play.
     const stack = start.querySelector('.beam-run__stack')!;
     expect(Array.from(stack.children).map((n) => n.className)).toEqual([
       'beam-run__title',
       'beam-run__brief',
+    ]);
+    expect(Array.from(start.children).map((n) => n.className)).toEqual([
+      'beam-run__start-head',
       'beam-run__actions',
     ]);
     expect(start.textContent).not.toContain(COPY.meta.estimatedTime);
-    expect(start.textContent).not.toContain(COPY.legend.moveJumpTap);
+    expect(start.textContent).not.toContain(COPY.legend.moveJumpKeys);
     expect(start.textContent).not.toContain(COPY.legend.fireKeys);
     // The controls also still reach screen-reader users via the canvas description,
     // the act key included.
@@ -1179,31 +1247,78 @@ describe('Overlays', () => {
     expect(buttons(parent)).toHaveLength(1);
   });
 
-  it('shows the on-screen pads instead of keys on a touch device', () => {
-    // A phone player has no arrow keys and gets one-tap play by default, so the legend
-    // draws the pads they will actually see: two arrows and a round jump, then — three
-    // stages later — the smaller act disc on its own.
+  it('shows no control legend at all on a touch device', () => {
+    // Owner call: in non-desktop mode the controls are not shown anywhere. The thumb
+    // pads are on the screen from the first frame of play, so neither teaching card
+    // (move + jump on level 0, fire on level 3) carries a row there — not keys, and
+    // not the pads redrawn as caps either.
     const host = document.createElement('div');
     document.body.appendChild(host);
     const touch = new Overlays(host, cb, { touch: true });
-    touch.show('titlecard', { levelLabel: 'Head Office', legend: 'moveJump' });
-    const card = host.querySelector('.beam-run__overlay--visible')!;
-    const keys = card.querySelector('.beam-run__keys') as HTMLElement;
-    expect(keys.textContent).toBe(COPY.legend.moveJumpTap);
-    expect(card.textContent).not.toContain(COPY.legend.moveJumpKeys);
-    // Round caps: three of them, the same three controls the pads draw.
-    expect(keys.querySelectorAll('.beam-run__key--pad')).toHaveLength(3);
-    expect(CSS).toContain('.beam-run__key--pad { border-radius: 50%; }');
-    // The act pad is the SMALL disc, which is how it is told apart from jump: both are
-    // discs, so size is the only difference available.
-    touch.show('start');
-    touch.show('titlecard', { levelLabel: 'The Fit-Out Trap', legend: 'fire' });
-    const fireRow = host.querySelector(
-      '.beam-run__overlay--visible .beam-run__keys',
-    ) as HTMLElement;
-    expect(fireRow.querySelectorAll('.beam-run__key--small')).toHaveLength(1);
-    expect(fireRow.textContent).toBe(COPY.legend.fireTap);
+    for (const [levelLabel, legend] of [
+      ['Headquarters', 'moveJump'],
+      ['The Fit-Out Trap', 'fire'],
+    ] as const) {
+      touch.show('start');
+      touch.show('titlecard', { levelLabel, legend });
+      const card = host.querySelector('.beam-run__overlay--visible')!;
+      const keys = card.querySelector('.beam-run__keys') as HTMLElement;
+      expect(keys.hidden, levelLabel).toBe(true);
+      expect(keys.childNodes, levelLabel).toHaveLength(0);
+      expect(card.querySelectorAll('.beam-run__key'), levelLabel).toHaveLength(0);
+      expect(card.textContent, levelLabel).not.toMatch(/arrow|space jumps|\bF fires/i);
+    }
     touch.destroy();
     host.remove();
+  });
+  it('still teaches the keys on a keyboard device', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const keyboard = new Overlays(host, cb, { touch: false });
+    keyboard.show('titlecard', { levelLabel: 'Headquarters', legend: 'moveJump' });
+    const keys = host.querySelector('.beam-run__overlay--visible .beam-run__keys') as HTMLElement;
+    expect(keys.hidden).toBe(false);
+    expect(keys.textContent).toBe(COPY.legend.moveJumpKeys);
+    // Three caps: left, right, SPACE.
+    expect(keys.querySelectorAll('.beam-run__key')).toHaveLength(3);
+    // The round touch caps went with the touch legend, CSS included.
+    expect(CSS).not.toContain('beam-run__key--pad');
+    expect(CSS).not.toContain('beam-run__key--small');
+    keyboard.destroy();
+    host.remove();
+  });
+  it('keeps an overlay taller than the frame scrollable from its top edge', () => {
+    // A flex column centred by justify-content overflows both ends, and the part above
+    // the frame cannot be scrolled to: the win receipt lost its headline on an 800x600
+    // window and on a phone in landscape. Auto margins centre the same when there is
+    // room and collapse when there is not.
+    expect(CSS).toMatch(/\.beam-run__overlay \{[^}]*justify-content: flex-start/);
+    expect(CSS).toContain(
+      '.beam-run__overlay:not(.beam-run__overlay--start) > :first-child { margin-top: auto; }',
+    );
+    expect(CSS).toContain(
+      '.beam-run__overlay:not(.beam-run__overlay--start) > :last-child { margin-bottom: auto; }',
+    );
+  });
+});
+
+describe('transition-card copy', () => {
+  it('punctuates a card line only where it has two parts (owner calls)', () => {
+    const lines = [
+      ...Object.values(COPY.titleCard.brief),
+      ...Object.values(COPY.clearCard.line),
+      ...Object.values(COPY.clearCard.title),
+      ...Object.values(COPY.deathCard.line),
+      ...Object.values(COPY.deathCard.title),
+      COPY.bonus.brief,
+      COPY.bonus.clear.title,
+      COPY.bonus.clear.line,
+    ];
+    for (const line of lines) {
+      // Two sentences, or a comma that carries the meaning, keep their marks: stripped,
+      // "Good job. Do not get comfortable." read as one run-on sentence.
+      const twoParts = /[.,] \S/.test(line);
+      if (!twoParts) expect(line, line).not.toMatch(/[.,]/);
+    }
   });
 });

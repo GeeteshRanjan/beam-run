@@ -515,6 +515,6 @@ describe('Screen 3 — Workplace (taped off → 500Leaders → the room put righ
     stepN(sim, 900); // 15s — longer than any old timed shield
     expect(hz.restore).toBe(1);
     expect(hz.isFixed).toBe(true);
-    expect(sim.activePower?.product).toBe('500Leaders');
+    expect(sim.activePower?.product).toBe('Workspace');
   });
 });

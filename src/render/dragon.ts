@@ -45,12 +45,11 @@ import { drawText, drawLabelPlaque } from './PixelText';
 import {
   MOUTH_X_FRACTION,
   MOUTH_Y_FRACTION,
-  coneAxisY,
-  coneHalfAt,
   type FireState,
   type CandidateState,
   type DragonState,
   type SteamState,
+  type StompState,
   type WaterState,
 } from '../world/Hazards/Dragon';
 
@@ -60,31 +59,31 @@ const { TILE: T } = RESOLUTION;
  * module painted the flame's band per column and worked its thickness out from the same two
  * constants the hazard did. Two copies of one profile is the `badgeFloat` defect waiting
  * for somebody to change one of them, and the pass that gave the flame a floor run and a
- * 3.4× taper would have been exactly that occasion. Both the axis and the half-thickness
- * now come from `coneAxisY`/`coneHalfAt` — the functions the hitbox itself is stepped from —
- * so this module has no opinion about the fire's shape at all, and no reason to read the
- * dragon's numbers.
+ * 3.4× taper would have been exactly that occasion. The jet now arrives as `fire.points`
+ * (from `Dragon.flameStream`, the same samples the hitbox squares are built from), so this
+ * module has no opinion about the fire's shape at all, and no reason to read the dragon's
+ * numbers.
  */
 const GROUND_TOP = 15 * T;
 
 // --- palette ---------------------------------------------------------------
 
-const OUTLINE = '#1A0A0E';
+const OUTLINE = '#0C1110';
 /**
- * Oxblood crimson: mid, shade, highlight. A red dragon, and never the fire's orange.
- *
- * Lighter than the first attempt at this palette (#8A2A33), which rasterised as a
- * dark mass against the dark teal sky — the silhouette was there in the file and not
- * on the screen. The separation from the fire is carried by value in the other
- * direction: every flame is cream-cored and *lighter* than this.
+ * Charcoal hide with a green cast: mid, shade, highlight (owner call: "make the Godzilla
+ * look like actual Godzilla — this looks more like a bigger lizard/frog"). It was oxblood
+ * crimson with pink plates, and a red animal with pink fins is a salamander however the
+ * silhouette is cut. The real thing is near-black; this is held a value up from that so
+ * the mass still separates from the ember night sky, and the lit planes are what carry
+ * the contour. Fire stays the only warm, bright thing on the screen.
  */
-const SCALE = '#9B2F38';
-const SCALE_DARK = '#5C1620';
-const SCALE_LIT = '#C24A50';
-/** Bone belly plates — the lightest thing on the body, so the mass reads. */
-const BELLY = '#E7D3A6';
-/** Every third belly course, so the plates read as plates rather than as one stripe. */
-const BELLY_SHADE = '#C9B184';
+const SCALE = '#4A5650';
+const SCALE_DARK = '#28302D';
+const SCALE_LIT = '#77877D';
+/** Chest and abdominal segments — a step lighter than the hide, never a cream bib. */
+const BELLY = '#9AA595';
+/** Every third chest course, so the plates read as ridges rather than as one stripe. */
+const BELLY_SHADE = '#78836F';
 /** Horns, teeth, claws, spines. */
 const BONE = '#EFE4C8';
 const BONE_DARK = '#BCAE8C';
@@ -116,6 +115,33 @@ const WATER_LIT = '#A8ECFA';
 
 /**
  * The Godzilla, authored as **one 80×63 grid** and drawn at scale 3 → 240×189.
+ *
+ * **Rebuilt a fifth time** (owner: "make the Godzilla look better and like actual Godzilla,
+ * this looks more like a bigger lizard/frog"). Same grid size, same jaw registration
+ * (`JAW_*`), new animal: charcoal hide instead of crimson, a **small head** on a thick neck
+ * over a **pear-shaped body** that is heaviest at the thighs, short arms held forward and
+ * bent, and a row of big **bone dorsal plates** anchored on the real back edge and growing
+ * largest over the shoulders — pink triangles pinned along a red back were most of the
+ * "lizard". Generated from part masks (tail, legs, torso, neck, head, arm) lit per part from
+ * the upper front, in a throwaway generator; only the output ships.
+ *
+ * **Then muscle and a rounder face** (owner: "make it look muscular, abdomen and above, and the
+ * face has too-sharp features — Godzilla has rounder, muscular, defined features"). The skull is
+ * a union of ellipses sloping smoothly from dome to a blunt snout, with a jaw muscle at the
+ * cheek; the upper body carries a shoulder/trapezius mass, a pectoral shelf with a shadow under
+ * it, four stacked **abdominal segments** (lit top, crease under each, a crease line off the
+ * flank) in the chest tones, and rounded quad and calf masses, each lit on its own contour.
+ *
+ * **Then a fuller head** (owner: "the face still looks too sharp and elongated — make it
+ * fuller, muscular, defined, and carry some weight"). Same mouth registration (`JAW_*`, row
+ * 10, hinge 62, tip 77), so the fire and the opening jaw are untouched; the weight went
+ * *vertically*. The skull is two rows taller at the dome (rows 1–16, was 2–14), the upper
+ * muzzle is deep and blunt instead of sloping to a point, the lower jaw is one broad mass
+ * with a flat underside reaching row 16 (it was a thin strip under the teeth, which is what
+ * made the head read as a wedge), the cheek/jowl muscle is bigger and carries a crease back
+ * from the corner of the mouth, the brow is a lit ridge over a shadow shelf, and the neck is
+ * thicker so the heavier head sits on something. A long head is a raptor; a head as deep as
+ * it is long is a Godzilla.
  *
  * **Third resolution, same animal** (owner: "reduce the pixel size on the entire
  * Godzilla, right now it's not looking very good and not at all refined" — plus the mouth,
@@ -156,13 +182,22 @@ const WATER_LIT = '#A8ECFA';
  *    shoulders** — the narrowing that stops the head merging into the chest;
  *  · **an upright stance** on two thick legs with the room showing through between
  *    them, and feet with lit top planes and claws;
- *  · **dorsal plates as separate LEAVES** (`f`, tips `c`), each widest in its middle
- *    course and pointed at the tip, with air between (3). Grown row by row off the back
- *    edge — which is how the 48-wide version drew them — they merge into one pale wedge
- *    over the shoulders, and a pale wedge on a back is a **wing**;
+ *  · **dorsal plates as separate LEAVES** with air (or a keyline) between (3). Grown row
+ *    by row off the back edge — which is how the 48-wide version drew them — they merge
+ *    into one pale wedge over the shoulders, and a pale wedge on a back is a **wing**;
+ *  · **rounded MAPLE plates, not triangles** (owner: "give me less pointy ones"). Each
+ *    plate keeps the anchor and direction of the triangle it replaced, rebuilt as a dome
+ *    with three round lobes at its crown (the 1954/Heisei plate), shaded `F` rim / `f`
+ *    face / `d` root. Triangles at this size read as spikes — a stegosaur, not a Godzilla;
+ *  · **a domed, blunt skull** (owner: "less beaky, less inclined forward, more weight on
+ *    top"). The crown is a row higher (row 0) and three cells further back, so its high
+ *    point sits over the eye, and the front of the face drops near-vertically to the
+ *    snout instead of running down one long diagonal from forehead to tip — that diagonal
+ *    was the beak. Rows 0–10 only: the mouth row, teeth and lower jaw are untouched, so
+ *    `JAW_*` still registers;
  *  · **a heavy tail** that lies FLAT along the floor for its last third, its plates
- *    continuing down it as triangles. Tapered all the way to a point down a straight
- *    diagonal it read as a blade;
+ *    continuing down it. Tapered all the way to a point down a straight diagonal it read
+ *    as a blade;
  *  · **a tapered belly** (3) — the plated abdomen narrows at both ends. A rectangle of
  *    cream on the front of the animal reads as a bib, which is the same defect as the
  *    "scarf" the version before it drew;
@@ -170,77 +205,86 @@ const WATER_LIT = '#A8ECFA';
  *    on a grid rasterise as polka dots, which is a costume.
  *
  * `B`/`b` are the belly plates, `H` the lit planes, `S` the shade, `A`/`p` the eye,
- * `m`/`h` the maw and its teeth, `c` claws and plate tips. There are **no horns and no
+ * `m`/`h` the maw and its teeth, `c` the upper teeth and claws, `F`/`f`/`d` the dorsal
+ * plates. There are **no horns and no
  * wings** — both were on the dragon this replaced, and both are exactly what said
  * "this animal is not a Godzilla".
  */
 export const BEAST: readonly string[] = [
-  '................................................................................',
-  '..........................................................KKKKKKKKKKKKK.........',
-  '........................................................KKHHHHHHHHHHHHHKKK......',
-  '......................................................KKHHHHHHHHHHHHHHHHHHH.....',
-  '.....................................................KHHHHHHHHHHHHHHHHHHHHHH....',
-  '....................................................KHHHHHHHHHHssssssssHHHHHK...',
-  '....................................................KHHHHHssssSSKKKKKKKKSSsppK..',
-  '...................................................KHHsssssssssssAAApAAsssssSK..',
-  '...................................................KHssssssssssssAAApAAssssssK..',
-  '...................................................KsssssssssssssSSSSSSssssssK..',
-  '...................................................KsssssssssSmmmmmmccmmccmmcc..',
-  '...................................................KsssssssssssSSmhhmmhhmmhhmm..',
-  '...................................................KssssssSSSSSSSHHHHHHHHHKK....',
-  '...................................................KsSSSSSSSSSSSsssssssKKK......',
-  '..................................................KSSSSSSSSSSSSSSSSKKKK.........',
-  '.................................................KsSSSSSSSSSSSSKKKK.............',
-  '...............................................KKssSSSSSSSSSSKK.................',
-  '............................................KccKSSSSSSSSSSSSK...................',
-  '........................................KccfffKHSSSsssssssHHHKK.................',
-  '.....................................KccfffffKHSSSSsssssssssHHHKK...............',
-  '.......................................KccfffKSSSSSSssssssssssHHHKKK............',
-  '.........................................KccKHSSSSSSssssssssssHHHHHHK...........',
-  '.........................................KKKHSSSSSSsssssssssssHHHHHHHK..........',
-  '.....................................KccfKHHSSSSSSsssssssssssssHHHHHHHK.........',
-  '.................................KccffffKHSSSSSSSssssssSSSSSsssHHHHHHHHKK.......',
-  '.............................KccfffffffKHSSSSSSSSsssssssssssssHHHHHHHHHHHKK.....',
-  '..............................KccffffKKHSSSSSSSsssssssssssssssHHHHHHHHHHHHHKK...',
-  '............................K...KccfKHHSSSSSSSSsssssssssssssssHHHHHHHHHssssssK..',
-  '...........................KfK....KKHSSSSSSSSSsssssssssssssssHHHHHHHHHsssssscK..',
-  '...........................KfK.KccfKSSSSSSSSSSsssssssssssssssHHHHHHHHHSSSSScK...',
-  '..........................KfffKfffKHSSSSSSSSSSSSSssssssSSSSSHHbbbHHHHSSSKcK.....',
-  '........................KcKfffKfffKSSSSSSSSSSsssssssssssssssHBBBBHHHKKKK........',
-  '..........................KfffKffKHSSSSSSSSSsssssssssssssssHBBBBHHHK............',
-  '......................K...KfffKcfHSSSSSSSSSSsssssssssssssssbbbbbHHHK............',
-  '.....................KfK.KfffffKKSSSSSSSSSSSsssssssssssssssBBBBBHHHK............',
-  '.....................KfK.KcccccKHSSSSSSSSSSSssssssssssssssBBBBBBHHHK............',
-  '....................KfffKKcccccKHSSSSSSSSSSSSSSSSssssssSSSbbbbbbHHHK............',
-  '....................KfffK...KHHHHSSSSSSSSSSSsssssssssssssssBBBBBBHHHK...........',
-  '................K...KfffK.KKHHHssSSSSSSSSSSSsssssssssssssssBBBBBBHHHK...........',
-  '...............KfK.KfffffKHHHHssssSSSSSSSSSSSssssssssssssssbbbbbbHHHK...........',
-  '...............KfK.KcccccKHHHsssssKSSSSSSSSSSsssssssssssssssBBBBBHHHK...........',
-  '..............KfffKKcccccKHHsssssK.KSSSSSSSSSsssssssssssssssBBBBBHHHK...........',
-  '..............KfffK..KKHHHsssssssK.KSSSSSSSSSSSSSssssssSSSSHbbbbHHHK............',
-  '...........K.KfffffKKHHHHssssssssK..KSSSSSSSSssssssssssssssBBBBHHHK.............',
-  '..........KfKKcccccKHHHHsssssssSSK..KSSSSSSSSSssssssssssssHBBBHHKK..............',
-  '..........KfKKcccccKHHssssssssSSSK.KSSSSSSSSSSKKKKKssssssHHHHHHK................',
-  '.........KfffK.KKHHHsssssssssSSSSK.KSSssssHHHK.....KSSSssssHHHK.................',
-  '......K..KcccKKHHHsssssssssSSSSSSK.KSSssssHHHK.....KSSSssssHHHK.................',
-  '.....KfK.KcccKHHHssssssssSSSSSSSSSKSSSssssHHHK.....KSSSsssssHHHK................',
-  '....KfffK..KHHHssssssssSSSSSSSSKKKSSSSssssHHHK.....KSSSsssssHHHK................',
-  '....KcccKKKHHHsssssssSSSSSSSSKK...KSSSssssHHHK.....KSSSsssssHHHK................',
-  '..K.KcccKHHHssssssssSSSSSSSKK....KSSSsssssHHHK.....KSSSsssssHHHK................',
-  '.KfK..KKHHHssssssSSSSSSSSKK......KSSSsssssHHHK.....KSSSsssssHHHK................',
-  'KcccKKHHHssssssSSSSSSSKKK........KSSSsssssHHHK....KSSSssssssHHHK................',
-  'KcccKHHsssssSSSSSSSSKK...........KSSSsssssHHHK....KSSSssssssHHHK................',
-  '.KKHHssssssSSSSSSKKK............KSSSssssssHHHK....KSSSssssssHHHK................',
-  'KHHssssssSSSSSSKK...............KSSSssssssHHHK....KSSSssssssHHHK................',
-  'KssssssSSSSSKKK.................KSSSssssssHHHK....KSSSssssssHHHK................',
-  'KsssSSSSSSKK...................KSSSssssssHHHHK....KSSSssssssHHHHK...............',
-  'KsSSSSSKKK.....................KSSSssssssHHHHK....KSSSssssssHHHHK...............',
-  'KSSSKKK......................KKSSSsssssssHHHHHK...KSSSSSsssssssHHKKKK...........',
-  'KSKK.........................KSSSSsssssssHHHHHK...KSSSSSsssssssHHHHHK...........',
-  'KK...........................KKKKKKKKKcKKcKKcKK...KKKKKKcKKKcKKKcKKcK...........',
+  '............................................................KKKKKKKKKKK.........',
+  '.......................................KKK................KKSsHHHHHHHHHHK.......',
+  '......................................KdFFK..............KSSsssHHHHHHHHHHHK.....',
+  '....................................KKdfffFKK...........KSSSssssssssssssHHHK....',
+  '...................................KdFfffffFFKKK.......KSSSssssssHHHHHHHssHHK...',
+  '..................................KdfffffffffFFFK....KKSSsssssssSSSSSSSSsssHHK..',
+  '..................................KdffffffffffffdK.KKKHHHSSssssssssSAApSsssKHHK.',
+  '..................................KdfffffffffffdK.KHHHHHHSSsHHHHssssSSSsssssHHK.',
+  '..................................KdfffffffffdddKKHHHHHHSSsSHssHHHsssssSssssHHK.',
+  '...................................KdffffffdddKKHHsssHHHSSssSssssHsssssssSSsHHK.',
+  '...............................KKKKdfffffdddKKHHHssssHHHSSsssSmmmmmmccmmccmmccK.',
+  '..............................KdFFKdffffddKKHHHssssssHHsSSssssssmhhmmhhmmhhmmK..',
+  '............................KKdfffFKdffddKHHHssssssssHssKSsssssssHHHHHHHHHHHK...',
+  '...........................KdFffffFKKddKKssssssssssssHSsKSSssssssSssssssssHHK...',
+  '..........................KdfffffffFFKKKSsssssHHHHHHHsSssKSSsssssSssssssssKK....',
+  '..........................KdfffffffffdKKSsssssHssssHHHSsssKKSSSSSSSSsssKKK......',
+  '..........................KdfffffffffdKSSsssssssHHHHsHSsssssKKKKKKKKKKK.........',
+  '..........................KdffffffffddKSSsSSsssHHHHHHHHsssssssK.................',
+  '..........................KdfffffffddKSSSsSSsssssssssHHHsssssK..................',
+  '..........................KdfffffffdKHSSSsSSSsssssssssHSBBBSK...................',
+  '..........................KddfdfffddKHSSSsSSSsssssSBBBBBHKKKK...................',
+  '...........................KKdKddfdKHHSSSSsSSssssSbbbbbHKsHHHK..................',
+  '.............................KKKKddKHHSSSSssSSssssSSSSssKSsHHHK.................',
+  '......................KK...KKKdK.KdKHHSSSSsssSSSSBBBBBsHKSSssssK................',
+  '....................KKdFKKKdFFFK..KKHHHSSSSssssSBBBBBBBHKSSsssssK...............',
+  '...................KdFffFFFfffFK..KSHHHSSSSSssssSbbbbbbbHKSsssssK...............',
+  '...................KdffffffffffFK.KSHHHHSSSSSSSsssSSSSSSHHKKssssHK..............',
+  '..................KdfffffffffffFKKSSssHHHSSSSSSSSSSSBBBBBBHHKSSSHK..............',
+  '..................KdfffffffffffFKKSSsssHHHSSSSSSSSSSBBBBBBBBHKSSHHK.............',
+  '..................KdfffffffffffFKKSSssssHHHHSSSSSSSSbbbbbbbbK.KSSHK.............',
+  '..................KdffffffffffdddKSSsssssHHHHSssssssSSSSSSSHK..KSsHK............',
+  '..................KdffffffffdddKKSSSssssssHHHSssssssSBBBBBBHK...KSSK............',
+  '..................KdfffffffddKKHHSSSssssssssHSsssssSBBBBBBBBK....KSK............',
+  '..................KdffffffddKHHHHSSSsssssssssSsssssSbbbbbbbbK....KKKc...........',
+  '.................KKdfffffddKssHHHSSSssssssssssSsssssHHHHHHSSK....c.c............',
+  '................KdFKdffdddKSSSHHHSSSssssssssssSSssHHHHHHHHHHK.....c.............',
+  '...............KdffFKdfdKKSSSsHHHSSSSssssssssssSSsHHHHHHHHHHK...................',
+  '...............KdfffFKddKSSSSSHHHSSSSsssssssssSSKssssHHHHHHHHK..................',
+  '...............KdfffFKdKSSSSSSHHHSSSSssssssssssKSsssssssssHHHHK.................',
+  '...............KKdffddKSSSSSSHHHHHSSSSssssssssHKSssssssssssHHHK.................',
+  '..............KdKddddKSSSSSSsHHSHHSSSSssssssHHKSSsssssssssssHHHK................',
+  '.............KdFKddKKSSSSSSSHHHSsHHSSSSssssHHHKSSsSsssssssssHHHK................',
+  '.............KdfFKdKSSSSSSSSHHHSSHHSSSSssssHHHKSSsSssssssssssHHK................',
+  '............KdffddKSSSSSSSSSHHHSSHHSSSSSsssHHHKSSsSssssssssssHHK................',
+  '............KddddKSSSSSSSSSSHHHSSSHSSSSSSSSHHHKSSsSsssssssssHHHK................',
+  '............KddKKSSSSSSSSSSSHHHKSSsHSHSSSSSHHHKSSSSsssssssssssHK................',
+  '.............KKKSSSSSSSSSSSSsHHHKSSsSSHSSSSSsHKSSSSSssssssssssHK................',
+  '.............KKSSSSSSSSSSSSSSHHHKSSssSSSKKSSSsKSSSsSSssssssssHHK................',
+  '.............KSSSSSSSSSSSSSSsHHHKSSSssHSSSKKKSsKSSSsSSssssSsssK.................',
+  '...........KKSSSSSSSSSSSSSSSSsHHHKSSsssHHHHHHKKKSSSHHHHSSSSsssK.................',
+  '...........KSSSSSSSSSSSSSSSSSSssKKSSSsssHHHHHK..KSssssHHsssssK..................',
+  '........KKKsSSSSSSSSSSSSSSSSSSKK.KSSSSSsssHHK....KsssssHssssK...................',
+  '........KsssSSSSSSSSSSSSSSSSSK..KSSSSSSSSsHK......KssssHsssK....................',
+  '.......KsssssSSSSSSSSSSSSSKKK...KSSSSSSSSHHK......KssssHsHHK....................',
+  '......KSSSSSSSSSSSSSSSSSKK......KSSSSSSSSHHK......KssssssHHK....................',
+  '....KKsSSSSSSSSSSSSSSSKK........KSSSSSSSSHHK......KssssssHHK....................',
+  '...KHssSSSSSSSSSSSSKKK..........KSSSSSSSSHHK......KSSSSssHHK....................',
+  '.KKHssSSSSSSSSSSSKK.............KSSSSSSSSHHK.....KSSssssssHHK...................',
+  'KSSsSSSSSSSSSSKKK...............KSSSSSSSSsHHK....KSSssssssssHKK.................',
+  'KSSSSSSSSSSKKK..................KSSSSSSSSssHHK...KSSssssssssHHHK................',
+  'KSSSSSKKKKK.....................KSSSSSSSSSSsHHK..KSSSSSSSSSSsHHHK...............',
+  'KKKKKK..........................KSSSSSSSSSSSSSK.cKSSSSSSSSSSSSSsKc..............',
+  '................................KKKKKKKKKcKcKcK.cKKKKKKKKKcKcKcKKc..............',
 ];
 
-const DORSAL = '#F08A90';
+/**
+ * Dorsal plates: weathered bone, the lightest large shape on the animal. Three tones per
+ * plate (maple pass): `F` the lit top/front rim, `f` the face, `d` the back edge and the
+ * root where the plate meets the hide — so a rounded plate reads as a solid lobe rather
+ * than a flat cut-out.
+ */
+const DORSAL = '#CFCBB8';
+const DORSAL_LIT = '#E6E2D0';
+const DORSAL_ROOT = '#9E9A88';
 const BEAST_PALETTE: Palette = {
   K: OUTLINE,
   s: SCALE,
@@ -248,7 +292,9 @@ const BEAST_PALETTE: Palette = {
   H: SCALE_LIT,
   B: BELLY,
   b: BELLY_SHADE,
+  F: DORSAL_LIT,
   f: DORSAL,
+  d: DORSAL_ROOT,
   A: EYE,
   p: '#140806',
   m: MAW,
@@ -318,8 +364,337 @@ const BEAST_OFFSET_Y = 1;
 const JAW_ROW = 10;
 const JAW_HINGE_COL = 62;
 const JAW_TIP_COL = 77;
-/** Cells the muzzle end of the jaw drops when the mouth is fully open (8 × 3px = 24px). */
-const JAW_MAX_CELLS = 8;
+/**
+ * Cells the muzzle end of the jaw drops when the mouth is fully open (5 × 3px = 15px).
+ *
+ * Was 8 (owner call: "the face when throwing fire still feels elongated, maybe 2–3 pixels").
+ * The jaw drops as a rigid piece, so every cell of drop is a cell of extra head height: at 8
+ * the open head was half as tall again as the shut one; at 5 it is a wide bite (~18° off a
+ * 15-cell jaw) and the skull still reads as the same skull.
+ */
+const JAW_MAX_CELLS = 5;
+/** Last grid row of the lower jaw (the mandible's keyline). Rows `JAW_ROW + 1`..this swing. */
+const JAW_BOTTOM_ROW = 16;
+
+/*
+ * --- the moving parts ------------------------------------------------------
+ *
+ * Owner call: "the feet of the Godzilla don't move and that makes it look weird — make it
+ * move naturally, and other muscles of the body where required", and "when it's throwing
+ * flame the lower jaw is getting elongated".
+ *
+ * The grid is still one authored animal; what moves is **which cells go where**. Every cell
+ * is assigned to one part once, at load, from where it sits in `BEAST`, and each frame a
+ * part is offset by whole cells — so the art stays on the hero's 3px grid and mirrors
+ * exactly as before. The boundaries are read off the drawn grid, like `JAW_*`:
+ *  · **legs** — everything from `LEG_TOP_ROW` down, split at `NEAR_LEG_COL`. Below that row
+ *    the two shins, and the tail, are separated by air in every row, so a leg can swing
+ *    without tearing anything. A leg is **sheared** from the knee (0 at `LEG_TOP_ROW`, full
+ *    at the claws) and its foot lifted by compressing the shin, never stretching it: every
+ *    row moves up by at least as much as the one above, so no row can open a gap;
+ *  · **the tail** — every column left of `TAIL_COL`, moved as whole columns so the tail
+ *    bends rather than tearing: its root rides with the hips and its tip lifts;
+ *  · **the near arm** — the forearm and claws below `ARM_TOP_ROW`, where they hang clear of
+ *    the chest, swinging against the near leg;
+ *  · **the lower jaw** — rows `JAW_ROW + 1`..`JAW_BOTTOM_ROW` in front of the hinge, moved
+ *    **as a rigid piece** (each column dropped by its distance from the hinge) with the maw
+ *    opening in the gap it leaves. The previous build painted a thin mandible *under* a
+ *    growing hole while the shut jaw stayed where it was, so an open mouth was a jaw
+ *    stretched to twice its depth. A jaw that moves keeps its depth by construction.
+ */
+const LEG_TOP_ROW = 50;
+/** First row of the feet (where they widen into the toes); below it a foot moves rigidly. */
+const FOOT_TOP_ROW = 57;
+const FOOT_ROW = BEAST.length - 1;
+const NEAR_LEG_COL = 47;
+const TAIL_COL = 32;
+const ARM_TOP_ROW = 29;
+const ARM_BOTTOM_ROW = 35;
+const ARM_COL = 61;
+/**
+ * px of ground covered by one full gait cycle (two steps). The phase is read off the body's
+ * own position, so a planted foot moves backwards under the hips at exactly the speed the
+ * body moves forwards — it stays put on the bricks instead of skating. A quarter of this
+ * (15px, five cells) is how far a foot reaches either side of its hip.
+ */
+const STRIDE_PX = 60;
+/** Cells a foot clears the floor at mid-swing. Heavy and low: this is not a sprinter. */
+const LIFT_CELLS = 3;
+/** Cells the tail tip rises: on each step while walking, and held while it roars or breathes. */
+const TAIL_LIFT_CELLS = 2;
+/** How far the near forearm swings, as a fraction of the near foot's reach (the other way). */
+const ARM_SWING = 0.35;
+
+type BeastPart = 'body' | 'tail' | 'jaw' | 'arm' | 'far' | 'near';
+interface BeastCell {
+  r: number;
+  c: number;
+  fill: string;
+  part: BeastPart;
+}
+
+/**
+ * Every painted cell of `BEAST` with its part, in paint order: row-major, except that the
+ * near leg goes last so it always crosses *in front of* the far one mid-stride.
+ */
+const BEAST_CELLS: readonly BeastCell[] = (() => {
+  const partOf = (r: number, c: number): BeastPart => {
+    if (c < TAIL_COL) return 'tail';
+    if (r >= LEG_TOP_ROW) return c >= NEAR_LEG_COL ? 'near' : 'far';
+    if (r > JAW_ROW && r <= JAW_BOTTOM_ROW && c > JAW_HINGE_COL) return 'jaw';
+    if (r >= ARM_TOP_ROW && r <= ARM_BOTTOM_ROW && c >= ARM_COL) return 'arm';
+    return 'body';
+  };
+  const rest: BeastCell[] = [];
+  const near: BeastCell[] = [];
+  BEAST.forEach((row, r) => {
+    for (let c = 0; c < row.length; c += 1) {
+      const fill = BEAST_PALETTE[row[c]!];
+      if (!fill) continue;
+      const cell = { r, c, fill, part: partOf(r, c) };
+      (cell.part === 'near' ? near : rest).push(cell);
+    }
+  });
+  return [...rest, ...near];
+})();
+
+/** One leg's pose: px its foot sits from under its hip (world x), and cells it is lifted. */
+interface LegPose {
+  reach: number;
+  lift: number;
+}
+interface BeastPose {
+  /** Cells the whole body sinks — 1 on a heavy footfall, 0 as the legs pass. Never up. */
+  bob: number;
+  near: LegPose;
+  far: LegPose;
+  /** Cells the tail tip is raised. */
+  tail: number;
+  /** px (world x) the near claws swing at full length. */
+  arm: number;
+}
+
+/**
+ * One leg at `psi` through its cycle: planted for the first half (the foot travels from a
+ * quarter-stride ahead of the hip to a quarter behind it, at exactly the body's speed), then
+ * lifted and carried forward for the second half.
+ */
+function legPose(psi: number, amount: number): LegPose {
+  const q = STRIDE_PX / 4;
+  if (psi < 0.5) return { reach: amount * (q - psi * STRIDE_PX), lift: 0 };
+  const s = (psi - 0.5) * 2;
+  return {
+    reach: amount * (-q + s * (STRIDE_PX / 2)),
+    lift: amount * LIFT_CELLS * Math.sin(Math.PI * s),
+  };
+}
+
+/**
+ * Where every moving part is this frame.
+ *
+ * The **stride** follows `gait` (the hazard eases it in and out) and is dropped under
+ * reduced motion, exactly as the hero's own run cycle is (`Game.drawPlayer`'s `still`). The
+ * **tail lift** that goes with an open jaw is a pose, not a cycle — it rises with the jaw
+ * through the roar and the wind-up and falls with it — so it is state and survives reduced
+ * motion the way the jaw does.
+ */
+function beastPose(state: DragonState, reduced: boolean, pinned = false): BeastPose {
+  const g = reduced ? 0 : Math.max(0, Math.min(1, state.gait));
+  const x = state.box.x + state.box.w / 2;
+  const phi = (((x / STRIDE_PX) % 1) + 1) % 1;
+  const tension = Math.min(1, Math.max(0, state.jawOpen)) * TAIL_LIFT_CELLS;
+  const s = state.stomp;
+  if (s || pinned) {
+    /*
+     * A stomp owns the front leg, and it is a telegraph, so it is drawn under reduced
+     * motion too (like the jaw). The far leg takes the weight, planted; the tail comes up
+     * with the foot; the body drops a cell as the foot lands — that part is juice.
+     */
+    const near = stompLeg(s, pinned);
+    const landed = pinned || (s?.phase === 'recover' && s.progress < 0.3);
+    return {
+      bob: landed && !reduced ? 1 : 0,
+      near,
+      far: { reach: 0, lift: 0 },
+      tail: Math.max(tension, (near.lift / STOMP_LIFT_CELLS) * TAIL_LIFT_CELLS),
+      arm: 0,
+    };
+  }
+  const near = legPose(phi, g);
+  const far = legPose((phi + 0.5) % 1, g);
+  // Both feet down and spread at phi 0 and 0.5: that is where the weight lands.
+  const bob = Math.round(g * Math.abs(Math.cos(2 * Math.PI * phi)));
+  const sway = g * TAIL_LIFT_CELLS * (0.5 + 0.5 * Math.sin(4 * Math.PI * phi));
+  return { bob, near, far, tail: Math.max(sway, tension), arm: -ARM_SWING * near.reach };
+}
+
+/** Cells the front foot is raised at the top of a stomp's wind-up. */
+const STOMP_LIFT_CELLS = 6;
+/** Cells it rests above the floor on the frames it is standing on a flattened player. */
+const PIN_LIFT_CELLS = 2;
+
+/**
+ * The front leg through a stomp: up and over the committed spot for the wind-up (eased,
+ * so it rises fast and hangs — the hang is the warning), straight down for the slam,
+ * planted where it landed for the first half of the recovery, then one short step home.
+ * `pinned` is the life-lost beat: the foot is down, on him.
+ */
+function stompLeg(s: StompState | null, pinned: boolean): LegPose {
+  const reach = s ? s.x - s.home : 0;
+  if (pinned || !s) return { reach, lift: PIN_LIFT_CELLS };
+  const ease = (u: number) => 1 - (1 - u) * (1 - u);
+  if (s.phase === 'lift') {
+    const e = ease(s.progress);
+    return { reach: reach * e, lift: STOMP_LIFT_CELLS * e };
+  }
+  if (s.phase === 'slam') return { reach, lift: STOMP_LIFT_CELLS * (1 - s.progress) };
+  if (s.progress < 0.5) return { reach, lift: 0 };
+  const u = (s.progress - 0.5) * 2;
+  return { reach: reach * (1 - u), lift: 2 * Math.sin(Math.PI * u) };
+}
+
+const clamp01 = (v: number): number => Math.max(0, Math.min(1, v));
+
+/** Cells a lower-jaw column drops at `open`: none at the hinge, `JAW_MAX_CELLS` at the tip. */
+function jawDrop(c: number, open: number): number {
+  if (c <= JAW_HINGE_COL) return 0;
+  const along = Math.min(1, (c - JAW_HINGE_COL) / (JAW_TIP_COL - JAW_HINGE_COL));
+  return Math.round(open * JAW_MAX_CELLS * along);
+}
+
+/**
+ * Paint the standing animal in `pose`, with the lower jaw dropped by `open`.
+ *
+ * The maw is painted **only in the gap the jaw leaves**, from the lower lip's resting row
+ * down to where the lip now is — the upper lip (row `JAW_ROW`, with its teeth) never moves,
+ * and the lower teeth and the whole mandible arrive with the jaw. While it is charging or
+ * burning the back of that gap is lit from inside, because light in a mouth is what makes an
+ * open mouth read as a mouth rather than as a bite taken out of the head.
+ */
+function drawPosedBeast(
+  ctx: CanvasRenderingContext2D,
+  drawX: number,
+  drawY: number,
+  flip: boolean,
+  pose: BeastPose,
+  open: number,
+  hot: boolean,
+  only?: BeastPart,
+): void {
+  const S = BEAST_SCALE;
+  const ox = Math.round(drawX);
+  const oy = Math.round(drawY);
+  const colX = (c: number) => ox + (flip ? BEAST_COLS - 1 - c : c) * S;
+  const cellsOf = (px: number) => Math.round(px / S) * S;
+
+  if (open > 0.02 && !only) {
+    const top = oy + (JAW_ROW + 1 + pose.bob) * S;
+    for (let c = JAW_HINGE_COL + 1; c <= JAW_TIP_COL; c += 1) {
+      const d = jawDrop(c, open);
+      if (d <= 0) continue;
+      ctx.fillStyle = MAW;
+      ctx.fillRect(colX(c), top, S, d * S);
+      if (hot && d > 1) {
+        const along = (c - JAW_HINGE_COL) / (JAW_TIP_COL - JAW_HINGE_COL);
+        ctx.fillStyle = along < 0.4 ? FIRE_CORE : along < 0.75 ? FIRE_MID : FIRE_DEEP;
+        ctx.fillRect(colX(c), top, S, Math.max(1, Math.round((d - 1) * 0.6)) * S);
+      }
+    }
+  }
+
+  const legSpan = FOOT_ROW - LEG_TOP_ROW;
+  const armSpan = ARM_BOTTOM_ROW - ARM_TOP_ROW + 1;
+  for (const cell of BEAST_CELLS) {
+    if (only && cell.part !== only) continue;
+    let dx = 0;
+    let dy = pose.bob;
+    switch (cell.part) {
+      case 'jaw':
+        dy += jawDrop(cell.c, open);
+        break;
+      case 'arm':
+        dx = cellsOf((pose.arm * (cell.r - ARM_TOP_ROW + 1)) / armSpan);
+        break;
+      case 'tail':
+        // Whole columns, so the tail bends: the root rides the hips, the tip lifts.
+        dy =
+          Math.round(pose.bob * clamp01((cell.c - 8) / 20)) -
+          Math.round(pose.tail * clamp01((22 - cell.c) / 22));
+        break;
+      case 'near':
+      case 'far': {
+        const leg = cell.part === 'near' ? pose.near : pose.far;
+        const f = (cell.r - LEG_TOP_ROW) / legSpan;
+        // Sinks with the hips at the knee, planted (or lifted) at the claws. The lift is
+        // taken up by the SHIN alone: the foot block from `FOOT_TOP_ROW` down rises as one
+        // piece, so a raised foot keeps its mass instead of flattening into a strip of claws.
+        const up = Math.min(1, (cell.r - LEG_TOP_ROW) / (FOOT_TOP_ROW - LEG_TOP_ROW));
+        dy = Math.round(pose.bob * (1 - f) - leg.lift * up);
+        dx = cellsOf(leg.reach * f);
+        break;
+      }
+      default:
+        break;
+    }
+    ctx.fillStyle = cell.fill;
+    ctx.fillRect(colX(cell.c) + dx, oy + (cell.r + dy) * S, S, S);
+  }
+}
+
+/** Dust kicked off the bricks where a stomp landed — pale, low, and gone in half a beat. */
+const STOMP_DUST = '207,198,176';
+
+function drawStompDust(ctx: CanvasRenderingContext2D, state: DragonState, reduced: boolean): void {
+  const s = state.stomp;
+  if (reduced || !s || s.phase !== 'recover' || s.progress >= 0.5) return;
+  const u = s.progress / 0.5;
+  const a = 0.75 * (1 - u);
+  for (let side = -1; side <= 1; side += 2) {
+    for (let i = 0; i < 3; i += 1) {
+      const d = FOOT_HALF_PX + 4 + u * (18 + i * 14);
+      const size = 9 - i * 2;
+      pxRect(
+        ctx,
+        `rgba(${STOMP_DUST},${a})`,
+        s.x + side * d - size / 2,
+        GROUND_TOP - size - i * 4 - u * 8,
+        size,
+        size,
+        3,
+      );
+    }
+  }
+}
+/** Half the front foot's drawn width (18 cells at 3px), where the dust leaves from. */
+const FOOT_HALF_PX = 27;
+
+/**
+ * The front foot again, **on top of** the player, for the life-lost beat of a stomp.
+ *
+ * The host draws the hero after the hazards, so a flattened hero painted under a foot
+ * would come out lying on top of it. This repaints just that leg, in the pinned pose,
+ * after him — the same trick the DENIED stamp uses to hold him flat, from the other side.
+ */
+export function drawDragonFoot(
+  ctx: CanvasRenderingContext2D,
+  state: DragonState,
+  reduced: boolean,
+): void {
+  if (state.phase === 'beaten' || state.phase === 'stripping') return;
+  const { box } = state;
+  const flip = state.dir < 0;
+  const drawX = box.x + (flip ? box.w - BEAST_W - BEAST_OFFSET_X : BEAST_OFFSET_X);
+  drawPosedBeast(
+    ctx,
+    drawX,
+    box.y + BEAST_OFFSET_Y,
+    flip,
+    beastPose(state, reduced, true),
+    0,
+    false,
+    'near',
+  );
+}
 
 /**
  * The costume, **lying on the floor with one side unzipped** — 87×22 at scale 3 → 261×66.
@@ -594,6 +969,7 @@ export function drawDragon(
   state: DragonState,
   t: number,
   reduced: boolean,
+  pinned = false,
 ): void {
   const { box } = state;
   const flip = state.dir < 0;
@@ -614,22 +990,6 @@ export function drawDragon(
 
   const drawX = box.x + (flip ? box.w - BEAST_W - BEAST_OFFSET_X : BEAST_OFFSET_X);
   const drawY = box.y + BEAST_OFFSET_Y;
-  /**
-   * A run of grid cells, in pixels, mirrored the same way the grid is.
-   *
-   * Anything drawn *on* the animal (the glasses, their cracks) has to be registered
-   * to its cells rather than to the box, or it slides off the face the moment the
-   * grid or the offsets change — and it has to mirror by the same arithmetic
-   * `drawPixels` uses, or the glasses end up on the back of a left-facing head.
-   */
-  const cellRect = (c: number, r: number, wCells: number, hCells: number) => ({
-    x: flip
-      ? drawX + (BEAST_COLS - c - wCells) * BEAST_SCALE
-      : drawX + c * BEAST_SCALE,
-    y: drawY + r * BEAST_SCALE,
-    w: wCells * BEAST_SCALE,
-    h: hCells * BEAST_SCALE,
-  });
 
   /*
    * Going down (owner call: "it dies on the ground"). The last frames of the fight are a
@@ -647,83 +1007,25 @@ export function drawDragon(
     return;
   }
 
-  drawPixels(ctx, BEAST, BEAST_PALETTE, drawX, drawY, { scale: BEAST_SCALE, flip });
-
   /*
-   * --- the open jaw ---------------------------------------------------------
+   * The animal, posed: legs stepping while it shifts its weight, the tail and forearm moving
+   * with them, and the lower jaw dropped as one piece (see `drawPosedBeast`).
    *
-   * Owner call: "while throwing the flame the Godzilla doesn't open its mouth — make it
-   * open it." So the mouth is a **wedge cut into the head**, hinged at the back of the jaw
-   * and swinging down at the muzzle, and it is drawn in *cell* coordinates so it mirrors
-   * with the grid exactly like the rest of the animal.
-   *
-   * It is a hole rather than a sprite: dark maw, one course of teeth along the upper lip
-   * and one along the dropped lower jaw, and a hot throat at the hinge once the fire is
-   * lit. A separate open-mouthed head grid was the alternative and it is the wrong trade —
-   * two 4,700-cell heads that have to stay in agreement, to say something one wedge says.
-   *
-   * **And the dropped jaw is now a jaw** (owner call: "the mouth can be made a bit better,
-   * it's not well shaped"). The wedge alone put the maw *outside* the skull's own outline at
-   * the muzzle end — correct, that is where a lower jaw goes when it swings — but with
-   * nothing drawn under the tooth line it read as a dark triangle bitten out of the head
-   * against the sky. Two courses of hide and a keyline under the teeth give the mandible
-   * mass, so the mouth opens instead of the head breaking.
-   *
-   * `jawOpen` also carries the whole wind-up telegraph now that the floor marks are gone
-   * (see `drawCone`), which is why it is ramped rather than switched: the jaw parting *is*
-   * the warning.
+   * `jawOpen` carries the whole wind-up telegraph now that the floor marks are gone (see
+   * `drawCone`), which is why it is ramped rather than switched: the jaw parting *is* the
+   * warning. The hinge and the tip are `JAW_*`, read off the grid, so the mouth opens where
+   * the hazard's fire leaves it.
    */
-  if (state.jawOpen > 0.02) {
-    const open = Math.min(1, state.jawOpen);
-    const hot = state.phase === 'burning' || state.phase === 'charging';
-    for (let c = JAW_HINGE_COL; c <= JAW_TIP_COL; c += 1) {
-      // The wedge: nothing at the hinge, deepest at the muzzle, so the jaw rotates.
-      const along = (c - JAW_HINGE_COL) / Math.max(1, JAW_TIP_COL - JAW_HINGE_COL);
-      const depth = Math.round(open * JAW_MAX_CELLS * along);
-      if (depth <= 0) continue;
-      const top = cellRect(c, JAW_ROW, 1, depth);
-      pxRect(ctx, MAW, top.x, top.y, top.w, top.h, 2);
-      // The throat, lit from inside while it is charging or burning: light in a mouth is
-      // what makes an open mouth read as an open mouth rather than as a bite taken out
-      // of the head.
-      if (hot && depth > 1) {
-        const glow = cellRect(c, JAW_ROW, 1, Math.max(1, depth - 1));
-        pxRect(
-          ctx,
-          along < 0.4 ? FIRE_CORE : along < 0.75 ? FIRE_MID : FIRE_DEEP,
-          glow.x,
-          glow.y,
-          glow.w,
-          Math.max(BEAST_SCALE, glow.h * 0.55),
-          2,
-        );
-      }
-      /*
-       * Teeth: 2-cell blocks on the upper lip and on the lower, alternating between the two,
-       * so the open jaw keeps the interlocking bite the shut one has. At scale 3 a one-cell
-       * tooth is 3px and disappears, which is why the pitch is counted in *pairs* here and
-       * in the grid — the two have to agree or the mouth changes its dentistry as it opens.
-       */
-      const tooth = Math.floor((c - JAW_HINGE_COL) / 2) % 2 === 0;
-      if (tooth) {
-        const upper = cellRect(c, JAW_ROW, 1, 1);
-        pxRect(ctx, BONE, upper.x, upper.y, upper.w, upper.h, 2);
-      }
-      const lower = cellRect(c, JAW_ROW + depth, 1, 1);
-      pxRect(ctx, tooth ? BONE_DARK : BONE, lower.x, lower.y, lower.w, lower.h, 2);
-      // …and the mandible under them: two courses of hide and a keyline, so what swings
-      // down is a jaw with mass rather than the lower edge of a hole.
-      // Mid tone first, shade under it, keyline last — in that order and not darkest-first:
-      // a mandible painted in `SCALE_DARK` against the maw is two near-blacks touching, and
-      // the jaw disappears back into the hole it is supposed to be the bottom of.
-      const jaw = cellRect(c, JAW_ROW + depth + 1, 1, 1);
-      pxRect(ctx, SCALE, jaw.x, jaw.y, jaw.w, jaw.h, 2);
-      const under = cellRect(c, JAW_ROW + depth + 2, 1, 1);
-      pxRect(ctx, SCALE_DARK, under.x, under.y, under.w, under.h, 2);
-      const keel = cellRect(c, JAW_ROW + depth + 3, 1, 1);
-      pxRect(ctx, OUTLINE, keel.x, keel.y, keel.w, keel.h, 2);
-    }
-  }
+  drawPosedBeast(
+    ctx,
+    drawX,
+    drawY,
+    flip,
+    beastPose(state, reduced, pinned),
+    Math.min(1, Math.max(0, state.jawOpen)),
+    state.phase === 'burning' || state.phase === 'charging',
+  );
+  drawStompDust(ctx, state, reduced);
 
   /*
    * **There is no costume on the animal at all any more** (owner call: "remove the
@@ -893,13 +1195,13 @@ export function drawDragon(
  *     screen's terracotta floor rasterised as a muddy brown smudge on a brown floor.
  *  2. **What is painted is what burns.** Every flame cell is drawn inside
  *     `fire.boxes`, which is exactly the geometry the simulation collides against
- *     (`Dragon.coneBoxes`). The old rolling fronts leaned their bright lip 8px
+ *     (`Dragon.streamBoxes`). The old rolling fronts leaned their bright lip 8px
  *     *outside* the hitbox on the side the player met first, which is the
  *     hazard-sprite rule broken in the worst possible direction.
  *
- * The taunt is drawn at `fire.labelAt` — fixed for the whole burst, over the middle
- * of the lane, and it does not travel with the flame (owner call). The next burst
- * brings the next taunt.
+ * The taunt is drawn at `fire.labelAt` — on the flame, and it does not travel with the
+ * *growing* front (owner call). When the aim swings after the player (`AIM_*`) the words
+ * go with the jet they are written on. The next burst brings the next taunt.
  */
 export function drawCone(
   ctx: CanvasRenderingContext2D,
@@ -937,10 +1239,8 @@ export function drawCone(
      *    backdrop, and something dropping out of that head is legible at the far end of
      *    the frame.
      *
-     * The rhythm is untouched: `BURST_WINDUP` is still 0.65s and the burst still commits
-     * its lane at the start of it, so a player who has read one cycle knows the floor in
-     * front of the beast is about to be on fire. What they no longer get is a diagram of
-     * exactly how far.
+     * The rhythm is untouched: `BURST_WINDUP` is still 0.65s, and the aim is held for it,
+     * so the jet lights where the beast was looking when it drew breath and then chases.
      */
     for (let i = 0; i < 6; i += 1) {
       const ang = (i / 6) * Math.PI * 2 + p * 3;
@@ -979,130 +1279,97 @@ export function drawCone(
   }
 
   /*
-   * Burning, painted **column by column inside the hazard's own boxes**.
+   * Burning, painted **point by point inside the hazard's own squares** (`fire.points` /
+   * `fire.boxes`).
    *
-   * The version this replaces drew three stacked rectangles per segment, which is eight
-   * flat bars in three colours: at 190px deep that was a wide orange girder lying across
-   * the screen, and it is half of what the owner meant by "the fire it throws is too bad"
-   * (the other half was the width, and that is `CONE_NEAR_H`/`CONE_FAR_H`).
+   * The jet is aimed at the player now (owner call), so it can leave the jaw at any angle
+   * and bend while it swings; the old pass painted per x-column and assumed a flame lying
+   * along the floor, which a steep or rising jet is not. Each point is a square as wide as
+   * the flame there, and every course is painted *inside* it:
    *
-   * What reads as fire is a **profile**: a 4px cell grid where every column has its own
-   * top and bottom, pinched in by a stable per-column bite so both edges are ragged, with
-   * three courses inside it (deep shell, mid body, thin cream core on the axis). Same
-   * technique as the clouds on screen 2 — a height per column rather than a few big
-   * rectangles — and the same reason: what reads as 8-bit is the cell size plus the
-   * silhouette, and a shape with no steps in its outline has no silhouette.
+   *  · a deep shell, whose four edges each bite inwards by a stable per-point amount so the
+   *    outline is ragged rather than a staircase of equal blocks;
+   *  · a mid body that wanders about the axis instead of forming a second straight stripe;
+   *  · a broken cream core — hot and continuous near the jaw, pinched and intermittent
+   *    further out, so it never reads as a ruler through the orange.
    *
-   * The bite is keyed to the column's own x (not to a clock) so the flame does not crawl,
-   * and to one of two frames of flicker so it lives. Everything stays inside the box: the
-   * cells are clamped to it, which is what keeps "what is painted" and "what burns" the
-   * same geometry.
+   * Three passes over all the points, not three rects per point, so the courses never
+   * interleave where neighbouring squares overlap. The last points taper to a nose. Bites
+   * go inwards only: a lip outside the hitbox is fire that cannot hurt anybody.
    */
-  const boxes = fire.boxes;
+  const pts = fire.points;
   const q = fire.quenched;
   const cell = 4;
   const frame = reduced ? 0 : Math.floor(t * 14) % 3;
-  if (boxes.length > 0) {
-    const from = Math.min(...boxes.map((b) => b.x));
-    const to = Math.max(...boxes.map((b) => b.x + b.w));
-    const axis = target.x - mouth.x;
-    for (let x = from; x < to; x += cell) {
-      /*
-       * The flame's own band at this column, from the SAME numbers `Dragon.coneBoxes`
-       * steps — not from the box it happens to fall in. That distinction is the whole
-       * fix: a box is an AABB over a whole segment, so painting box-height columns
-       * rasterised as eight rectangular blocks with hard steps between them, i.e. an
-       * orange girder. The true band is a subset of its box, so this is still strictly
-       * inside the hitbox — it just paints the cone instead of the cone's bounding boxes.
-       */
-      const f = Math.max(0, Math.min(1, (x + cell / 2 - mouth.x) / (axis === 0 ? 1 : axis)));
-      /*
-       * The axis and the half-thickness both come from the **hazard's own functions**
-       * (`coneAxisY`, `coneHalfAt`) rather than from a lerp written out again here. They
-       * were inlined until the pass that gave the flame a touchdown and a 3.4× taper, and
-       * two copies of a hazard's profile is the `badgeFloat` defect with a different
-       * costume: the picture and the hitbox drift and nobody notices until a player is
-       * burnt by empty floor.
-       */
-      const ay = coneAxisY(mouth, target, f);
-      // …tapered over the last few columns, so the jet has a NOSE. Cut off square at
-      // full thickness it read as a length of pipe rather than as the end of a flame.
-      const nose = f > 0.93 ? 1 - ((f - 0.93) / 0.07) * 0.6 : 1;
-      const half = nose * coneHalfAt(f);
-      const k = Math.round(x / cell);
-      const n = reduced ? 0.5 : hash2(k, 11 + frame);
-      const n2 = reduced ? 0.5 : hash2(k, 29 + frame);
-      // Both edges bite INWARDS, never outwards: a lip outside the hitbox is fire that
-      // cannot hurt anybody, which is the hazard-sprite rule broken the wrong way.
-      const top = ay - half + Math.round((2 + n * 16) / cell) * cell;
-      const bottom = Math.min(GROUND_TOP, ay + half) - Math.round((1 + n2 * 12) / cell) * cell;
-      const h = Math.max(cell, bottom - top);
-      const w = Math.min(cell, to - x);
-      const near = f < 0.25;
-      const split = f > 0.32 && k % 11 === frame * 2 + 3 && h >= cell * 6;
-
-      if (split) {
-        // A narrow lick of air between two lobes. One transparent cell every eleven
-        // columns breaks the hose silhouette without inventing flame outside the
-        // simulation's boxes or creating a gap a player could reasonably read as safe.
-        const gapY = top + Math.round(h * (0.42 + (n - 0.5) * 0.18) / cell) * cell;
-        pxRect(ctx, FIRE_DEEP, x, top, w, Math.max(cell, gapY - top), cell);
-        pxRect(ctx, FIRE_DEEP, x, gapY + cell, w, Math.max(cell, bottom - gapY - cell), cell);
-      } else {
-        pxRect(ctx, FIRE_DEEP, x, top, w, h, cell);
-      }
-
-      // The mid flame wanders around the axis instead of forming a second straight
-      // stripe. Its changing vertical offset makes the fire roll while the fixed
-      // reduced-motion frame remains completely stable.
-      const inner = Math.max(cell, h * (0.46 + n2 * 0.16));
-      const innerY = Math.max(top, Math.min(bottom - inner, ay - inner / 2 + (n - 0.5) * h * 0.2));
-      pxRect(ctx, FIRE_MID, x, innerY, w, inner, cell);
-
-      // A broken hot core: brightest near the jaw, pinched and intermittent at the
-      // broad floor fire. This keeps cream from becoming a ruler through the orange.
-      if (near || (k + frame) % 5 !== 0) {
-        const core = Math.max(cell, h * (near ? 0.3 : 0.14 + n * 0.07));
-        const coreY = Math.max(top, Math.min(bottom - core, ay - core / 2 + (n2 - 0.5) * h * 0.16));
-        pxRect(ctx, near ? FIRE_HOT : FIRE_CORE, x, coreY, w, core, cell);
-      }
+  const n = pts.length;
+  const snap = (v: number) => Math.round(v / cell) * cell;
+  const noseAt = (i: number) => (n > 4 && i >= n - 3 ? 1 - ((i - (n - 4)) / 3) * 0.45 : 1);
+  const shells: { x: number; y: number; w: number; h: number; half: number; cy: number }[] = [];
+  for (let i = 0; i < n; i += 1) {
+    const p = pts[i]!;
+    const half = p.half * noseAt(i);
+    const a = reduced ? 0.5 : hash2(i, 11 + frame);
+    const b = reduced ? 0.5 : hash2(i, 29 + frame);
+    const bite = Math.min(half * 0.5, 2 + a * half * 0.35);
+    const biteLow = Math.min(half * 0.5, 1 + b * half * 0.25);
+    const left = p.x - half + snap(bite * b);
+    const right = p.x + half - snap(bite * (1 - b));
+    const top = p.y - half + snap(bite);
+    const bottom = Math.min(GROUND_TOP, p.y + half) - snap(biteLow);
+    const w = Math.max(cell, right - left);
+    const h = Math.max(cell, bottom - top);
+    shells.push({ x: left, y: top, w, h, half, cy: p.y });
+    pxRect(ctx, FIRE_DEEP, left, top, w, h, cell);
+  }
+  for (let i = 0; i < n; i += 1) {
+    const s = shells[i]!;
+    const a = reduced ? 0.5 : hash2(i, 37 + frame);
+    const inner = Math.max(cell, s.h * (0.46 + a * 0.16));
+    const innerW = Math.max(cell, s.w * 0.7);
+    const iy = Math.max(s.y, Math.min(s.y + s.h - inner, s.cy - inner / 2 + (a - 0.5) * s.h * 0.2));
+    pxRect(ctx, FIRE_MID, s.x + (s.w - innerW) / 2, iy, innerW, inner, cell);
+  }
+  for (let i = 0; i < n; i += 1) {
+    const s = shells[i]!;
+    const near = i < n * 0.25;
+    if (!near && (i + frame) % 5 === 0) continue;
+    const a = reduced ? 0.5 : hash2(i, 43 + frame);
+    const core = Math.max(cell, s.h * (near ? 0.3 : 0.14 + a * 0.07));
+    const coreW = Math.max(cell, s.w * (near ? 0.6 : 0.4));
+    const cy = Math.max(s.y, Math.min(s.y + s.h - core, s.cy - core / 2));
+    pxRect(ctx, near ? FIRE_HOT : FIRE_CORE, s.x + (s.w - coreW) / 2, cy, coreW, core, cell);
+  }
+  // The root, on the first point: the fire is visibly coming out of the animal rather
+  // than starting in the air near it. Centred on that point's square, so it stays inside
+  // it at whatever angle the jet leaves the jaw.
+  const first = pts[0];
+  if (first) {
+    pxRect(ctx, FIRE_HOT, first.x - 8, first.y - 12, 16, 24, 4);
+    pxRect(ctx, FIRE_CORE, first.x - 8, first.y - 4, 16, 8, 4);
+  }
+  // Where it has landed: uneven tongues licking up off the floor, which is what separates
+  // "fire splashing on the ground" from "a bar of light ending". Each tongue stays inside
+  // the square of the point it rises from (that square's bottom is the floor).
+  for (let i = 0; i < n; i += 2) {
+    const p = pts[i]!;
+    if (!p.onFloor) continue;
+    for (let k = 0; k < 2; k += 1) {
+      const r = hash2(i * 3 + k, 43);
+      const h = Math.min(p.half * 2 - 4, 14 + r * 26);
+      const x = p.x - p.half + 4 + ((k + r) / 2) * (p.half * 2 - 20);
+      pxRect(ctx, FIRE_DEEP, x, GROUND_TOP - h, 12, h, 4);
+      pxRect(ctx, FIRE_MID, x + 2, GROUND_TOP - h * 0.6, 7, h * 0.6, 4);
     }
   }
-  // The root, at the jaw: two cells at full value where the jet leaves the mouth, so the
-  // fire is visibly coming out of the animal rather than starting in the air near it.
-  if (boxes.length > 0) {
-    // Kept on the fire's own side of the jaw, because the first segment starts AT the
-    // mouth: a root centred on it hangs half its width outside the hitbox, which is the
-    // rule this whole function exists to keep.
-    const rx = dir > 0 ? mouth.x + 2 : mouth.x - 18;
-    pxRect(ctx, FIRE_HOT, rx, mouth.y - 14, 16, 28, 4);
-    pxRect(ctx, FIRE_CORE, rx, mouth.y - 6, 16, 12, 4);
-  }
-  // Where it hits the floor: uneven tongues licking up off the far end, which is what
-  // separates "fire running along the ground" from "a bar of light ending". Kept
-  // inside the last segment's own span.
-  const last = boxes[boxes.length - 1];
-  if (last) {
-    for (let i = 0; i < 5; i += 1) {
-      const n = hash2(Math.round(last.x / 8) + i, 43);
-      const h = 14 + n * 26;
-      pxRect(ctx, FIRE_DEEP, last.x + i * (last.w / 5), GROUND_TOP - h, 12, h, 4);
-      pxRect(ctx, FIRE_MID, last.x + 2 + i * (last.w / 5), GROUND_TOP - h * 0.6, 7, h * 0.6, 4);
-    }
-  }
-  // Steam where the water is winning, boiling off the top of the jet.
-  //
-  // Two staggered rows of varied cells, not one row of equal ones: the first version
-  // was five identical 12×10 blocks on a single y and rasterised as a dashed line
-  // ruled across the flame. Steam has to have a top and a bottom to be steam.
-  if (q > 0.01) {
+  // Steam where the water is winning, boiling off the top of the jet: two staggered rows
+  // of varied cells, so it has a top and a bottom rather than reading as a dashed line.
+  if (q > 0.01 && n > 1) {
     for (let i = 0; i < 7; i += 1) {
-      const n = hash2(i, 23);
-      const f = i / 6;
-      const s = 10 + Math.round(n * 12);
-      const sx = mouth.x + (target.x - mouth.x) * f;
-      const sy = mouth.y + (target.y - mouth.y) * f - 40 - Math.round(n * 26) - (i % 2) * 14;
-      pxRect(ctx, `rgba(233,246,250,${0.5 + 0.4 * q * n})`, sx, sy, s, s, 4);
+      const r = hash2(i, 23);
+      const p = pts[Math.round((i / 6) * (n - 1))]!;
+      const s = 10 + Math.round(r * 12);
+      const sy = p.y - p.half - 10 - Math.round(r * 26) - (i % 2) * 14;
+      pxRect(ctx, `rgba(233,246,250,${0.5 + 0.4 * q * r})`, p.x - s / 2, sy, s, s, 4);
     }
   }
 
@@ -1117,10 +1384,11 @@ export function drawCone(
    *  · **on the flame** — `labelAt` is a point on the axis at `LABEL_F`, not a clearance
    *    above the whole shape. The plaque is gone with it: a framed dark plate over burning
    *    fire is a sign in front of the fire, which is the picture being replaced.
-   *  · **at the flame's angle** — `ctx.rotate(fire.labelAngle)`, the axis's own descent,
-   *    computed once in the hazard so the words cannot disagree with the shape.
-   *  · **it does not come forward** — the point is committed when the burst commits, so the
-   *    flame grows *through* the words rather than pushing them along.
+   *  · **at the flame's angle** — `ctx.rotate(fire.labelAngle)`, the jet's own direction
+   *    there, computed once in the hazard so the words cannot disagree with the shape.
+   *  · **it does not come forward** — the point is a fraction of the *whole* jet's length,
+   *    not of the grown part, so the flame grows *through* the words rather than pushing
+   *    them along; when the aim swings, the words go with the jet.
    *  · **it is there as long as the flame is** — this is inside the burning branch, and the
    *    wind-up returns before it.
    *
@@ -1416,23 +1684,39 @@ export function drawFloatingBrick(
  *    the barrel. Sized against the drawn hero (48×60) it is now plainly a two-handed tool
  *    rather than a sidearm — which is the read the owner is after, and it is also honest,
  *    because it is a hose being held open rather than a trigger being pulled.
+ *
+ * **…and then the bell came off** (owner call: the tip "looks like a dickhead"). A thin
+ * shaft running into a round, symmetric knob with a slit across its face is exactly that
+ * silhouette, and the idle drip hanging off the end made it worse. What replaced it is
+ * built to be asymmetric and hard-edged, which is what a machine looks like:
+ *
+ *  · a **top rail** over the barrel, flush with the housing's lit rail, so the top line
+ *    runs straight from the tank to the muzzle and there is no "neck";
+ *  · a **boxy nozzle block** that sits *low* (rows 6–13 against the barrel's 7–10), with a
+ *    flat front face, a chamfered bottom corner and two vent slots down its side — a
+ *    muzzle brake, not a bulb;
+ *  · the bore as a **dark notch in the face** with the pressure lit behind it, framed by a
+ *    lit lip above and below;
+ *  · a **foregrip** under the barrel, which is also the second hand the size promised.
+ *
+ * The bore stays on rows 8–9, so `muzzleY` and the jet's exit line are unchanged.
  */
 const CANNON: readonly string[] = [
   '.....KKKKKKKKKKK....................',
   '....KLTTTTTTTTTTLK..................',
   '....KttttttttttttK..................',
   '....KKttttttttttKK..................',
-  '...KBBBBBBBBBBBBBBBK.........KK.....',
-  '...KbbbbbbbbbbbbbbbK........KCCK....',
-  '...KbbbbbbbbbbbbbbbKKKKKKKKKCCCCK...',
-  '...KbbbbbbbbbbbbbbbKccccccccCaaaaCK.',
-  '...KbbbbbbbbbbbbbbbKccccccccCaooooaK',
-  '...KbbbbbbbbbbbbbbbKccccccccCaooooaK',
-  '...KbbbbbbbbbbbbbbbKccccccccCaaaaCK.',
-  '...KbbbbbbbbbbbbbbbKKKKKKKKKCCCCK...',
-  '...KKKbbbbbKKbbbbbKK........KCCK....',
-  '......KGGGK.KggggK...........KK.....',
-  '......KgggK.KKKKKK..................',
+  '...KBBBBBBBBBBBBBBBKKKKKKKKKKKKKK...',
+  '...KbbbbbbbbbbbbbbbKBBBBBBBBBBBBK...',
+  '...KbbbbbbbbbbbbbbbKKKKKKKKKKKKKKKKK',
+  '...KbbbbbbbbbbbbbbbKCCCCCCCKNNNNNNCK',
+  '...KbbbbbbbbbbbbbbbKcccccccKnnnnnoaa',
+  '...KbbbbbbbbbbbbbbbKcccccccKnananoaa',
+  '...KbbbbbbbbbbbbbbbKcccccccKnanannCK',
+  '...KbbbbbbbbbbbbbbbKKKKKKKKKnanannCK',
+  '...KKKbbbbbKKbbbbbKK.KGGK..KnnnnnnK.',
+  '......KGGGK.KggggK...KggK..KKKKKKK..',
+  '......KgggK.KKKKKK...KKKK...........',
   '.......KgggK........................',
   '.......KgggK........................',
   '........KKKK........................',
@@ -1445,8 +1729,10 @@ const CANNON_PALETTE: Palette = {
   t: WATER_DEEP, // the pressure tank on top
   T: WATER,
   L: WATER_LIT, // its valve
-  c: WATER_DEEP, // barrel, collar and the flared bell
-  C: WATER,
+  c: WATER_DEEP, // barrel
+  C: WATER, // its lit top course, and the lip around the bore
+  n: '#24424D', // the nozzle block — steel, a step darker than the housing
+  N: '#4E7280', // its top course
   /*
    * The bore itself, and it is **dark**. A hole seen side-on is a hole: the version this
    * replaced painted the whole aperture in `WATER_LIT`, which is a bright plate on the end
@@ -1513,10 +1799,13 @@ export function drawWaterCannon(
       );
     }
   } else if (!reduced) {
-    // Charged and idle: two full-alpha cells at the bore. Few cells at full alpha
-    // say "live"; many at low alpha say "rendering fault" (the badge halo lesson).
-    pxRect(ctx, WATER, muzzleX - (facing === 1 ? 0 : 4), muzzleY + 2, 4, 4, 2);
-    pxRect(ctx, WATER_LIT, muzzleX - (facing === 1 ? -2 : 6), muzzleY + 2, 2, 4, 2);
+    // Charged and idle: a pilot light on the housing (grid cols 15–16, rows 8–9). It used
+    // to be two cells hanging off the end of the bore, which on this silhouette read as a
+    // drip — the last thing the tip needed. Few cells at full alpha say "live"; many at
+    // low alpha say "rendering fault" (the badge halo lesson).
+    const pilotX = facing === 1 ? x + 15 * CANNON_SCALE : x + 19 * CANNON_SCALE;
+    pxRect(ctx, WATER, pilotX, y + 8 * CANNON_SCALE, 4, 4, 2);
+    pxRect(ctx, WATER_LIT, pilotX + (facing === 1 ? 2 : 0), y + 8 * CANNON_SCALE, 2, 2, 2);
   }
 }
 

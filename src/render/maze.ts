@@ -54,13 +54,14 @@
  *    cabinet, a striped arm) and by motion (aimless wandering), never by colour.
  *
  * The names are the joke and the argument at once: the things blocking the build
- * are TAX, GST, LEGAL, ENTITY and AUDIT. They are set in the 5×7 bitmap font
- * on a framed plaque **over each monster** — which is where the owner asked for
- * the TAX/GST/AUDIT signage to live, instead of on boards hanging in the sky.
+ * are TRADE REG., IC TERMS, NOTARY, GOVERNANCE and TP DOCS (`levels.json`). They are
+ * set in the 5×7 bitmap font on a framed plaque **over each monster** — which is where
+ * the owner asked for the signage to live, instead of on boards hanging in the sky —
+ * and laid out by `layoutNamePlaques` so they never overlap.
  */
 import { RESOLUTION } from '../data/tuning.config';
 import { drawPixels, pxRect, type Palette } from './PixelArt';
-import { drawLabelPlaque } from './PixelText';
+import { drawLabelPlaque, measureText, GLYPH_H } from './PixelText';
 import type { LiftState, MonsterState } from '../world/Hazards/ComplianceMaze';
 
 /**
@@ -157,7 +158,6 @@ const MONSTER_PX_W = MONSTER[0]!.length * MONSTER_SCALE;
  */
 export function drawMonsters(ctx: CanvasRenderingContext2D, monsters: MonsterState[]): void {
   for (const m of monsters) {
-    const cx = m.box.x + m.box.w / 2;
     const x0 = Math.round(m.box.x);
     // Contact shadow, so a monster on a stair tread does not look airborne.
     pxRect(ctx, 'rgba(0,16,22,0.35)', m.box.x + 4, m.box.y + m.box.h - 2, m.box.w - 8, 3, 1);
@@ -197,31 +197,87 @@ export function drawMonsters(ctx: CanvasRenderingContext2D, monsters: MonsterSta
     // besides the head's colour. Same grid, third palette: no new sprite.
     const palette = m.friendly ? SMILING : m.struck ? STRUCK : ANGRY;
     drawPixels(ctx, MONSTER, palette, m.box.x, m.box.y, { scale: MONSTER_SCALE });
-
-    // Name plate — a framed plaque, the same one the backdrop's filing cabinets
-    // used to carry, moved onto the thing it names (owner call: "I don't want the
-    // TAX, AUDIT and other overlays in the sky, rather on top of monsters"). It is
-    // the screen's only signage now, so it can afford to be legible: scale 2 on a
-    // solid dark plaque, cool grey while the filing is pending and mint once it is
-    // through. Dropped once a monster has sat down on the landing, because five
-    // names shoulder to shoulder render as one unreadable word — and by then they
-    // have made their point.
-    //
-    // It steps up out of the way as the boom rises, because raised the boom reaches
-    // above the head and that is exactly where the plaque sits — an earlier raster
-    // had five booms hidden behind five name plates.
-    if (!m.settled) {
-      drawLabelPlaque(ctx, m.name, cx, m.box.y - 26 - m.arm * 34, {
-        scale: 2,
-        fg: m.friendly ? '#9FE6C4' : '#CFE6EC',
-        bg: 'rgba(0,20,27,0.82)',
-        frame: m.friendly ? 'rgba(90,190,150,0.55)' : 'rgba(28,120,142,0.6)',
-        padX: 6,
-        padY: 4,
-        alpha: 0.95,
-      });
-    }
   }
+
+  // Name plates go on after every sprite, so a plate that had to step out of a
+  // neighbour's way is never painted over by that neighbour's head or boom.
+  const plates = layoutNamePlaques(monsters);
+  monsters.forEach((m, i) => {
+    const p = plates[i]!;
+    drawLabelPlaque(ctx, m.name, p.x + p.w / 2, p.y + PLATE.frame, {
+      scale: PLATE.scale,
+      fg: m.friendly ? '#9FE6C4' : '#CFE6EC',
+      bg: 'rgba(0,20,27,0.82)',
+      frame: m.friendly ? 'rgba(90,190,150,0.55)' : 'rgba(28,120,142,0.6)',
+      padX: PLATE.padX,
+      padY: PLATE.padY,
+      alpha: 0.95,
+    });
+  });
+}
+
+/** The name plate's geometry: `drawLabelPlaque` at these options, frame included. */
+const PLATE = { scale: 2, padX: 6, padY: 4, frame: 2, gap: 4 } as const;
+/** px from the plate's outer top to the next row's: one plate plus the gap. */
+const PLATE_ROW = GLYPH_H * PLATE.scale + PLATE.padY * 2 + PLATE.frame * 2 + PLATE.gap;
+
+export interface PlateRect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/**
+ * Where each monster's name plate goes (outer frame rect, same order as `monsters`).
+ *
+ * Name plate — a framed plaque over the thing it names (owner call: "I don't want the
+ * TAX, AUDIT and other overlays in the sky, rather on top of monsters"). It is the
+ * screen's only signage, so it is legible: scale 2 on a solid dark plaque, cool grey
+ * while the filing is pending and mint once it is through. It steps up with the boom,
+ * because raised the boom reaches above the head and that is exactly where the plate
+ * sits — an earlier raster had five booms hidden behind five name plates.
+ *
+ * **It stays on after the powerup and on the landing** (owner call: the names "should
+ * show even after the creatures are disengaged … and when they are resting the text
+ * doesn't overlap"). An earlier pass dropped the plate on settling because five names
+ * shoulder to shoulder read as one word; this resolves the collision instead. Each
+ * plate, in authored order, takes the first slot that clears every plate already placed
+ * by `PLATE.gap`:
+ *
+ * - walking: over the head, then one row higher, and so on — two monsters sharing a
+ *   route tail stack their names instead of printing one over the other;
+ * - settled: over the head, then **under the feet** on the landing's face, then further
+ *   down it. Over the head is capped by the room's ceiling, while the plinth below is
+ *   solid, empty brick, so that is where the extra rows go.
+ *
+ * Pure and deterministic (no state across frames), so a test can hold it to "no two
+ * plates overlap" against the real settled positions.
+ */
+export function layoutNamePlaques(monsters: MonsterState[]): PlateRect[] {
+  const placed: PlateRect[] = [];
+  const hits = (r: PlateRect): boolean =>
+    placed.some(
+      (o) =>
+        r.x < o.x + o.w + PLATE.gap &&
+        o.x < r.x + r.w + PLATE.gap &&
+        r.y < o.y + o.h + PLATE.gap &&
+        o.y < r.y + r.h + PLATE.gap,
+    );
+  for (const m of monsters) {
+    const w = measureText(m.name.toUpperCase(), PLATE.scale, 1) + (PLATE.padX + PLATE.frame) * 2;
+    const h = PLATE_ROW - PLATE.gap;
+    const x = Math.round(m.box.x + m.box.w / 2 - w / 2);
+    const above = m.box.y - 26 - m.arm * 34 - PLATE.frame;
+    const below = m.box.y + m.box.h + 4;
+    const slots: number[] = [above];
+    for (let k = 0; k < monsters.length; k += 1) {
+      slots.push(m.settled ? below + k * PLATE_ROW : above - (k + 1) * PLATE_ROW);
+    }
+    const rect = slots.map((y) => ({ x, y, w, h })).find((r) => !hits(r)) ?? { x, y: above, w, h };
+    placed.push(rect);
+  }
+  return placed;
 }
 
 /**

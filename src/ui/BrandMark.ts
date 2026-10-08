@@ -12,13 +12,35 @@
 
 import { COPY } from '../data/copy';
 import { ANSR_MARK_PATH, ANSR_MARK_VIEWBOX, LOGO_ORANGE } from './ansrMark';
+import { setPixelText } from './PixelType';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
+
+/**
+ * Authored-pixel size of the lockup's two lines, as a % of the frame width (see
+ * `PixelTextOptions.unit`). The wordmark matches the cap height the web type had
+ * (~27px on a 1280 frame); the edition sits a step under it, at the body size the
+ * rest of the overlays use. Both carry `maxShare` because the lockup row shrink-wraps
+ * its contents, where the default percentage cap is circular.
+ */
+export const LOCKUP_PX = {
+  full: {
+    word: { unit: 0.3, minPx: 2.4, maxPx: 4.2, maxShare: 40 },
+    title: { unit: 0.17, minPx: 1.6, maxPx: 2.6, maxShare: 40 },
+  },
+  compact: {
+    word: { unit: 0.18, minPx: 1.8, maxPx: 2.6, maxShare: 30 },
+    title: { unit: 0.13, minPx: 1.5, maxPx: 1.9, maxShare: 30 },
+  },
+} as const;
+
+const WORD_INK = { color: '#FFFFFF', shadow: 'rgba(0,16,22,0.85)' } as const;
+const EDITION_INK = { color: '#CFE6EC', shadow: 'rgba(0,16,22,0.85)' } as const;
 
 export { LOGO_ORANGE };
 
 export interface LockupOptions {
-  /** Sub-line after the rule (the edition). Omitted → mark + wordmark only. */
+  /** Sub-line after the wordmark (the edition). Omitted → mark + wordmark only. */
   title?: string;
   /** Wordmark next to the sunburst. Defaults to the game name (`ANSRcade`). */
   wordmark?: string;
@@ -26,11 +48,17 @@ export interface LockupOptions {
   compact?: boolean;
 }
 
-/** The ANSR sunburst as an inline SVG (decorative — the lockup carries the name). */
-function createSunburst(doc: Document): SVGSVGElement {
+/**
+ * The ANSR sunburst as an inline SVG (decorative — the lockup carries the name). Also
+ * the powerup on its own, no tag, on the death card that tells the player to take it.
+ */
+export function createSunburst(
+  doc: Document,
+  className = 'beam-run__brand-mark',
+): SVGSVGElement {
   const svg = doc.createElementNS(SVG_NS, 'svg');
   svg.setAttribute('viewBox', ANSR_MARK_VIEWBOX);
-  svg.setAttribute('class', 'beam-run__brand-mark');
+  svg.setAttribute('class', className);
   svg.setAttribute('aria-hidden', 'true');
   svg.setAttribute('focusable', 'false');
   const path = doc.createElementNS(SVG_NS, 'path');
@@ -41,8 +69,7 @@ function createSunburst(doc: Document): SVGSVGElement {
 }
 
 /**
- * Create the lockup: sunburst + ANSR wordmark, optionally followed by a hairline
- * rule and the game title.
+ * Create the lockup: sunburst + ANSR wordmark, optionally followed by the edition.
  */
 export function createBrandLockup(doc: Document, opts: LockupOptions = {}): HTMLDivElement {
   const wordmark = opts.wordmark ?? COPY.meta.name;
@@ -53,26 +80,27 @@ export function createBrandLockup(doc: Document, opts: LockupOptions = {}): HTML
 
   el.appendChild(createSunburst(doc));
 
-  // The wordmark and the edition share a row of their own so they can sit on a
-  // common BASELINE. Centring them against each other (which is what a single
-  // flex row does) left the smaller edition text visibly low against the much
-  // larger wordmark.
+  // The wordmark and the edition share a row of their own, centred on one line.
+  // Both are set in the game's 5×7 bitmap font (owner call), like every other line
+  // on the overlays: in web type the lockup was the one piece of Moderat left on
+  // screens that are otherwise all pixel art. `setPixelText` keeps the real string
+  // in a hidden span, so `textContent` still reads "ANSRcade" with its casing.
   const text = doc.createElement('span');
   text.className = 'beam-run__brand-text';
+  const spec = opts.compact ? LOCKUP_PX.compact : LOCKUP_PX.full;
 
   const word = doc.createElement('span');
   word.className = 'beam-run__brand-word';
-  word.textContent = wordmark;
+  setPixelText(word, wordmark, { ...spec.word, ...WORD_INK, maxChars: 40 });
   text.appendChild(word);
 
+  // No divider between the wordmark and the edition (owner call): the row gap
+  // and the step down in size separate them on their own.
   if (opts.title) {
-    const rule = doc.createElement('span');
-    rule.className = 'beam-run__brand-rule';
-    rule.setAttribute('aria-hidden', 'true');
     const title = doc.createElement('span');
     title.className = 'beam-run__brand-title';
-    title.textContent = opts.title;
-    text.append(rule, title);
+    setPixelText(title, opts.title, { ...spec.title, ...EDITION_INK, maxChars: 40 });
+    text.appendChild(title);
   }
   el.appendChild(text);
   return el;

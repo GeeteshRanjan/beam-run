@@ -4630,3 +4630,12 @@ output formats).
   priced and left), and §33, that the art is upscaled by a **fractional** factor on any screen wider than
   1280 because `index.html` lifts the display cap, which is now the only remaining reason the same build
   looks different on two machines and is a look rather than a bug.
+
+---
+
+## Archive frozen — 2026-09-29
+
+No new entries after this line. From 2026-09-29 history is one line per entry in `HANDOFF_LOG.md`
+(append-only); permanent findings and paid-for dead ends go to `docs/INVARIANTS.md` as before. This
+file stays for `grep -n -i '<keyword>' docs/JOURNAL.md` when the background on a pre-freeze decision
+is needed. Never read it whole (~500 KB).

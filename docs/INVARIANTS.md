@@ -9,15 +9,291 @@
 > permanent rule or trap, append it here (in the section it belongs to) as part of
 > that pass — not into `HANDOFF.md`, and not left buried in `docs/JOURNAL.md`.
 >
-> `HANDOFF.md` is the *router* and current state (status, environment, defaults, model §4.1–§4.8),
+> `HANDOFF.md` is current state + cross-cutting gotchas; the model (§3–§4.8) is `docs/MODEL.md`,
 > with the detail in `docs/SCREENS.md` (per-screen model), `docs/ARCHITECTURE.md` (module map) and
-> `docs/OPEN.md` (owner decisions). `docs/JOURNAL.md` is *history*, append-only.
+> `docs/OPEN.md` (owner decisions). `HANDOFF_LOG.md` is *history* (one line per entry);
+> `docs/JOURNAL.md` is the frozen narrative archive up to 2026-09-20 (grep only).
 > This file is *rules*.
 
 **Five groups, in order. Read the ones your task touches** (line numbers drift as it grows —
-grep the bold heading): **Bundle** (build, minification, budget) · **DOM bitmap type** ·
+list them with `grep -n '^## ' docs/INVARIANTS.md`, then read one group's line range): **Bundle** (build, minification, budget) · **DOM bitmap type** ·
 **Layout** · **Gameplay** (the big one — physics, lives, badges, hazards, and the art traps per
-screen) · - **A pickup's furniture can seal a screen even when the pickup is fine.** The Workplace's badge cabinet
+screen) · **Testing**. Gameplay is ~70% of this file; if it keeps growing, split it per screen
+into `docs/INVARIANTS-<screen>.md` and leave the cross-screen rules here.
+
+---
+
+## Bundle
+- Vite's terser plugin **skips `es`-format library output**; `minifyEsOutput()` in `vite.config.ts`
+  re-adds it. Without it the ESM bundle ships unminified (~5 KB of the gate).
+- **That plugin must run in `generateBundle`, not `renderChunk`.** Vite's `vite:esbuild-transpile`
+  runs in the post phase and re-prints the chunk, so a `renderChunk` hook's work was silently undone
+  — mangled names survived, whitespace came back, and the output *looked* minified for many passes.
+  `budget.test.mjs` guards it: "es much bigger than umd" is the signature.
+- Dev-only code must be **constructed** behind `__DEV__`, not merely used behind it. `DebugOverlay`
+  was an eager field initialiser, so the class stayed reachable and shipped to every host.
+- Copy for build-time-only pages does not belong in `COPY` — that object is imported by the game,
+  so anything in it ships (this is why the 404 strings live in `data/notFoundCopy.ts`).
+- **A CSS rule may have a caller the game does not contain.** `NotFoundPage.ts` builds the 404 out of
+  the game's own class names, and it is a **build-time** page — so deleting `.beam-run__stake` /
+  `--stake-figure` along with the title screen's hook left the 404's "404" as unstyled bitmap art, with
+  every test in the suite green. Before deleting a shared rule, grep `src/ui/NotFoundPage.ts` (and the
+  standalone pages) as well as the game. `notFound.test.ts` now does it mechanically: every
+  `beam-run__` class in the page's markup must appear as a selector in the stylesheet it inlines.
+- **There are TWO builds, and a build-time plugin has to be in both.** `vite.config.site.ts` never ran
+  `stripLevelNotesPlugin`, so every word of `levels.json`'s authoring prose shipped to the deployed
+  page — ~5 KB gzipped — for as long as that plugin has existed. Nothing reported it because the budget
+  gate only measures `dist/` and **`dist-site/` is what is actually deployed.** Grep *both* outputs.
+- **Grep the built bundle for any prose you just wrote.** `strip-level-notes.ts` covers the places
+  it was taught about, and a `note` on a *hazard array entry* was not one of them until the dragon's
+  700-character note shipped to every host. Anywhere a human can write in `levels.json`, the
+  stripper has to be able to take it back out — and it must not take out strings that are **drawn**
+  (the dragon's `taunts` are painted on its fireballs; both cases now have tests).
+- **`levels.json` ships, prose included — so write the notes freely and let the build strip them.**
+  The engine imports the file, so `meta.notes`/`structure`/`clock`/`conventions`, every `note`,
+  `meaningTag`, `zone`, most `role`s and the `hint`/`onClear`/`win` mirrors of `COPY` were going out
+  to every host: documenting the compliance maze properly cost ~3 KB gzipped and broke the gate.
+  `scripts/strip-level-notes.ts` removes them at build time (dev and tests read the file as
+  authored). Two things it must keep: `role` when it contains `noncollide` (`Screen` branches on it)
+  and `copy.titleCard` (`Simulation.screenLabel`). Never shorten a level note to save bytes — add
+  the key to the stripper.
+- The scoped stylesheet is a TS template literal, so nothing minifies it by default —
+  `scripts/css-minify.mjs` runs as a Vite plugin and guards structure by counting braces.
+- **Backticks inside `styles.ts` terminate the template literal.** Write CSS comments in prose.
+- The budget gate sums the ESM *and* UMD builds even though a host loads exactly one. Real
+  download is the IIFE figure. Effective per-bundle budget is therefore ~45 KB.
+
+## DOM bitmap type
+
+- **A SHADOWED PIXEL LABEL IS NOT CENTRED BY ITS BOX.** `paintPixelSvg`'s drop shadow adds one cell to the
+  right and bottom only, so a label centred by flexbox sits a cell up and left of its container's middle.
+  On the legend's key caps that read as glyphs off-centre in their caps (owner report, 2026-10-08; measured
+  11px left vs 15px right in a 36px cap). `centreInk: true` pads the left and top by the same cell; the
+  caps and the CONTROLS caption use it. Use it on any small box that frames a single label.
+- **TRANSITION-CARD PUNCTUATION ONLY WHERE A LINE HAS TWO PARTS, AND THAT MOVES THE WRAP** (owner calls,
+  2026-10-08; `ui.test.ts` enforces it). Single-clause lines are bare; two-sentence lines and meaningful
+  commas keep their marks — stripping them all made "Good job. Do not get comfortable." one run-on
+  sentence. Taking a full stop off shortens the last line, so a greedy 26-character wrap
+  can turn a balanced pair into a near-widow ("flatten you" under "do not let the paperwork"). The brief
+  and clear-card lines go through `briefMeasure` (Overlays.ts), which narrows the measure to the widest one
+  that gives two balanced lines; test a new line at that measure, not at 26.
+- **NO PLAIN-PX CEILING ON ANY OVERLAY SIZE: WRITE IT IN DESIGN PIXELS (`P()` / `--beam-run-px`).** The
+  standalone site lifts the 1280px display cap (`--beam-run-max-width: 100vw`), so the frame grows to the
+  window while every `maxPx` ceiling, `clamp(…, Npx)` upper bound and `min(100%, Npx)` panel width stopped
+  at ~1300-1650px. On a 1920 screen the start headline was 34% of the frame instead of its designed 48%,
+  and on 2560 the cards read as a small island in a big picture. `--beam-run-px` is
+  `max(1px, 100cqw / 1280)` on the stage: exactly 1px on any frame up to 1280 (so phones and embeds are
+  byte-for-byte unchanged) and growing with it past that. `PixelType`'s ceiling, `Hud.sizePixels` and its
+  numeric twin `pixelArtWidthPx`, and every px ceiling in `styles.ts` use it; floors stay plain px. Fallback
+  `var(--beam-run-px, 1px)` matters: surfaces outside the stage (the 404 page) never define it.
+- **THE `hidden` ATTRIBUTE LOSES TO ANY AUTHOR RULE THAT SETS `display`, AND TWO OF OURS DID.** `[hidden]`
+  is a UA stylesheet rule (`display: none`), so `.beam-run__advice { display: flex }` beats it outright —
+  and both lines on the briefing card are flex columns of bitmap SVG that are shown and hidden by
+  assigning to `el.hidden`. Symptom, which took several passes to be reported: the retry hint ("TAKE THE
+  ANSR POWERUP") was painted on the card of the first stage a player died on and then **stayed on the
+  briefing card of every screen after it**, with the attribute set and doing nothing. It looked like a
+  model bug and every candidate for it was innocent — `Simulation._retry` is cleared by `loadScreen`,
+  `screenHasPowerup` reads level data, the host recomputes the hint every frame and there is a test for
+  each. Before the first death the line was absent for the *wrong reason*: the element had no content yet.
+  Three rules out of it. **`.beam-run [hidden] { display: none !important; }` exists and must stay** — the
+  extra class and the `!important` are what a browser reads. **It is the LAST rule in the file, and that is
+  not tidiness:** jsdom's `getComputedStyle` cascades by *source order alone*, ignoring specificity and
+  `!important`, so with the rule up at the top the fix was correct per spec and **unprovable in any test we
+  could write** (measured: identical sheet, rule early → `flex`, rule last → `none`). Anything added below
+  that line which hides by attribute is on its own. And **clear the content as well as hiding it**, because a
+  hidden element holding its last text is one cascade mistake away from printing it again.
+- **A cascade claim has to be tested as a cascade, and that needs the widget ROOT.** The guard in
+  `ui.test.ts` injects the real stylesheet and reads the computed `display` back — it fails with `flex` the
+  moment the rule is removed, which a regex over the CSS never would. It also has to put `class="beam-run"`
+  on the test's parent: every rule in this stylesheet is scoped to that root, the real host sets it and the
+  bare `<div>` these tests mount into does not, so *no* scoped rule applies in the default fixture. Any
+  future test that reasons about the shipped cascade needs the same line.
+- **Any `PixelSpec` without `maxShare` is a bug waiting to happen.** The default `min(96%, …)` cap
+  is circular inside a shrink-wrapping flex box, and the browser silently falls back to the SVG's
+  intrinsic width — that is how the closing months figure rendered at a third of its size.
+  Size in frame units (`--beam-run-u`, i.e. `cqw` against the stage) with an explicit `maxShare`.
+- The 5×7 font has **no lower case and no apostrophe**. Any string drawn as pixels must avoid
+  apostrophes (there is a test guarding this). Unsupported chars fold (em dash → hyphen, → → >).
+- Every pixel heading must ship a `.beam-run__sr` span with the real prose, and the artwork must
+  be decorative, so `textContent` and screen readers are unchanged.
+- **A wrapped bitmap line whose last line is one word is a widow, and `wrapPixelLabel` is greedy, so
+  the copy has to be written for the measure.** All six stage briefs were authored at ~60 characters
+  and set at `body`'s own 34-char measure: every one of them wrapped to three lines with the final word
+  alone, directly over a centred button. The fix is both ends — a 26-char measure on the card and copy
+  at ≤50 characters — and it is now *tested* (`ui.test.ts` fails a brief needing three lines, or whose
+  two lines are more than 2:1 apart), because "slightly more descriptive" is how it comes back.
+  Balance is not decoration when the lines are centred: 33/9 reads as a mistake.
+- **Measure a new line against the lines around it, not just against the frame.** The briefing card's
+  keyboard prompt was authored at `caption` and rendered **353px wide against the brief's 326** — the
+  footnote was the biggest thing on the screen. Do the arithmetic (`unit × cols` against the caps) for
+  every role you add to a surface, or one clamp quietly inverts the hierarchy.
+- **Do not print the same word twice in a column, and that includes a heading and the line under it.**
+  Three of these have shipped and all three were invisible in the source (the strings live in different
+  objects) and obvious in the raster: "Press SPACE to continue" under a cap labelled **Continue** ·
+  **COMPLIANCE** over "compliance does not run in a straight line" · **WORKPLACE** over "the workplace is
+  not". Read a screen's strings *in the order they are painted*, then look at the picture. `ui.test.ts`
+  now enforces it for the briefs (no word over three characters from the stage label may appear in the
+  brief) — the general rule still needs a human eye.
+- **Do not caption a button.** Two versions of "press SPACE" under the briefing card's cap were cut: the
+  first repeated the verb, the second read as a *second, quieter button drawn on the first*, so the eye
+  kept going back to check which one was the control. A focused button already answers Space and Enter —
+  a line saying so is documentation of the browser. Same call the start screen made when its control
+  legend came out ("stating them made the title screen read as a manual").
+- **`display: none` HIDES AN ELEMENT FROM THE SCREEN AND FROM THE A11Y TREE, AND NOT FROM
+  `textContent`.** The briefing card's control legend was first built as *two* pre-made rows (move+jump,
+  fire) toggled by `hidden`, which is cheap and looks obviously right. It put the whole control guide —
+  "Arrow keys move. Space jumps. F fires an ANSR tool…" — inside **every** briefing card in the game as far
+  as anything reading the DOM was concerned, and the standing assertion that a card never says SPACE failed
+  on the *Compliance* card. Same family as the retry hint that stayed on every later card with `hidden` set
+  and doing nothing, and the same fix: **empty the element, do not merely hide it.** The row is built once
+  and filled per card (`Overlays.fillLegend`), which costs nothing because it sits behind the card's repaint
+  key — twice per run, not sixty times a second. Any conditional line on a card has to satisfy *both*
+  `hidden` and an empty `textContent`, and the cascade test at the end of `ui.test.ts` should list it.
+- **A word may be forbidden as PROSE and allowed as a KEY CAP, and an assertion that predates the caps
+  cannot tell.** `ui.test.ts` has forbidden "SPACE" on the briefing card since two keyboard prompts were cut
+  from it. The controls then moved onto that card, so level 0 legitimately draws a cap labelled SPACE — a
+  button, not a caption on one. The check is re-scoped rather than dropped: it runs on a card with **no
+  legend** and additionally asserts the legend row is empty there. When a surface gains a new kind of
+  content, re-read the assertions it already carries before adding to them.
+- **A DIVIDER MUST HUG WHAT IT DIVIDES, AND A CARD IS A BAD UNIT TO MEASURE THAT IN.** A rule was drawn over
+  the briefing card's legend (chrome about the machine, separated from the lines about the place). The rule
+  spans the card's 560px column; the row it encloses is ~300px on level 0 and **~100px on level 3**, where
+  the legend is one F cap. A full-width rail over one small button is a border drawn round nothing — the same
+  finding that took the out-of-lives panel from 560 to 440. Cut to a step (`margin-top`). The grey tile the
+  owner later asked for (2026-09-29) obeys this: it **shrink-wraps** the row (`width: fit-content`, a
+  `min-width` so the one-cap fire tile is not a sliver) rather than spanning the card.
+- **A `%` GAP INSIDE A SHRINK-WRAPPED FLEX BOX RESOLVES TO ALMOST NOTHING, AND BOX-SHADOW RAILS EAT WHAT IS
+  LEFT.** `.beam-run__key-group` had `gap: clamp(4px, 0.7%, …)`: the % resolved against the group itself, so
+  it sat on the 4px floor, and two caps' 2px outer rails (box-shadow spread, which takes no layout space)
+  closed it to zero — the two arrow caps fused into one block. Gaps between railed caps are in frame units
+  (`U()`) and must exceed twice the rail.
+- **A CARD'S HEADLINE IS PAINTED AS ONE UNWRAPPED LINE, SO ANYTHING FOLDED INTO IT IS CHARGED TO THE WIDEST
+  STAGE NAME IN THE GAME.** `show()` hands `paintPixelSvg` a single-element array for the stage label.
+  "LEVEL 2: THE COMPLIANCE MAZE" is 28 characters: folded into the title it either overflows `maxShare` or
+  shrinks *every* stage name to fit the longest one. The level number is an **eyebrow** — its own element
+  above the heading, at `caption` — which also keeps the heading's `textContent` the stage name for
+  assistive tech and gives the number its own job (where you are in the run, which the name does not say).
+- **MEASURE EVERY NEW STRING BEFORE RASTERISING IT, NOT AFTER.** A throwaway script that resolves each
+  role's `PX_TYPE` unit against a 1280 frame and prints the wrap, the per-line lengths and the width as a %
+  of that role's own cap (`/tmp/brrender/measure.mts`, this pass) takes seconds and catches the two defects
+  that keep coming back — the one-word widow, and the line that is wider than the headline above it. It
+  cannot answer whether the thing looks *designed*; that is what the raster is for. Do both, in that order.
+- **The DOM cards can be rasterised without a browser, and it is worth it.** `/tmp/brrender/cards.mts`
+  draws them on canvas from the **real** copy, the real `wrapPixelLabel` and the real 5×7 font at the real
+  `PX_TYPE` units resolved against a 1280 frame. It is not the shipped cascade, so it proves nothing about
+  CSS — but hierarchy and balance are exactly what these screens have always been hardest to check, and it
+  is what killed the legend's divider.
+
+- **A CARD OVER A STAGE NEEDS A GROUND OF ITS OWN, BECAUSE THE STAGES ARE FULL OF WORDS.** The transition
+  cards were a column of bitmap type on an 86% wash, and the raster read as clutter: the Head Office paints
+  HEAD OFFICE, BUSINESS CASE and BUDGET, Compliance NOTARY and INTERCO, the Workplace its own plaque — so
+  the card's lines sat on top of the room's lines and the eye had to sort them. No wash light enough to
+  glimpse the stage fixes that; a solid panel does (`.beam-run__stack--titlecard`). It is `fit-content`,
+  so the rail hugs its widest line (the 440px out-of-lives finding, again), which is safe only because every
+  glyph inside is sized in frame units — a `%` width in there would measure the shrink-wrapped box.
+
+## Layout
+- The stage clamps on **both** axes (`max-width` derived from `--beam-run-max-height`), with a
+  `dvh` layer. On a **touch device** it deliberately stops being 16:9: `aspect-ratio: auto` plus a control
+  band (`--beam-run-portrait-band`), HUD in the top band, thumb controls in the bottom.
+- Host-overridable knobs: `--beam-run-max-width`, `--beam-run-max-height`, `--beam-run-portrait-band`.
+- **The title screen's copy lives in the sky, not on the skyline.** The start overlay is top-pinned
+  (`.beam-run__start-head` = lockup + hook + offer, then START as its own sibling) under a stepped scrim
+  that is clear from 57% down, so the attract scene shows at full strength. `titleScene.ts` keeps the
+  middle skyline low to leave that sky open — raise a tower there and it runs into START. On a touch
+  stage in portrait the overlay becomes a 3-row grid (band / frame height / band): copy in the band above
+  the frame, START in the band below. Moving START back inside `.beam-run__stack` breaks that split.
+- Type inside the frame is sized in `cqw` (`--beam-run-u`), never `vw` — the frame is letterboxed,
+  so window-relative type overflows it.
+- **Overlays centre with auto margins, never with `justify-content: center`.** `.beam-run__overlay` is
+  `justify-content: flex-start`, and its first/last child get `margin-top/bottom: auto` (the start overlay
+  excepted — it is top-pinned). A centred flex column taller than the frame overflows *both* ends and the
+  part above the top edge is outside the scroll range: the win receipt lost its brand line and headline on
+  an 800x600 window (a 450px frame) and on phones in landscape, and the assist dialog lost its title. The
+  focused CTA scrolls the overlay down, which hid the defect in every "does it fit" glance. `safe center`
+  is not an option while older iOS Safari is in the audience.
+- **THE CONTROL BAND IS GATED ON TOUCH, NEVER ON ORIENTATION, AND IT WAS GATED ON ORIENTATION FOR MOST OF
+  THIS BUILD'S LIFE.** `@media (orientation: portrait)` is not a test for "this device has thumbs", and
+  getting that wrong is wrong in *both* directions at once. Every **desktop** window taller than it was wide
+  — a browser docked to half a 16:9 screen, a rotated monitor, a Mac window dragged narrow — matched the
+  query and got the phone box: the stage stopped being 16:9, the game shrank to a strip centred between two
+  large bands, and nothing was ever drawn in those bands because a mouse device has no thumb controls. That
+  is the whole reason the same build "looked a different shape from one machine to the next", which is how
+  it was reported. And the query simultaneously *excluded* the device that needed the band most — a tablet
+  in landscape is ~4:3, so a 16:9 frame filled it edge to edge and the buttons were drawn on the gameplay.
+  `stageClassName(isTouch)` is now the gate and it is a **function**, fed by the same `isTouchDevice()` call
+  that decides whether the controls exist at all, so the box and its contents cannot disagree — and because
+  it is a function rather than a media query, there is a test. A second test walks every
+  `@media (orientation: …)` block in the sheet and fails if any of them mentions `aspect-ratio`.
+- **The world itself has never been distorted, so do not go looking there.** `computeViewport` is a uniform
+  `contain` fit — one `scale` on both axes, centred offsets, clipped to 1280×720 — and `Renderer.test.ts`
+  pins it at six sizes. When somebody reports "the aspect ratio is different on my machine", the thing that
+  changed shape is the **box** (the rule above) or the **letterbox margin**, never the picture. Worth saying
+  because the first instinct is to audit the renderer, which is the one part that was right.
+- **A STYLESHEET CANNOT DO ARITHMETIC, SO ANY ROW OF FIXED-SIZE THINGS THAT HAS TO FIT A PHONE NEEDS ITS
+  NUMBERS IN A MODULE.** Upright, four thumb targets share one row — back, forward, the armed tool, jump —
+  and at the hand-tuned sizes (76px pads, a 104px jump, a 16px gap, a 14px inset) that row demands
+  `2×14 + 3×76 + 104 + 3×16 = 396px` against a **390px** iPhone frame. It shipped like that: on the most
+  likely phone in this audience's pocket the move pad and the tool button overlapped, and with 12px of hit
+  slop each they overlapped by more than they looked like they did. Nothing caught it because CSS cannot sum
+  its own literals and jsdom cannot lay anything out. `ui/touchGeometry.ts` now owns the numbers as
+  `clamp(min, N × --beam-run-u, max)` specs, `styles.ts` generates the CSS from them, and
+  `touchAndAssist.test.ts` sums the row at every frame width from a 280px Galaxy Fold cover screen up. The
+  ceilings are the tuned sizes and they are reached at ~430px, so nothing changed on a normal phone.
+- **MEASURE THE TALLEST THING IN A CLUSTER, NOT THE BIGGEST ONE.** The tool button is *lifted* off jump's
+  baseline onto a diagonal, so the top of the act cluster is `lift + pad` (50 + 76 = 126), not `jump` (108).
+  The band is 180px, a home indicator takes 34 of it and the zone's own inset another 16, leaving 130 — so a
+  lift tuned by eye at 58px put the button 4px **outside the band**, i.e. back over the gameplay, which is
+  the one thing the band exists to prevent. Same class of error as measuring a hoist's clearance along the
+  walk instead of where a player stops. `clusterHeightPx` is the guard.
+- **A SAFE BOUND IS NOT A TIGHT BOUND, AND RESERVING TOO MUCH SPACE COLLIDES WITH WHAT IS ON THE OTHER
+  SIDE.** The pause button is anchored past the lives plaque, and the first version reserved that plaque's
+  `maxShare` (26% of the frame). The hearts never come near it — 25 authored cells at 0.34 of a frame unit
+  is about 8.5% — so the "safe" bound pushed the button 23px further left than it needed and straight onto
+  the stage plaque. Reserve the clamp the thing actually resolves to (`LIVES_PLAQUE`, guarded against
+  `HUD_PX.lives` by a test), not the ceiling it is allowed to reach.
+- **"THE CORNERS ARE TAKEN, SO PUT IT IN THE MIDDLE" IS AN ANSWER ABOUT THE SIZE OF THE GAP AND NOT ABOUT
+  WHERE THE GAP IS.** The top band's two HUD plaques are anchored to opposite corners and the stage plaque
+  is about twice the width of the lives plaque, so on a 390px frame the free space runs from x 193 to x 288
+  — 96px, plenty — while a **centred** 44px button sits at 173-217 and lands inside the stage plaque. The
+  sum said "96px of room" and passed; the raster showed a button on top of a readout. Two rules out of it:
+  assert the **edges** of the thing against the **edges** of its neighbours, never the width of the space
+  between them; and on a frame under 340px there is no horizontal slot at all (31px on a 280px screen for a
+  44px minimum target), so it drops below the plaque row via a **container** query — a container query and
+  not a media query, because the number that matters is the width of the letterboxed *frame*, which is not
+  the width of the window.
+- **A LANDSCAPE PHONE HAS NO BAND TO GIVE, AND A LANDSCAPE TABLET NEARLY DOES.** Sideways the band is
+  whatever the height has left over after a full-width 16:9 frame: ~78px a side on an 1180×820 iPad
+  (against a cluster wanting 126, so ~10% of the frame's bottom corners is overlaid) and **zero** on a
+  693×390 landscape phone. Buying a full band means capping the frame from `(height − 2 × cluster)`, which
+  costs ~14% of an iPad's frame width and ~27% of a phone's — so it is priced, not free, and it is
+  `docs/OPEN.md` §32 rather than a call made in a stylesheet. Two things that *are* settled: portrait is
+  fully clear at every width (tested), and if the reserve is ever taken it must be gated on `min-height`
+  so it applies to tablets only.
+- **A CONTROL THAT DUPLICATES NO KEY CANNOT LIVE IN AN `aria-hidden` SUBTREE.** The thumb pads are
+  `aria-hidden` because a screen-reader user drives the game with real keys — correct, and it was on the
+  whole layer. The moment pause moved in there, that hid the one control with **no** other route to it: a
+  phone has no Escape key, so before this button existed a touch player could not reach pause, the assist
+  options or the way out at all. The attribute moved onto the two zones and pause keeps a real label
+  (`COPY.controls.pause`). When adding anything to a hidden layer, ask what else answers it.
+- **Pause routes through the same input EDGE the keyboard does, not through the Game's paused flag.** The
+  touch button calls `pressAction('pause')` / `releaseAction('pause')`, so `handleFrameInput`'s guard (only
+  while PLAYING or already paused) is the single place that decides and a phone and a keyboard cannot end up
+  with two different pause behaviours. It only ever *pauses* — the layer is hidden while the overlay is up,
+  and resuming is the overlay's own focusable button.
+- **No keyboard key is ever named on touch, and a tool's control shows only where the tool is.** The
+  in-game tool prompt (`Game.drawToolPrompt`, `render/actPrompt.ts`) draws the **F** cap only when
+  `!isTouch` — as one strip, **PRESS [F] and no verb** (owner calls: "write Press F", then "just keep
+  Press [F]"; the `COPY.toolPrompt` verbs are touch-only now; `lead` on `drawActPrompt`,
+  `LEAD_STRIP_H` = 34 so the cap is inset 4px, and `cx` clamped by `actPromptWidth` so PRESS never leaves
+  the frame near an edge); the hatch's ↓ prompt has no lead and keeps its 26px cap-beside-plaque layout,
+  because its down chevron is placed off that height. On touch it draws the verb alone and the act pad pulses (`beam-run__touch--hint`). Same rule
+  as the Tech Park hatch's ↓ cap and the briefing legend's pad swap. The prompt is up only while a tool is
+  armed (`hasCutter` / `hasCannon`) and until its first shot — "used" is read off the hazard's
+  `sinceShot`, not the input, so a sub-frame tap still counts.
+
+## Gameplay
+- **A pickup's furniture can seal a screen even when the pickup is fine.** The Workplace's badge cabinet
   floats at gx 4-5, ending at x 240, and the partition wall was at gx 6 — so a player pinned against that
   wall stood at 212-240, i.e. **underneath the cabinet**, where its underside capped their jump at 36px
   against the 80px the wall needs. Every measurement *about the badge* was correct and the screen was
@@ -108,223 +384,6 @@ screen) · - **A pickup's furniture can seal a screen even when the pickup is fi
   an 8px slab on top is a shelf); a framed fabric panel in two courses with three posts (one slab with a
   rail is a wall); and a monitor with a thin bezel, a chin, a slim stand and a **wide** foot (a rectangle
   on a 10px neck is a television on a stick).
-
-**Testing**. Gameplay is ~70% of this file; if it keeps growing, split it per screen
-into `docs/INVARIANTS-<screen>.md` and leave the cross-screen rules here.
-
----
-
-**Bundle**
-- Vite's terser plugin **skips `es`-format library output**; `minifyEsOutput()` in `vite.config.ts`
-  re-adds it. Without it the ESM bundle ships unminified (~5 KB of the gate).
-- **That plugin must run in `generateBundle`, not `renderChunk`.** Vite's `vite:esbuild-transpile`
-  runs in the post phase and re-prints the chunk, so a `renderChunk` hook's work was silently undone
-  — mangled names survived, whitespace came back, and the output *looked* minified for many passes.
-  `budget.test.mjs` guards it: "es much bigger than umd" is the signature.
-- Dev-only code must be **constructed** behind `__DEV__`, not merely used behind it. `DebugOverlay`
-  was an eager field initialiser, so the class stayed reachable and shipped to every host.
-- Copy for build-time-only pages does not belong in `COPY` — that object is imported by the game,
-  so anything in it ships (this is why the 404 strings live in `data/notFoundCopy.ts`).
-- **A CSS rule may have a caller the game does not contain.** `NotFoundPage.ts` builds the 404 out of
-  the game's own class names, and it is a **build-time** page — so deleting `.beam-run__stake` /
-  `--stake-figure` along with the title screen's hook left the 404's "404" as unstyled bitmap art, with
-  every test in the suite green. Before deleting a shared rule, grep `src/ui/NotFoundPage.ts` (and the
-  standalone pages) as well as the game. `notFound.test.ts` now does it mechanically: every
-  `beam-run__` class in the page's markup must appear as a selector in the stylesheet it inlines.
-- **There are TWO builds, and a build-time plugin has to be in both.** `vite.config.site.ts` never ran
-  `stripLevelNotesPlugin`, so every word of `levels.json`'s authoring prose shipped to the deployed
-  page — ~5 KB gzipped — for as long as that plugin has existed. Nothing reported it because the budget
-  gate only measures `dist/` and **`dist-site/` is what is actually deployed.** Grep *both* outputs.
-- **Grep the built bundle for any prose you just wrote.** `strip-level-notes.ts` covers the places
-  it was taught about, and a `note` on a *hazard array entry* was not one of them until the dragon's
-  700-character note shipped to every host. Anywhere a human can write in `levels.json`, the
-  stripper has to be able to take it back out — and it must not take out strings that are **drawn**
-  (the dragon's `taunts` are painted on its fireballs; both cases now have tests).
-- **`levels.json` ships, prose included — so write the notes freely and let the build strip them.**
-  The engine imports the file, so `meta.notes`/`structure`/`clock`/`conventions`, every `note`,
-  `meaningTag`, `zone`, most `role`s and the `hint`/`onClear`/`win` mirrors of `COPY` were going out
-  to every host: documenting the compliance maze properly cost ~3 KB gzipped and broke the gate.
-  `scripts/strip-level-notes.ts` removes them at build time (dev and tests read the file as
-  authored). Two things it must keep: `role` when it contains `noncollide` (`Screen` branches on it)
-  and `copy.titleCard` (`Simulation.screenLabel`). Never shorten a level note to save bytes — add
-  the key to the stripper.
-- The scoped stylesheet is a TS template literal, so nothing minifies it by default —
-  `scripts/css-minify.mjs` runs as a Vite plugin and guards structure by counting braces.
-- **Backticks inside `styles.ts` terminate the template literal.** Write CSS comments in prose.
-- The budget gate sums the ESM *and* UMD builds even though a host loads exactly one. Real
-  download is the IIFE figure. Effective per-bundle budget is therefore ~45 KB.
-
-**DOM bitmap type**
-- **THE `hidden` ATTRIBUTE LOSES TO ANY AUTHOR RULE THAT SETS `display`, AND TWO OF OURS DID.** `[hidden]`
-  is a UA stylesheet rule (`display: none`), so `.beam-run__advice { display: flex }` beats it outright —
-  and both lines on the briefing card are flex columns of bitmap SVG that are shown and hidden by
-  assigning to `el.hidden`. Symptom, which took several passes to be reported: the retry hint ("TAKE THE
-  ANSR POWERUP") was painted on the card of the first stage a player died on and then **stayed on the
-  briefing card of every screen after it**, with the attribute set and doing nothing. It looked like a
-  model bug and every candidate for it was innocent — `Simulation._retry` is cleared by `loadScreen`,
-  `screenHasPowerup` reads level data, the host recomputes the hint every frame and there is a test for
-  each. Before the first death the line was absent for the *wrong reason*: the element had no content yet.
-  Three rules out of it. **`.beam-run [hidden] { display: none !important; }` exists and must stay** — the
-  extra class and the `!important` are what a browser reads. **It is the LAST rule in the file, and that is
-  not tidiness:** jsdom's `getComputedStyle` cascades by *source order alone*, ignoring specificity and
-  `!important`, so with the rule up at the top the fix was correct per spec and **unprovable in any test we
-  could write** (measured: identical sheet, rule early → `flex`, rule last → `none`). Anything added below
-  that line which hides by attribute is on its own. And **clear the content as well as hiding it**, because a
-  hidden element holding its last text is one cascade mistake away from printing it again.
-- **A cascade claim has to be tested as a cascade, and that needs the widget ROOT.** The guard in
-  `ui.test.ts` injects the real stylesheet and reads the computed `display` back — it fails with `flex` the
-  moment the rule is removed, which a regex over the CSS never would. It also has to put `class="beam-run"`
-  on the test's parent: every rule in this stylesheet is scoped to that root, the real host sets it and the
-  bare `<div>` these tests mount into does not, so *no* scoped rule applies in the default fixture. Any
-  future test that reasons about the shipped cascade needs the same line.
-- **Any `PixelSpec` without `maxShare` is a bug waiting to happen.** The default `min(96%, …)` cap
-  is circular inside a shrink-wrapping flex box, and the browser silently falls back to the SVG's
-  intrinsic width — that is how the closing months figure rendered at a third of its size.
-  Size in frame units (`--beam-run-u`, i.e. `cqw` against the stage) with an explicit `maxShare`.
-- The 5×7 font has **no lower case and no apostrophe**. Any string drawn as pixels must avoid
-  apostrophes (there is a test guarding this). Unsupported chars fold (em dash → hyphen, → → >).
-- Every pixel heading must ship a `.beam-run__sr` span with the real prose, and the artwork must
-  be decorative, so `textContent` and screen readers are unchanged.
-- **A wrapped bitmap line whose last line is one word is a widow, and `wrapPixelLabel` is greedy, so
-  the copy has to be written for the measure.** All six stage briefs were authored at ~60 characters
-  and set at `body`'s own 34-char measure: every one of them wrapped to three lines with the final word
-  alone, directly over a centred button. The fix is both ends — a 26-char measure on the card and copy
-  at ≤50 characters — and it is now *tested* (`ui.test.ts` fails a brief needing three lines, or whose
-  two lines are more than 2:1 apart), because "slightly more descriptive" is how it comes back.
-  Balance is not decoration when the lines are centred: 33/9 reads as a mistake.
-- **Measure a new line against the lines around it, not just against the frame.** The briefing card's
-  keyboard prompt was authored at `caption` and rendered **353px wide against the brief's 326** — the
-  footnote was the biggest thing on the screen. Do the arithmetic (`unit × cols` against the caps) for
-  every role you add to a surface, or one clamp quietly inverts the hierarchy.
-- **Do not print the same word twice in a column, and that includes a heading and the line under it.**
-  Three of these have shipped and all three were invisible in the source (the strings live in different
-  objects) and obvious in the raster: "Press SPACE to continue" under a cap labelled **Continue** ·
-  **COMPLIANCE** over "compliance does not run in a straight line" · **WORKPLACE** over "the workplace is
-  not". Read a screen's strings *in the order they are painted*, then look at the picture. `ui.test.ts`
-  now enforces it for the briefs (no word over three characters from the stage label may appear in the
-  brief) — the general rule still needs a human eye.
-- **Do not caption a button.** Two versions of "press SPACE" under the briefing card's cap were cut: the
-  first repeated the verb, the second read as a *second, quieter button drawn on the first*, so the eye
-  kept going back to check which one was the control. A focused button already answers Space and Enter —
-  a line saying so is documentation of the browser. Same call the start screen made when its control
-  legend came out ("stating them made the title screen read as a manual").
-- **`display: none` HIDES AN ELEMENT FROM THE SCREEN AND FROM THE A11Y TREE, AND NOT FROM
-  `textContent`.** The briefing card's control legend was first built as *two* pre-made rows (move+jump,
-  fire) toggled by `hidden`, which is cheap and looks obviously right. It put the whole control guide —
-  "Arrow keys move. Space jumps. F fires an ANSR tool…" — inside **every** briefing card in the game as far
-  as anything reading the DOM was concerned, and the standing assertion that a card never says SPACE failed
-  on the *Compliance* card. Same family as the retry hint that stayed on every later card with `hidden` set
-  and doing nothing, and the same fix: **empty the element, do not merely hide it.** The row is built once
-  and filled per card (`Overlays.fillLegend`), which costs nothing because it sits behind the card's repaint
-  key — twice per run, not sixty times a second. Any conditional line on a card has to satisfy *both*
-  `hidden` and an empty `textContent`, and the cascade test at the end of `ui.test.ts` should list it.
-- **A word may be forbidden as PROSE and allowed as a KEY CAP, and an assertion that predates the caps
-  cannot tell.** `ui.test.ts` has forbidden "SPACE" on the briefing card since two keyboard prompts were cut
-  from it. The controls then moved onto that card, so level 0 legitimately draws a cap labelled SPACE — a
-  button, not a caption on one. The check is re-scoped rather than dropped: it runs on a card with **no
-  legend** and additionally asserts the legend row is empty there. When a surface gains a new kind of
-  content, re-read the assertions it already carries before adding to them.
-- **A DIVIDER MUST HUG WHAT IT DIVIDES, AND A CARD IS A BAD UNIT TO MEASURE THAT IN.** A rule was drawn over
-  the briefing card's legend (chrome about the machine, separated from the lines about the place). The rule
-  spans the card's 560px column; the row it encloses is ~300px on level 0 and **~100px on level 3**, where
-  the legend is one F cap. A full-width rail over one small button is a border drawn round nothing — the same
-  finding that took the out-of-lives panel from 560 to 440. Cut to a step (`margin-top`): the caps carry
-  their own bevel and dark fill, so they already read as buttons and the separation only has to be a pause.
-- **A CARD'S HEADLINE IS PAINTED AS ONE UNWRAPPED LINE, SO ANYTHING FOLDED INTO IT IS CHARGED TO THE WIDEST
-  STAGE NAME IN THE GAME.** `show()` hands `paintPixelSvg` a single-element array for the stage label.
-  "LEVEL 2: THE COMPLIANCE MAZE" is 28 characters: folded into the title it either overflows `maxShare` or
-  shrinks *every* stage name to fit the longest one. The level number is an **eyebrow** — its own element
-  above the heading, at `caption` — which also keeps the heading's `textContent` the stage name for
-  assistive tech and gives the number its own job (where you are in the run, which the name does not say).
-- **MEASURE EVERY NEW STRING BEFORE RASTERISING IT, NOT AFTER.** A throwaway script that resolves each
-  role's `PX_TYPE` unit against a 1280 frame and prints the wrap, the per-line lengths and the width as a %
-  of that role's own cap (`/tmp/brrender/measure.mts`, this pass) takes seconds and catches the two defects
-  that keep coming back — the one-word widow, and the line that is wider than the headline above it. It
-  cannot answer whether the thing looks *designed*; that is what the raster is for. Do both, in that order.
-- **The DOM cards can be rasterised without a browser, and it is worth it.** `/tmp/brrender/cards.mts`
-  draws them on canvas from the **real** copy, the real `wrapPixelLabel` and the real 5×7 font at the real
-  `PX_TYPE` units resolved against a 1280 frame. It is not the shipped cascade, so it proves nothing about
-  CSS — but hierarchy and balance are exactly what these screens have always been hardest to check, and it
-  is what killed the legend's divider.
-
-**Layout**
-- The stage clamps on **both** axes (`max-width` derived from `--beam-run-max-height`), with a
-  `dvh` layer. On a **touch device** it deliberately stops being 16:9: `aspect-ratio: auto` plus a control
-  band (`--beam-run-portrait-band`), HUD in the top band, thumb controls in the bottom.
-- Host-overridable knobs: `--beam-run-max-width`, `--beam-run-max-height`, `--beam-run-portrait-band`.
-- Type inside the frame is sized in `cqw` (`--beam-run-u`), never `vw` — the frame is letterboxed,
-  so window-relative type overflows it.
-- **THE CONTROL BAND IS GATED ON TOUCH, NEVER ON ORIENTATION, AND IT WAS GATED ON ORIENTATION FOR MOST OF
-  THIS BUILD'S LIFE.** `@media (orientation: portrait)` is not a test for "this device has thumbs", and
-  getting that wrong is wrong in *both* directions at once. Every **desktop** window taller than it was wide
-  — a browser docked to half a 16:9 screen, a rotated monitor, a Mac window dragged narrow — matched the
-  query and got the phone box: the stage stopped being 16:9, the game shrank to a strip centred between two
-  large bands, and nothing was ever drawn in those bands because a mouse device has no thumb controls. That
-  is the whole reason the same build "looked a different shape from one machine to the next", which is how
-  it was reported. And the query simultaneously *excluded* the device that needed the band most — a tablet
-  in landscape is ~4:3, so a 16:9 frame filled it edge to edge and the buttons were drawn on the gameplay.
-  `stageClassName(isTouch)` is now the gate and it is a **function**, fed by the same `isTouchDevice()` call
-  that decides whether the controls exist at all, so the box and its contents cannot disagree — and because
-  it is a function rather than a media query, there is a test. A second test walks every
-  `@media (orientation: …)` block in the sheet and fails if any of them mentions `aspect-ratio`.
-- **The world itself has never been distorted, so do not go looking there.** `computeViewport` is a uniform
-  `contain` fit — one `scale` on both axes, centred offsets, clipped to 1280×720 — and `Renderer.test.ts`
-  pins it at six sizes. When somebody reports "the aspect ratio is different on my machine", the thing that
-  changed shape is the **box** (the rule above) or the **letterbox margin**, never the picture. Worth saying
-  because the first instinct is to audit the renderer, which is the one part that was right.
-- **A STYLESHEET CANNOT DO ARITHMETIC, SO ANY ROW OF FIXED-SIZE THINGS THAT HAS TO FIT A PHONE NEEDS ITS
-  NUMBERS IN A MODULE.** Upright, four thumb targets share one row — back, forward, the armed tool, jump —
-  and at the hand-tuned sizes (76px pads, a 104px jump, a 16px gap, a 14px inset) that row demands
-  `2×14 + 3×76 + 104 + 3×16 = 396px` against a **390px** iPhone frame. It shipped like that: on the most
-  likely phone in this audience's pocket the move pad and the tool button overlapped, and with 12px of hit
-  slop each they overlapped by more than they looked like they did. Nothing caught it because CSS cannot sum
-  its own literals and jsdom cannot lay anything out. `ui/touchGeometry.ts` now owns the numbers as
-  `clamp(min, N × --beam-run-u, max)` specs, `styles.ts` generates the CSS from them, and
-  `touchAndAssist.test.ts` sums the row at every frame width from a 280px Galaxy Fold cover screen up. The
-  ceilings are the tuned sizes and they are reached at ~430px, so nothing changed on a normal phone.
-- **MEASURE THE TALLEST THING IN A CLUSTER, NOT THE BIGGEST ONE.** The tool button is *lifted* off jump's
-  baseline onto a diagonal, so the top of the act cluster is `lift + pad` (50 + 76 = 126), not `jump` (108).
-  The band is 180px, a home indicator takes 34 of it and the zone's own inset another 16, leaving 130 — so a
-  lift tuned by eye at 58px put the button 4px **outside the band**, i.e. back over the gameplay, which is
-  the one thing the band exists to prevent. Same class of error as measuring a hoist's clearance along the
-  walk instead of where a player stops. `clusterHeightPx` is the guard.
-- **A SAFE BOUND IS NOT A TIGHT BOUND, AND RESERVING TOO MUCH SPACE COLLIDES WITH WHAT IS ON THE OTHER
-  SIDE.** The pause button is anchored past the lives plaque, and the first version reserved that plaque's
-  `maxShare` (26% of the frame). The hearts never come near it — 25 authored cells at 0.34 of a frame unit
-  is about 8.5% — so the "safe" bound pushed the button 23px further left than it needed and straight onto
-  the stage plaque. Reserve the clamp the thing actually resolves to (`LIVES_PLAQUE`, guarded against
-  `HUD_PX.lives` by a test), not the ceiling it is allowed to reach.
-- **"THE CORNERS ARE TAKEN, SO PUT IT IN THE MIDDLE" IS AN ANSWER ABOUT THE SIZE OF THE GAP AND NOT ABOUT
-  WHERE THE GAP IS.** The top band's two HUD plaques are anchored to opposite corners and the stage plaque
-  is about twice the width of the lives plaque, so on a 390px frame the free space runs from x 193 to x 288
-  — 96px, plenty — while a **centred** 44px button sits at 173-217 and lands inside the stage plaque. The
-  sum said "96px of room" and passed; the raster showed a button on top of a readout. Two rules out of it:
-  assert the **edges** of the thing against the **edges** of its neighbours, never the width of the space
-  between them; and on a frame under 340px there is no horizontal slot at all (31px on a 280px screen for a
-  44px minimum target), so it drops below the plaque row via a **container** query — a container query and
-  not a media query, because the number that matters is the width of the letterboxed *frame*, which is not
-  the width of the window.
-- **A LANDSCAPE PHONE HAS NO BAND TO GIVE, AND A LANDSCAPE TABLET NEARLY DOES.** Sideways the band is
-  whatever the height has left over after a full-width 16:9 frame: ~78px a side on an 1180×820 iPad
-  (against a cluster wanting 126, so ~10% of the frame's bottom corners is overlaid) and **zero** on a
-  693×390 landscape phone. Buying a full band means capping the frame from `(height − 2 × cluster)`, which
-  costs ~14% of an iPad's frame width and ~27% of a phone's — so it is priced, not free, and it is
-  `docs/OPEN.md` §32 rather than a call made in a stylesheet. Two things that *are* settled: portrait is
-  fully clear at every width (tested), and if the reserve is ever taken it must be gated on `min-height`
-  so it applies to tablets only.
-- **A CONTROL THAT DUPLICATES NO KEY CANNOT LIVE IN AN `aria-hidden` SUBTREE.** The thumb pads are
-  `aria-hidden` because a screen-reader user drives the game with real keys — correct, and it was on the
-  whole layer. The moment pause moved in there, that hid the one control with **no** other route to it: a
-  phone has no Escape key, so before this button existed a touch player could not reach pause, the assist
-  options or the way out at all. The attribute moved onto the two zones and pause keeps a real label
-  (`COPY.controls.pause`). When adding anything to a hidden layer, ask what else answers it.
-- **Pause routes through the same input EDGE the keyboard does, not through the Game's paused flag.** The
-  touch button calls `pressAction('pause')` / `releaseAction('pause')`, so `handleFrameInput`'s guard (only
-  while PLAYING or already paused) is the single place that decides and a phone and a keyboard cannot end up
-  with two different pause behaviours. It only ever *pauses* — the layer is hidden while the overlay is up,
-  and resuming is the overlay's own focusable button.
-
-**Gameplay**
 - Level data drives everything; the engine hardcodes no gameplay number. Mirror any change to
   `src/data/{tuning.config.ts,levels.json}` into the root copies.
 - **EVERY TRANSITION IS TWO CARDS, AND THE SECOND SCREEN IS LOADED BY THE PRESS THAT LEAVES THE FIRST.**
@@ -365,7 +424,7 @@ into `docs/INVARIANTS-<screen>.md` and leave the cross-screen rules here.
   leaked onto every later card once. An element that does not exist cannot regress.
 - **A hazard that appears N times may not say the same word N times.** The four DENIED stamps were one piece
   of information repeated four times. Each now names the approval it refuses on its index label (ENTITY ·
-  BANKING · TAX IDS · DIR KYC, authored in `levels.json`) and prints DENIED on its **rubber die** — which is
+  BANKING · TAX · MCA, authored in `levels.json`) and prints DENIED on its **rubber die** — which is
   where a real stamp's message lives: the label on the body is the index (what it is for), the die is the
   impression (what it says). Drawn in **inverse values**, dark on the pale plate and light on the near-black
   die, which is what stops the two words reading as one block of signage.
@@ -396,10 +455,15 @@ into `docs/INVARIANTS-<screen>.md` and leave the cross-screen rules here.
   untouched (the safe opening beat, the one window the boss cannot be hit in). Same pass, same rule: the
   compliance monsters went from TAX / GST / LEGAL / ENTITY / AUDIT — *departments* — to EXIM · INTERCO ·
   NOTARY · BOARD · TP PACT, the **filings**, which are the things that actually come back.
-- **A monster's plaque is ~7 characters, and that is the maze's geometry talking.** Set at scale 2 over a
-  creature 5 tiles wide, with five of them converging on one landing: the long forms are 18+ characters of
-  near-white lying across half the screen, which is exactly the unreadable block the plaque is *dropped* on
-  settling to avoid. `screen2.test.ts` holds every authored name to 7, uppercase, apostrophe-free.
+- **A monster's plate is laid out, not capped.** (Superseded: it used to be "~7 characters, and the plate
+  is dropped on settling".) Owner call 2026-09-29: names are TRADE REG. · IC TERMS · NOTARY · GOVERNANCE ·
+  TP DOCS, and the plates stay on after the powerup and at rest without overlapping. `layoutNamePlaques`
+  resolves collisions (walking: stack upward; settled: over the head, then under the feet on the plinth,
+  because the room's ceiling caps the space over the heads). The landing is what limits it: at
+  `GATHER_SPACING` 40 the settled names ran three rows down the plinth; 60 is the most the landing holds
+  (280px lip-to-wall) and gives one row over, one-and-a-bit under. **Longer names or a sixth monster
+  will add rows** — rasterise the settled frame. Names must be upper case with every character in
+  `PixelText.FONT` (an unknown glyph renders blank); `screen2.test.ts` checks both and no overlap.
 - **Drawn content goes in `levels.json` and must survive `strip-level-notes.ts`; its rationale goes in a
   `note` on the same entry.** The stamp labels and the dragon's taunts are drawn, so they ship; a `note` on
   a hazard-array entry is stripped. After adding either, grep **both** built bundles — `dist/` for the
@@ -436,6 +500,12 @@ into `docs/INVARIANTS-<screen>.md` and leave the cross-screen rules here.
   the player through it. The clearance lift descends only while it is carrying and returns only while
   it is empty. `levels.json` says where it *parks*; `ComplianceMaze` owns where it *is*, and hands the
   same box to the collision list and to the renderer (the `badgeFloat` rule, applied to geometry).
+  **The one exception is the assisted DENIED stamp**, which moves toward whoever stands on it (it
+  lifts its rider). It gets away with it by resolving the rider itself: `Stamps.carry` runs in
+  `update` right after the head moves and before the press check, lifting any body whose feet were
+  at or above the old top (and taking a grounded rider down with it). And `solids()` leaves out a
+  head the player is already inside (one that has just come down onto him), because `moveAndCollide`
+  would otherwise snap him onto its roof or ~100px sideways out of it.
 - **On the maze screen the monsters are the barrier** — one object, not a creature plus a gate. They
   hold a striped arm down while scowling and raise it when GCC-BOT files everything. Do not re-add a
   standalone gate: a *solid* one on the only route makes the screen impossible without the badge (no
@@ -504,7 +574,8 @@ into `docs/INVARIANTS-<screen>.md` and leave the cross-screen rules here.
   Then **freeze** it — a mark that follows the player is a telegraph that lies.
 - **A boss may be faster than the player only if it cannot touch them.** `DRAGON.ROAM_SPEED` is 300
   against the player's 260, which is defensible on that screen and nowhere else: the dragon's body
-  is **not a hitbox**, so "you cannot outrun it" costs the player nothing except the option of
+  is **not a hitbox** (its telegraphed stomp is the only thing up close that can hurt, and it is
+  planted while it stomps), so "you cannot outrun it" costs the player nothing except the option of
   ignoring it. Two probe rounds at 96 and 150 px/s both ended 8/8 with zero delays because the boss
   simply lost the race and spent the stage lobbing fire at a back it could not reach.
 - **Range behaviour has to be derived from the attack's own geometry.** `Dragon.STANDOFF` is
@@ -533,7 +604,9 @@ into `docs/INVARIANTS-<screen>.md` and leave the cross-screen rules here.
   ANSR powerup"). Round a 40px mark a ring reads as a lasso drawn round the logo, and on a *perched*
   badge there is nothing to explain why it would be turning. What carries "this is a pickup" is
   everything that is not the logo — the levitation shaft and its wake, the ground chevron, and on a
-  perch the lit plinth plus four flare cells at full alpha. `badge.test.ts` counts the cells in the
+  perch only the contact shadow (the plinth and the flare cells were both removed on owner calls —
+  an orange strip under the mark reads as an underline, and nothing in the mark's own tone may be
+  painted under it; `badge.test.ts` asserts no `MARK_LIT_RGB` cell on a perch). `badge.test.ts` counts the cells in the
   24-34px annulus (4 on a perch, <6 on a rail, all of them on the shaft's axis) so a fifth ring fails
   immediately. **Do not add one.**
 - **A pickup's LABEL is per delivery, and one of the four now carries none.** The capability plaque is
@@ -575,7 +648,7 @@ into `docs/INVARIANTS-<screen>.md` and leave the cross-screen rules here.
   draws `#ff7a45` / `#ff9570`: same hue to within 4 degrees, fully saturated, lighter on every channel,
   and neither of them the value accent `#FF5400`. `badge.test.ts` measures the hue and the channels
   rather than pinning a literal, because "brighter" is how a pickup ends up cream. The translucent form
-  used by the perch plinth and the secret stage's trail is exported as channels (`MARK_LIT_RGB`) and
+  used by the secret stage's trail (and once the perch plinth, now removed) is exported as channels (`MARK_LIT_RGB`) and
   checked against the hex, because those two had drifted from the mark once already.
 - **Anywhere the ANSR mark appears it is the brand asset, never an interpretation of it.** One path
   (`ui/ansrMark.ts`, from `ANSR Logo.svg`) feeds the DOM lockup, the plaza, the attract-screen facade
@@ -825,8 +898,8 @@ into `docs/INVARIANTS-<screen>.md` and leave the cross-screen rules here.
   those columns, and two dark warm masses in the same place are one mass: the animal lost its
   silhouette and its head read as a hole in the rock. Deleting the crag put it back against the sky.
   Any time a hazard *moves* — including from the air to the floor — re-rasterise what is behind it.
-- **Nothing on this screen travels, and the hitbox is the painting.** `Dragon.coneBoxes()` cuts the
-  cone into stepped AABBs, and the simulation collides against exactly the boxes the renderer paints.
+- **Nothing on this screen travels, and the hitbox is the painting.** `Dragon.streamBoxes()` cuts the
+  jet into one square per point (it was `coneBoxes()`, stepped AABBs along a fixed lane), and the simulation collides against exactly the boxes the renderer paints.
   A cone is not an AABB and both dishonest ways round it cost the player: one box over the whole thing
   is lethal where there is no flame, a box round the axis alone is flame that cannot hurt anybody.
 - **A high jaw makes a fire lane SHORTER, not longer.** The flame leaves a Godzilla's head 190px up,
@@ -836,7 +909,44 @@ into `docs/INVARIANTS-<screen>.md` and leave the cross-screen rules here.
   1.60s of safe floor. Move `MOUTH_Y_FRACTION` and all three have to be re-measured.
 - **The safe pocket under the jaw is deliberate.** A beast that sets fire to its own feet is a beast
   whose fire nobody believes, and it gives "get in close" a meaning on a screen whose body is not a
-  hitbox.
+  hitbox. **Since the fire is a jet aimed at the player (2026-09-29, `AIM_*`) the pocket is a place to
+  pass through, not to park in** — a jet aimed at whoever stands there reaches it. What survives is the
+  dash: the angle of somebody running in under the head changes faster than `AIM_TURN_RATE`
+  (`v·h/(d²+h²)`), so they reach the jaw with the jet swinging down behind them; under the body is safe
+  **from the fire** — but not from the foot (below).
+- **Up close it STOMPS, and the stomp is only fair because its spot is COMMITTED at the lift** (owner
+  call, 2026-09-29). Within `STOMP_TRIGGER` of the front foot (past the roar, player low enough to
+  stand on — haloed or not, though a haloed player is never charged) the foot rises for `STOMP_WINDUP`
+  over where the player was, clamped to `STOMP_REACH`, and only its fall (`STOMP_SLAM`) is lethal.
+  The body is a **wall until it is beaten** (`BARRIER_X`, owner call: it cannot be walked past), and
+  `BARRIER_X` must stay inside `STOMP_FOOT_X + STOMP_TRIGGER − PLAYER.WIDTH/2` or a player can stand
+  pressed against it without ever being stomped. The escape is **backwards**: a runner at `WALK_SPEED`
+  covers 117px in the wind-up and clears the committed footprint. **Do not make the foot track the
+  player during the lift**, shorten the wind-up, widen `STOMP_W` or lengthen `STOMP_TRIGGER` without
+  re-running `Dragon.test`'s "turning to run gets you out": each one turns a warning into a trap. The
+  body also holds its facing and its ground while a foot is up, or the foot lands somewhere it was not
+  lifted over.
+- **Screen 4 is the one stage that CANNOT be finished without its powerup** (owner call, 2026-09-29,
+  reversing "no screen is impossible without its badge" for this stage only). The wall is enforced in
+  `Dragon.holdBack`, not as a solid, so the level validator's physics flood (static solids only) still
+  reports the exit reachable — that is expected and not a defect. `screen4.test` "cannot be walked past"
+  is the guard. Tests that need screen 5 teleport past the exit (`driveToScreen`), which the wall does
+  not touch.
+- **An aimed hazard has to be fair through its aim's LIMITS, since it no longer has a lane.** The jet
+  eases towards the player's centre (turn = `AIM_EASE` × angle to go, capped at `AIM_TURN_RATE`), holds
+  for the wind-up (a tracking wind-up would turn the assist's `extraTelegraph` into more time to aim),
+  holds once the player is behind the jaw, and is clamped to `[−AIM_UP, AIM_DOWN]` so it never points
+  at the sky or at the beast's own feet. The crossing test waits `CONE_FAR_H / 2` further back than the
+  jet's far *centre* — `target` is the axis end, the flame is thicker than that.
+- **Measure a jet's reach to the edge of its last square, not its centre line.** `FLAME_LENGTH` 440
+  looked clear of the badge brick (928 − 440 = 488 > 454) and burnt a player standing on it: the last
+  square is 48px wider than its centre. 400 is 928 − 400 − 48 = 480. A test with the badge in play is
+  vacuous here — standing on the brick collects it and the halo makes the fire harmless — so that
+  check lives in `Dragon.test.ts`, unassisted.
+- **A stream is a history, not an angle.** Each point of the jet left the jaw `s / speed` ago along the
+  aim *then* (`Dragon.aimLog`, kept for `CONE_GROW`), which is what makes a swinging jet bend like a
+  hose instead of rotating as a bar. Clear the log when the burn starts: fire that did not exist during
+  the wind-up must not inherit the wind-up's aim.
 - **A growing attack is a fairness mechanism, not a flourish.** The cone ignites next to the beast
   first and arrives at the far end 0.3s later — the end the player is standing at — so somebody caught
   in the outer lane still has a beat to leave.
@@ -1268,7 +1378,7 @@ into `docs/INVARIANTS-<screen>.md` and leave the cross-screen rules here.
   corridor open beneath it — and because it is flush with the hoist's left edge it reads as the
   machine's guide column rather than as a floating block.
 
-**Testing**
+## Testing
 - For time-windowed hazards, read the hazard's own state getter right after `update()` rather than
   recomputing `t = i * DT` (float consistency).
 - Test helpers live in `src/test/helpers.ts`: `driveToScreen`, `expireGrace`, `engageBadge` (reads
@@ -1405,7 +1515,10 @@ ending and the death pose; full narrative in `docs/JOURNAL.md`)
   tall on adjacent rows they merge into one pale mass along the spine, which reads as **fur**; standing
   off the back behind a dark keyline they read as **flags pinned to the shoulder**. Narrow at the top,
   widest at the base, base row in shade, one clear row of air between each pair. **At scale 3 even that
-  merges** — see the "leaf" rule in the third-resolution block below.
+  merges** — see the "leaf" rule in the third-resolution block below. **Triangles read as spikes**
+  (owner: "less pointy"): the shipped plates are rounded maple lobes rebuilt on each old triangle's
+  anchor + axis. Eroding a triangle's tip only blunts it, and free-floating ellipses detach from the
+  back and read as cotton balls — a plate has to stay full width at its root and round off at its crown.
 - **A tail that tapers to a point down a straight diagonal is a BLADE.** It has to thicken at the hips
   and **lie flat along the floor** for its last third, which is also what makes an upright stance
   believable.
@@ -1532,15 +1645,21 @@ not well shaped right now" + "reduce the pixel size on the entire Godzilla, it's
   the mouth with a shadow course under the mandible, which is the whole difference between a jawline and a
   throat. Bending the line down over the last five columns was tried and reverted: **a step in a tooth row
   rasterises as two teeth that have fallen out.**
-- **A dropped jaw needs a MANDIBLE.** The open mouth is a wedge cut from `JAW_ROW`, which correctly puts the
-  maw *outside* the skull's outline at the muzzle — but with only a tooth line under it, it reads as a dark
-  triangle bitten out of the head against the sky. Two courses of hide and a keyline below the teeth, and
-  **mid tone first, shade under it**: painted `SCALE_DARK`-first the mandible is two near-blacks touching
-  the maw and the jaw disappears into the hole it is the bottom of.
-- **The teeth in the grid and the teeth in the code have to share a PITCH.** The shut mouth's teeth are
-  authored as 2-cell pairs; the opening jaw draws its own, and while it kept the old `c % 2` rule the animal
-  changed its dentistry as its mouth opened. Anything the grid draws that the renderer also draws is one
-  rule in two places.
+- **A dropped jaw needs a MANDIBLE — and it must be the jaw's OWN, MOVED.** The first open mouth was a wedge
+  cut from `JAW_ROW` with a painted tooth line, then a painted two-course mandible, under it; the shut jaw in
+  the grid stayed where it was, so open, the head showed the jaw + the hole + a second jaw and the owner saw
+  "the lower jaw getting elongated". Now the grid's lower jaw (rows `JAW_ROW + 1`..`JAW_BOTTOM_ROW`, columns
+  past the hinge) is the moving piece and the maw is painted only in the gap it leaves, so depth is kept by
+  construction. `dragon.test.ts` asserts per muzzle column that the jaw's depth is equal open and shut.
+- **Animate a single grid by moving whole cells per PART, and only ever COMPRESS.** The Godzilla's walk
+  offsets tail/leg/arm/jaw cells (`BEAST_CELLS`); a leg row must move up at least as far as the row above it
+  (the body bob only sinks, a lifted foot shortens the shin), because a row that moves up less than its
+  neighbour opens a transparent 3px gap through the animal. The tail moves as whole columns for the same
+  reason. The near leg paints last so it crosses in front of the far one. A walk's phase comes from the
+  body's x, not from a clock, or the planted foot skates.
+- **The teeth are in the grid only now.** The old opening jaw drew its own teeth and had to share the
+  grid's 2-cell pitch or the animal changed its dentistry as it opened; the rigid jaw carries the grid's
+  teeth with it, so do not reintroduce painted teeth.
 - **When the creature's cell changes, EVERYTHING IT BECOMES changes with it.** The fallen costume was
   re-authored 52×13@5 → 87×22@3 in the same pass, because the suit and the standing beast are on screen
   *together* through `stripping`, cross-fading: two cell sizes there is one animal visibly turning into a
@@ -1575,7 +1694,13 @@ not well shaped right now" + "reduce the pixel size on the entire Godzilla, it's
   would put `CONE_REACH` and the whole lethal-lane chain out for re-measurement for no visible gain.
 
 ---
-**Copy — naming a screen**
+## Copy — naming a screen
+- **Current names (2026-09-29, owner calls):** screen 0 is **Headquarters** (card: "The Headquarters";
+  was Head Office — every older "Head Office" in comments and docs means this screen), and the four
+  powerups are labelled **1Wrk · Operations · Workspace · Talent500** (`CAPABILITIES` `product` + `tag`;
+  Operations and Workspace were GCC-BOT and 500Leaders, which older comments still say). The floating
+  and in-room "ANSR ENGAGED" labels are deleted; taking a powerup floats only its product tag.
+  The finale's doors no longer carry "GO LIVE".
 - **A screen's name is a data change in FOUR places, and one of them is analytics.** Renaming screen 0
   Reception → Head Office touches `name` **and** `copy.titleCard` in `src/data/levels.json` *and* the
   root `levels.json` mirror (nothing enforces that the two are byte-identical, so `diff` them). `name`
@@ -1621,7 +1746,7 @@ not well shaped right now" + "reduce the pixel size on the entire Godzilla, it's
   bank; no table). Full reasoning: `docs/SCREENS.md` §4.13.
 
 ---
-**Copy — figures a prospect can argue with, and the screens either end of the run**
+## Copy — figures a prospect can argue with, and the screens either end of the run
 - **The game states NO industry statistic on any surface a player can read.** The 24-month going-alone
   average and the 11-month ANSR benchmark are model constants only (`JOURNEY.BASELINE_MONTHS`,
   `ANSR_BENCHMARK_MONTHS`): they drive `monthsBase`, the cap, the validator and `br_months`, and they are
@@ -1723,15 +1848,24 @@ not well shaped right now" + "reduce the pixel size on the entire Godzilla, it's
 - **A line between a heading and the block it heads pushes that block out of alignment with the one
   opposite.** The receipt's "Pick one to talk about." sat between its title and its four rows, so the
   right-hand block started a line and a half below the left-hand one and the masses could never line up.
-  As a footnote *under* the rows it also reads where it is acted on. General form: in a two-column
-  composition, every column should be **caption, then block** — anything else goes below.
+  (It then moved under the rows, and is now deleted with the clickable rows, 2026-09-29.) General form:
+  in a two-column composition, every column should be **caption, then block** — anything else goes
+  below. In the wide layout both blocks *grow* to the column height (cost panel and receipt list alike)
+  and neither caption carries a top margin, so captions share a line and blocks share both edges
+  whichever column is taller — the left caption's stacked-layout margin put it ~10px low on the raster.
 - **There is no Navigator button on the start screen, the out-of-lives screen or the win receipt**
   (owner call). Before playing it is an exit from a 90-second game; after a win it was the same offer as
   the four capability rows beside it, with no `br_topic` attached. The route survives where it is
-  earned or asked for: the pause menu, the mid-run summary, and the four rows. Consequences that are
-  easy to miss when touching these screens: `Game.onOutOfLives` must **not** fire `ctaShown`, the win
-  screen's focus target is "Play again", and `COPY.win.receiptHint` is now the only instruction telling
-  a player the rows are clickable — do not shorten it into decoration.
+  earned or asked for: the pause menu and the mid-run summary. **The four receipt rows are read-only
+  since 2026-09-29** (owner call: "make the sections of what got you here unclickable") — `<li>`s in a
+  `<ul>`, no click handler, no hover — and `COPY.win.receiptHint` is deleted with them, so **the win
+  screen has no Navigator route at all** and `br_topic` is never set from it. Consequences that are easy
+  to miss when touching these screens: `Game.onOutOfLives` must **not** fire `ctaShown`, and the win
+  screen's focus target is "Play again", the only focusable element on it.
+- **The ANSR lockup is bitmap type too** (owner call, 2026-09-29): wordmark and edition are
+  `setPixelText` at `LOCKUP_PX` (ui/BrandMark.ts). **There is no divider between them** (owner call,
+  2026-10-08: the "|" came out); the row gap and the step down in size separate them. The win screen carries the full
+  "ANSRcade The GCC Game" lockup (compact); the out-of-lives and summary screens stay wordmark-only.
 - **The player-facing word is POWERUP; "badge" is internal vocabulary** (owner call). The type, the
   module, the data key, `badgeFloat`/`badgeDrop`/`badgePerch`/`badgeCeiling` and every comment in `src/`
   still say badge, and none of that was renamed — the owner's own note said "change from the wording ANSR
@@ -1759,7 +1893,7 @@ not well shaped right now" + "reduce the pixel size on the entire Godzilla, it's
 - **A sign in the world names the PLACE; the verdict on the place belongs on a surface that argues.**
   Head Office's directory board read "MARKET ENTRY: ON PAPER" — an editorial line on the one piece of
   furniture in the game whose whole job is to say where you are, and the third time that verdict is made
-  on that screen (the briefing card, and the three labelled steps). It says HEAD OFFICE. Accepted cost,
+  on that screen (the briefing card, and the three labelled steps). It says HEADQUARTERS (was HEAD OFFICE). Accepted cost,
   and it is the one deliberate exception to "do not print the same word twice": the HUD stage plaque says
   it too, and a lobby sign 100px up a back wall and a HUD label are different objects
   (`docs/OPEN.md` §26).
@@ -1776,7 +1910,7 @@ not well shaped right now" + "reduce the pixel size on the entire Godzilla, it's
   of laptop speakers.
 
 ---
-**Gameplay & art — the secret stage under the Tech Park (THE ENGINE ROOM)**
+## Gameplay & art — the secret stage under the Tech Park (THE ENGINE ROOM)
 
 The bonus brick breaker is not a screen: it is a stage inside one visit to screen 5
 (`world/BrickBreaker.ts`, `render/brickBreaker.ts`, `BONUS` in `tuning.config.ts`). Rules it
@@ -1923,8 +2057,9 @@ established, most of them general.
   as one.
 - **A muzzle flash in this room is COOL.** The only warm thing on The Engine Room is the ANSR mark, and
   an orange flash puts a second one on the frame on the exact frame the first one appears.
-- **The board is measured against the ball, not against the run.** `PADDLE.SKATE_SPEED_MULT` is 2.0 (520
-  px/s) because the mark's own horizontal pace at the 620 cap off a 55-degree edge hit is 508: a paddle
+- **The board is measured against the ball, not against the run.** `PADDLE.SKATE_SPEED_MULT` is 2.4 (624
+  px/s; 2.0 → 2.4 on 2026-09-29, owner: "can increase a bit") and must never drop below ~1.96 (508 px/s),
+  because the mark's own horizontal pace at the 620 cap off a 55-degree edge hit is 508: a paddle
   that cannot match the fastest sideways the ball can travel makes the rally a chase the player is
   structurally losing (owner call: "it's too slow to catch up"). The multiplier scales `GROUND_ACCEL`
   too, so the answer off a standing start comes with it.
@@ -1939,3 +2074,10 @@ established, most of them general.
   one place the act button's job has a *direction* in it. The font needed a `\u2193` glyph for that cap —
   authored under the code point and **not** under a letter, because `drawText` upper-cases everything it
   is handed and a lower-case stand-in folds into a word.
+- **A SUB-STAGE'S CARDS ARE SUB-STATES OF `PLAYING`, AND THE ROOM IS FROZEN UNDER THEM.** The Engine Room's
+  briefing and congratulations cards (`Simulation.bonusCard`) do not touch the state machine, for the same
+  reason the room does not. Three consequences: `updatePlaying` returns before `BrickBreaker.update` while
+  one is up, so the owner's sequence is timed from the press, not from the drop; `requestAdvance` checks
+  `bonusCard` *before* its state branches; and the host must pick the overlay (and hide the touch pads)
+  off `bonusCard`, because `state === 'PLAYING'` alone means "no card" everywhere else. The floor stencil
+  keys off `clock > 0`, so the frame never prints the name the card is printing.

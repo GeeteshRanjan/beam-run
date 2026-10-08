@@ -189,6 +189,14 @@ export class TouchControls {
     this.shootBtn.setAttribute('aria-label', label);
   }
 
+  /**
+   * Pulse the tool button: a powerup has just armed a tool and it has not been used yet.
+   * The touch half of the in-game tool prompt (the canvas draws the verb over the hero).
+   */
+  setShootHint(on: boolean): void {
+    this.root.classList.toggle('beam-run__touch--hint', on);
+  }
+
   setLarger(larger: boolean): void {
     this.root.classList.toggle('beam-run__touch--large', larger);
   }

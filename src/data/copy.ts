@@ -53,23 +53,27 @@ export const CAPABILITIES: readonly CapabilityCopy[] = [
     stage: 'Setup',
     effect: 'Entity, office and systems stood up once, properly',
     topic: 'setup',
-    tag: 'ANSR 1WRK',
+    // The powerup's label is the product name alone on every screen (owner call,
+    // 2026-09-29): 1Wrk · Operations · Workspace · Talent500. The Compliance and
+    // Workplace powerups were GCC-BOT and 500Leaders before that; older comments
+    // across the code still use those names for the same two badges.
+    tag: '1WRK',
   },
   {
     badge: 'CLEAR_PATH',
-    product: 'GCC-BOT',
+    product: 'Operations',
     stage: 'Compliance',
     effect: 'Entity, payroll, legal, tax and audit obligations handled',
     topic: 'compliance',
-    tag: 'GCC-BOT',
+    tag: 'OPERATIONS',
   },
   {
     badge: 'UNWRAP',
-    product: '500Leaders',
+    product: 'Workspace',
     stage: 'Workplace',
-    effect: 'On-ground leaders who unblock the team instead of adding process',
+    effect: 'A workplace fitted out and ready, without the red tape',
     topic: 'workplace',
-    tag: '500LEADERS',
+    tag: 'WORKSPACE',
   },
   {
     badge: 'EXTINGUISH',
@@ -154,16 +158,15 @@ export const COPY = {
    *    stages to introduce the one they have not.
    *
    * The caps are decorative pixel artwork, so each row needs one real sentence behind
-   * it for assistive tech and `textContent` — that is what these four strings are, and
-   * which pair is used depends on the device (`OverlayOptions.touch`): a phone player
-   * has no arrow keys and gets one-tap play by default, so the caps become the
-   * on-screen pads they will actually see.
+   * it for assistive tech and `textContent` — that is what these two strings are.
+   *
+   * **Keyboard devices only** (owner call: "in non desktop mode we are not showing the
+   * controls anywhere"). On touch the cards carry no legend; the thumb pads are on the
+   * screen from the first frame of play. The touch pair of sentences went with it.
    */
   legend: {
     moveJumpKeys: 'Arrow keys move. Space jumps.',
-    moveJumpTap: 'The pads move you, the big button jumps.',
     fireKeys: 'F fires an ANSR tool once a powerup has armed one.',
-    fireTap: 'The small button fires an ANSR tool once a powerup has armed one.',
     /**
      * The label beside each cap. Two or three characters wherever the word allows it,
      * because a label wider than the cap it sits beside turns a row of buttons into a
@@ -174,7 +177,18 @@ export const COPY = {
      * either tool. The per-tool wording lives on the touch button's own `aria-label`
      * (`COPY.controls`).
      */
+    /*
+     * One bare word per cap on every plate (owner call: "TO FIRE" was tried and cut —
+     * "keep only fire like we have with other instructions"), so level 3's [F] FIRE is
+     * the same design as level 0's MOVE / JUMP.
+     */
     caps: { move: 'Move', jump: 'Jump', fire: 'Fire' },
+    /**
+     * The faded caption at the top of the legend's grey tile (owner call: put the
+     * controls on "a grey 8-bit style tile" and write CONTROLS on it, faded). Decorative:
+     * the row's hidden sentence above is what assistive tech reads.
+     */
+    heading: 'Controls',
   },
 
   hud: {
@@ -279,6 +293,14 @@ export const COPY = {
    *
    * The stage's *name* is not repeated here — the card already prints it, from
    * `Simulation.screenLabel`.
+   *
+   * **Punctuation on the transition cards only where a line has two parts** (owner
+   * calls, 2026-10-08). A single-clause line is set bare, with no closing full stop
+   * ("Do not let the paperwork flatten you"). A line of two sentences, or one whose
+   * comma carries the meaning, keeps all of its punctuation: stripped, "Good job. Do
+   * not get comfortable." read as GOOD JOB DO NOT GET COMFORTABLE, one run-on
+   * sentence. The headlines keep their exclamation marks. `ui.test.ts` fails a
+   * single-clause card line that carries a comma or full stop.
    */
   titleCard: {
     /**
@@ -311,14 +333,14 @@ export const COPY = {
        * then *is* a straight line — three labelled steps, no hazard — and every screen
        * after it is not.
        */
-      0: 'All journeys are straight roads during planning.',
+      0: 'All journeys are straight roads during planning',
       /*
        * Setup Delays. No apostrophe (the 5x7 font has none), so the owner's "don't"
        * is set as "do not" — which at this measure also balances better: 24/12 rather
        * than a widow.
        */
-      1: 'Do not let the paperwork flatten you.',
-      2: 'Nothing is filed in a straight line.',
+      1: 'Do not let the paperwork flatten you',
+      2: 'Nothing is filed in a straight line',
       /*
        * The Workplace — the one stage the owner left to us ("for this level think of a
        * line"), so it is written to their pattern rather than to ours: name the thing
@@ -331,8 +353,8 @@ export const COPY = {
        * screen before there is anybody to name.
        */
       3: 'Paid for the space. Nobody can work in it.',
-      4: 'Staff your team before the project goes up in flames.',
-      5: 'Doors open, and a year still in hand.',
+      4: 'Staff your team before the project goes up in flames',
+      5: 'Doors open and a year still in hand',
     } as Record<number, string>,
     /**
      * The card advances on a press, and this cap is the whole of how it says so.
@@ -380,7 +402,7 @@ export const COPY = {
       4: 'Open for business!',
     } as Record<number, string>,
     line: {
-      0: 'Now it gets real.',
+      0: 'Now it gets real',
       1: 'Good job. Do not get comfortable.',
       2: 'Legal is happy. Facilities has questions.',
       3: 'A functioning office. The next stage is hot.',
@@ -425,10 +447,10 @@ export const COPY = {
       4: 'Declined!',
     } as Record<number, string>,
     line: {
-      1: 'Take the ANSR powerup to avoid further delays.',
-      2: 'Take the ANSR powerup to avoid legal drama.',
-      3: 'Take the ANSR powerup to build your workspace.',
-      4: 'Take the ANSR powerup to hire faster and better.',
+      1: 'Take the ANSR powerup to avoid further delays',
+      2: 'Take the ANSR powerup to avoid legal drama',
+      3: 'Take the ANSR powerup to build your workspace',
+      4: 'Take the ANSR powerup to hire faster and better',
     } as Record<number, string>,
     /**
      * The cap. "Try again" rather than the briefing card's "Continue": the card after
@@ -450,6 +472,11 @@ export const COPY = {
       stamp: 'SETUP DENIED',
       fire: 'OFFER DECLINED',
       /*
+       * The Godzilla's foot. Still the system, never the player: what comes down on a
+       * hiring plan is a headcount cut.
+       */
+      stomp: 'HEADCOUNT CUT',
+      /*
        * The compliance monsters. The old 'gate' cause went with the separate
        * barriers: each monster now IS the barrier, so there is one line for it.
        */
@@ -466,6 +493,7 @@ export const COPY = {
     reason: {
       stamp: 'Setup denied. The paperwork goes back to the start.',
       fire: 'An offer was declined. The hiring cycle restarts.',
+      stomp: 'Headcount was cut. The hiring plan starts over.',
       monster: 'A compliance query came back. The stage waits on an answer.',
       mummy: 'The workplace is still taped off. Nobody can get to work.',
       fall: 'The ground gave way. Rebuilt from the last solid step.',
@@ -590,8 +618,8 @@ export const COPY = {
     verdictClean: 'A clean run. Nothing to make up.',
     verdictDelayed: 'Every one had an ANSR answer.',
     receiptTitle: 'What got you here',
-    /* Short enough to set on one bitmap line beside the list it introduces. */
-    receiptHint: 'Pick one to talk about.',
+    /* `receiptHint` ("Pick one to talk about.") is gone with the clickable rows it
+     * pointed at (owner call): the receipt is read-only now. */
     /**
      * The delay line on the closing receipt, in place of the old quick-win
      * count. A clean run gets the credit; anything else gets the itemised cost,
@@ -618,8 +646,8 @@ export const COPY = {
      * primary cap, in two variants ("Plan your real journey" / "See what closes the
      * gap"), and it was the same offer as the four capability rows beside it —
      * generically, with no topic attached, next to four routes that each declare
-     * one. The rows are the conversion surface now and `receiptHint` is the whole
-     * instruction, which is why that line has to stay pointed at them.
+     * one. Those four rows were then made read-only as well (owner call, 2026-09-29),
+     * so the win screen has no Navigator route; the mid-run summary still has one.
      */
     replay: 'Play again',
   },
@@ -645,6 +673,26 @@ export const COPY = {
     close: 'Done',
     on: 'On',
     off: 'Off',
+  },
+
+  /**
+   * The in-game tool prompt over the hero's head, shown from the moment a powerup arms a
+   * tool until its first use (owner call: "when we get the gun, show in the game itself
+   * that you press F"). Pixel-font verbs: A-Z and spaces only.
+   *
+   * **The verbs are touch-only now** (owner call: "just keep Press [F]"): on a keyboard
+   * the prompt is PRESS [F] and nothing else. On touch there is no key to name, so the
+   * verb is the whole prompt there and must read on its own.
+   */
+  toolPrompt: {
+    cutter: 'CUT THE TAPE',
+    cannon: 'HOLD TO SPRAY',
+    /**
+     * The word before the F cap (owner call: "while in game we show F we need to write
+     * Press F"), so the prompt reads PRESS [F] rather than a bare letter.
+     * Keyboard only: on touch there is no cap, and so nothing to press.
+     */
+    press: 'PRESS',
   },
 
   /** Touch control accessible labels. */
@@ -698,14 +746,33 @@ export const COPY = {
    * with a hyphen in it), "Day Two" (true, and not a place), and "Sub-Level 1" (a
    * place, and it says nothing).
    *
-   * The name is not on a briefing card. The six screens stop the run to introduce
-   * themselves; this one is *found*, and a card would announce the discovery back to
-   * the player who just made it. It is painted on the frame for the first three
-   * seconds and carried on the HUD's stage plaque while they are down there —
-   * `render/brickBreaker.ts`'s `STAGE_NAME`, which a test holds to this string.
+   * **The name IS on a briefing card now** (owner call, reversing "a card would announce
+   * the discovery back to the player who made it": the hidden level gets transition
+   * screens like every other stage). The drop opens the briefing card, the lift out
+   * opens a congratulations card, and the room is frozen under both. The three-second
+   * title that used to be painted on the frame went with it — the card says the same
+   * two lines, and saying them twice is the name printed twice in one minute. What is
+   * left on the frame is the floor stencil, `render/brickBreaker.ts`'s `STAGE_NAME`,
+   * which a test holds to this string.
    */
   bonus: {
     name: 'The Engine Room',
+    /** The briefing card's eyebrow, where the six stages print "Level N". */
+    tag: 'Hidden level',
+    /**
+     * The line under the name, unchanged from the one the frame used to paint. Set at a
+     * 18-character measure (`BONUS_BRIEF_CHARS` in `Game.ts`), which breaks it on the
+     * comma, 16/14 — at the stages' 26 it strands FINISH on a line of its own.
+     */
+    brief: 'Live is day one, not the finish',
+    /**
+     * The congratulations card after the shaft has carried him out. Credit, then the
+     * hand-off, the shape every stage's card has; "humming" is the room's own sound.
+     */
+    clear: {
+      title: 'Humming along!',
+      line: 'Built, staffed, growing. Back up top.',
+    },
   },
 
   fallback: {

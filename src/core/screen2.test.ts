@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { makeInput } from './Input';
 import { JOURNEY, PLAYER } from '../data/tuning.config';
 import { ComplianceMaze } from '../world/Hazards/ComplianceMaze';
+import { FONT } from '../render/PixelText';
+import { layoutNamePlaques } from '../render/maze';
 import { DT, T, driveToScreen, engageBadge, expireGrace, stepN } from '../test/helpers';
 import type { Simulation } from './Simulation';
 
@@ -41,31 +43,26 @@ describe('Screen 2 — Compliance (a staircase maze of compliance monsters)', ()
     const sim = driveToScreen(2);
     const badgeGx = sim.screen.data.badge!.gx;
     const monsters = sim.screen.data.monsters!;
-    // The five filings the owner's reference view names, and the five words now
-    // drawn on plaques over the monsters themselves rather than on boards in the
-    // sky — so this list is also the screen's entire signage.
-    expect(monsters.map((m) => m.name).sort()).toEqual([
-      'BOARD',
-      'EXIM',
-      'INTERCO',
+    // The five filings the owner names, and the five words drawn on plaques over
+    // the monsters themselves rather than on boards in the sky — so this list is
+    // also the screen's entire signage. Owner's set, in authored order:
+    // Trade Reg. · IC Terms · Notary · Governance · TP Docs.
+    expect(monsters.map((m) => m.name)).toEqual([
+      'TRADE REG.',
+      'IC TERMS',
       'NOTARY',
-      'TP PACT',
+      'GOVERNANCE',
+      'TP DOCS',
     ]);
     /*
-     * Renamed by the owner, from TAX / GST / LEGAL / ENTITY / AUDIT to the five filings
-     * that actually stall a GCC setup: Export-Import Registration, the inter-company
-     * agreement, notarisation, board meetings and the transfer pricing agreement.
-     *
-     * They are set on a plaque at bitmap scale 2 over a creature 5 tiles wide, so
-     * **length is a constraint, not a preference**: the long forms would be 18 characters
-     * of near-white lying across half the maze, and five of those shoulder to shoulder on
-     * the landing is the unreadable block the plaque is dropped to avoid. Seven characters
-     * is the ceiling the old set established (ENTITY was six) and the new set holds it.
+     * Drawn in the 5×7 bitmap font, which is upper case only and renders an unknown
+     * character as a blank — so every character has to be one the font can draw.
+     * Length is no longer capped at 7: the plates stay on at rest, and
+     * `layoutNamePlaques` (maze.test.ts) is what keeps ten-character names apart.
      */
     for (const m of monsters) {
       expect(m.name, m.name).toBe(m.name.toUpperCase());
-      expect(m.name, m.name).not.toMatch(/['\u2018\u2019]/);
-      expect(m.name.length, m.name).toBeLessThanOrEqual(7);
+      for (const ch of m.name) expect(FONT[ch], `${m.name}: '${ch}'`).toBeDefined();
     }
     // Every corridor starts beyond the badge: the badge is the first thing on the
     // path, always.
@@ -177,7 +174,7 @@ describe('Screen 2 — Compliance (a staircase maze of compliance monsters)', ()
       );
     }
     expect(sim.powerups.collected).toBe(true);
-    expect(sim.activePower?.product).toBe('GCC-BOT');
+    expect(sim.activePower?.product).toBe('Operations');
   });
 
   it('leaves the corridor under both structures walkable, so the badge is a decision', () => {
@@ -260,7 +257,7 @@ describe('Screen 2 — Compliance (a staircase maze of compliance monsters)', ()
      */
     const struck = (sim.activeHazard as ComplianceMaze).monsterStates().filter((m) => m.struck);
     expect(struck).toHaveLength(1);
-    expect(struck[0]!.name).toBe('EXIM');
+    expect(struck[0]!.name).toBe('TRADE REG.');
     expect(struck[0]!.friendly).toBe(false);
   });
 
@@ -314,7 +311,39 @@ describe('Screen 2 — Compliance (a staircase maze of compliance monsters)', ()
     stepN(sim, 900); // 15s later
     expect(maze.monsterStates().map((m) => m.box.x)).toEqual(settled);
     expect(maze.monsterStates().every((m) => m.arm === 1)).toBe(true);
-    expect(sim.activePower?.product).toBe('GCC-BOT');
+    expect(sim.activePower?.product).toBe('Operations');
+  });
+
+  it('keeps every name plate on, and apart, through the walk home and at rest', () => {
+    // Owner call: the names stay on after the powerup and must not overlap once the
+    // five are resting. Measured against the real positions on every frame, since
+    // two of them share a route tail on the way and all five share one landing.
+    const sim = driveToScreen(2);
+    engageBadge(sim);
+    const maze = sim.activeHazard as ComplianceMaze;
+    const apart = (): void => {
+      const plates = layoutNamePlaques(maze.monsterStates());
+      expect(plates).toHaveLength(5);
+      for (let i = 0; i < plates.length; i += 1) {
+        for (let j = i + 1; j < plates.length; j += 1) {
+          const a = plates[i]!;
+          const b = plates[j]!;
+          const overlap = a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+          expect(overlap, `${i} vs ${j}`).toBe(false);
+        }
+      }
+    };
+    for (let i = 0; i < 420; i += 1) {
+      sim.step(DT, makeInput());
+      apart();
+    }
+    const states = maze.monsterStates();
+    expect(states.every((m) => m.settled)).toBe(true);
+    // The huddle fits the landing: its lip at x 680, the room's wall at x 960.
+    for (const m of states) {
+      expect(m.box.x).toBeGreaterThanOrEqual(680);
+      expect(m.box.x + m.box.w).toBeLessThanOrEqual(960);
+    }
   });
 
   it('the clearance lift carries the player down into the far bay', () => {

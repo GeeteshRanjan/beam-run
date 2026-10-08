@@ -153,7 +153,7 @@ function sizePixels(svg: SVGSVGElement, spec: PixelSpec): void {
   const cols = Number(svg.getAttribute('viewBox')?.split(' ')[2] ?? 1) || 1;
   const ideal = `calc(var(--beam-run-u) * ${(cols * spec.unit).toFixed(2)})`;
   const clamped =
-    `clamp(${(cols * spec.minPx).toFixed(1)}px, ${ideal}, ${(cols * spec.maxPx).toFixed(1)}px)`;
+    `clamp(${(cols * spec.minPx).toFixed(1)}px, ${ideal}, calc(var(--beam-run-px, 1px) * ${(cols * spec.maxPx).toFixed(1)}))`;
   svg.style.width = `min(${clamped}, calc(var(--beam-run-u) * ${spec.maxShare}))`;
 }
 
@@ -166,7 +166,12 @@ function sizePixels(svg: SVGSVGElement, spec: PixelSpec): void {
  */
 export function pixelArtWidthPx(cols: number, spec: PixelSpec, frameWidth: number): number {
   const u = frameWidth / 100;
-  const clamped = Math.min(Math.max(cols * spec.minPx, cols * spec.unit * u), cols * spec.maxPx);
+  // `--beam-run-px`: the ceiling is 1px per design pixel up to a 1280 frame, then grows.
+  const designPx = Math.max(1, frameWidth / 1280);
+  const clamped = Math.min(
+    Math.max(cols * spec.minPx, cols * spec.unit * u),
+    cols * spec.maxPx * designPx,
+  );
   return Math.min(clamped, spec.maxShare * u);
 }
 

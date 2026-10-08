@@ -40,6 +40,14 @@ import type { AABB } from '../world/Physics';
 const { WIDTH: W, HEIGHT: H, TILE: T } = RESOLUTION;
 const GROUND_TOP = 15 * T;
 
+/** Blend two `#rrggbb` tones (0 → a, 1 → b). */
+function mixHex(a: string, b: string, f: number): string {
+  const p = Math.max(0, Math.min(1, f));
+  const ch = (s: string, i: number): number => parseInt(s.slice(1 + i * 2, 3 + i * 2), 16);
+  const out = [0, 1, 2].map((i) => Math.round(ch(a, i) + (ch(b, i) - ch(a, i)) * p));
+  return `#${out.map((v) => v.toString(16).padStart(2, '0')).join('')}`;
+}
+
 /** Authored at 20×26 and drawn at scale 3, i.e. exactly the 60×78 hitbox. */
 export const SCALE = 3;
 const COLS = 20;
@@ -1362,7 +1370,15 @@ function tapeRun(ctx: CanvasRenderingContext2D, x0: number, x1: number): void {
  * cowl's inner rim is catching it and there are four flare cells at full alpha off the
  * mouth. Few cells at full alpha say "lit"; many at low alpha say "smudge".
  */
-function spotLight(ctx: CanvasRenderingContext2D, cx: number, lit: number): void {
+function spotLight(ctx: CanvasRenderingContext2D, cx: number, lit: number, fix = 0): void {
+  // The fitting's metal follows the room (owner call: the fixed office goes as light as the
+  // Head Office), from the dark teal of the broken floor to the lobby's brushed steel.
+  const recess = mixHex('#061C23', '#2A3238', fix);
+  const canopy = mixHex('#0A2730', '#6A737A', fix);
+  const canopyLit = mixHex('#154C5A', '#9DA8AE', fix);
+  const body = mixHex('#123F4C', '#6A737A', fix);
+  const cheek = mixHex('#2A7C90', '#9DA8AE', fix);
+  const dark = mixHex('#061C23', '#3A4147', fix);
   const { FIT_W: w, FIT_Y: y, FIT_H: h, SPOT_BOTTOM: bottom } = CEILING;
   /*
    * The silhouette is the whole job here, and the first cut got it wrong in a way that
@@ -1374,16 +1390,16 @@ function spotLight(ctx: CanvasRenderingContext2D, cx: number, lit: number): void
    * aperture stays a dark recess behind it, which is what a fitting in a service void
    * looks like and what keeps the fitting and its hole one object.
    */
-  pxRect(ctx, '#061C23', cx - w / 2, y, w, h, 2); // the recess, kept dark
+  pxRect(ctx, recess, cx - w / 2, y, w, h, 2); // the recess, kept dark
   // Canopy: half the aperture's width, so the hole still reads as a hole.
   const capW = 80;
-  pxRect(ctx, '#0A2730', cx - capW / 2, y + 4, capW, h - 6, 2);
-  pxRect(ctx, '#154C5A', cx - capW / 2, y + 4, capW, 3, 2);
+  pxRect(ctx, canopy, cx - capW / 2, y + 4, capW, h - 6, 2);
+  pxRect(ctx, canopyLit, cx - capW / 2, y + 4, capW, 3, 2);
   // Stem, short and narrow: it is what makes the can read as *hung* rather than as part
   // of the ceiling.
   pxRect(ctx, OUTLINE, cx - 11, y + h, 22, 12, 2);
-  pxRect(ctx, '#123F4C', cx - 9, y + h, 18, 12, 2);
-  pxRect(ctx, '#2A7C90', cx - 9, y + h, 4, 12, 2);
+  pxRect(ctx, body, cx - 9, y + h, 18, 12, 2);
+  pxRect(ctx, cheek, cx - 9, y + h, 4, 12, 2);
 
   /*
    * The can: four stepped courses flaring 44 → 72 down to the mouth. Stepping the width
@@ -1399,9 +1415,9 @@ function spotLight(ctx: CanvasRenderingContext2D, cx: number, lit: number): void
   ];
   for (const [cw, dy] of courses) {
     pxRect(ctx, OUTLINE, cx - cw / 2 - 2, top + dy, cw + 4, 12, 2);
-    pxRect(ctx, '#123F4C', cx - cw / 2, top + dy, cw, 10, 2);
-    pxRect(ctx, '#2A7C90', cx - cw / 2, top + dy, 4, 10, 2); // lit cheek, all the way down
-    pxRect(ctx, '#061C23', cx + cw / 2 - 5, top + dy, 5, 10, 2); // …and the dark one
+    pxRect(ctx, body, cx - cw / 2, top + dy, cw, 10, 2);
+    pxRect(ctx, cheek, cx - cw / 2, top + dy, 4, 10, 2); // lit cheek, all the way down
+    pxRect(ctx, dark, cx + cw / 2 - 5, top + dy, 5, 10, 2); // …and the dark one
   }
   // Rim, one step wider again and dark: the lip a lens sits behind.
   pxRect(ctx, OUTLINE, cx - 42, bottom - 12, 84, 5, 2);
@@ -1763,8 +1779,14 @@ function drawRestored(ctx: CanvasRenderingContext2D, r: number): void {
    * It lands under the terminal, the colleague and the player, so the figures stay
    * saturated against it.
    */
-  ctx.fillStyle = `rgba(178,230,244,${(0.11 * r).toFixed(3)})`;
+  // Cool and light, and held back now that the shell itself goes to the Head Office's
+  // warm plaster: at 0.11 over a light room it read as a blue filter.
+  ctx.fillStyle = `rgba(178,230,244,${(0.05 * r).toFixed(3)})`;
   ctx.fillRect(0, 0, W, H);
+  // The floor comes up with the walls — the lobby's warm stone laid over the tile, so the
+  // joints still show through and the ground band stays one step darker than the dado.
+  ctx.fillStyle = `rgba(196,184,160,${(0.5 * r).toFixed(3)})`;
+  ctx.fillRect(0, GROUND_TOP, W, H - GROUND_TOP);
 
   /*
    * …and the room gets LIGHT FITTINGS IT DID NOT HAVE (owner call: "add lights once
@@ -1876,7 +1898,7 @@ export function drawOffice(
     const base = faulty ? 0.05 : 0.62;
     const strike = reduced || r > 0.5 || !faulty ? 1 : hash2(Math.floor(t * 9), i) > 0.4 ? 1 : 0.1;
     const lit = Math.min(1, (base + (1 - base) * r) * strike);
-    spotLight(ctx, cx, lit);
+    spotLight(ctx, cx, lit, r);
     litSurfaces(ctx, cx, lit);
     floorPool(ctx, cx, lit);
   }

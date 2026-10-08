@@ -30,14 +30,35 @@ function atTheHatch(): Simulation {
   return sim;
 }
 
-function drop(sim: Simulation): void {
+/** Open the hatch. The room's briefing card comes up and waits. */
+function openHatch(sim: Simulation): void {
   sim.step(DT, makeInput({ shootPressed: true }));
 }
 
-/** Play the wall down with a tracking paddle, then walk into the shaft. */
+/** Press on every frame a card is up, until it is gone (the grace swallows early ones). */
+function pressThroughCard(sim: Simulation): void {
+  for (let i = 0; i < 120 && sim.bonusCard; i += 1) {
+    sim.step(DT, makeInput({ anyPressed: true }));
+  }
+}
+
+/** Open the hatch and press through the briefing card: the room is running. */
+function drop(sim: Simulation): void {
+  openHatch(sim);
+  if (sim.inBonus) pressThroughCard(sim);
+}
+
+/**
+ * Play the wall down with a tracking paddle, walk into the shaft, and press through the
+ * congratulations card that comes up once it has carried him out.
+ */
 function clearTheWall(sim: Simulation, maxSeconds = 150): void {
   const frames = Math.round(maxSeconds / DT);
   for (let i = 0; i < frames && sim.inBonus; i += 1) {
+    if (sim.bonusCard) {
+      sim.step(DT, makeInput({ anyPressed: true }));
+      continue;
+    }
     const stage = sim.bonus!;
     const cx = sim.player.box.x + sim.player.box.w / 2;
     const want = stage.remaining === 0 ? BONUS.ROOM.TUNNEL_CX : stage.ballState?.x;
@@ -122,6 +143,68 @@ describe('the secret tunnel — getting in', () => {
     clearTheWall(sim);
     expect(left).toBe(1);
     expect(entered).toBe(1);
+  });
+});
+
+describe('the secret tunnel — its two cards', () => {
+  it('briefs the room on the drop, holds it still, and starts it on a press', () => {
+    const sim = atTheHatch();
+    openHatch(sim);
+    expect(sim.inBonus).toBe(true);
+    expect(sim.bonusCard).toBe('brief');
+    // Still PLAYING: the cards are the room's own, not a GameState.
+    expect(sim.state).toBe('PLAYING');
+    const y = sim.player.box.y;
+    // It waits: two seconds untouched and nothing in the room has moved.
+    for (let i = 0; i < 120; i += 1) sim.step(DT, makeInput({ right: true }));
+    expect(sim.bonusCard).toBe('brief');
+    expect(sim.bonus!.clock).toBe(0);
+    expect(sim.player.box.y).toBe(y);
+    // The act key that opened the hatch is still down on the card's first frames, so
+    // a press inside the grace is swallowed.
+    const fresh = atTheHatch();
+    openHatch(fresh);
+    fresh.step(DT, makeInput({ anyPressed: true }));
+    expect(fresh.bonusCard).toBe('brief');
+    pressThroughCard(fresh);
+    expect(fresh.bonusCard).toBeNull();
+    fresh.step(DT, makeInput());
+    expect(fresh.bonus!.clock).toBeGreaterThan(0);
+  });
+
+  it('congratulates him once the shaft has carried him out, and hands back the plaza on a press', () => {
+    const sim = atTheHatch();
+    drop(sim);
+    const frames = Math.round(150 / DT);
+    for (let i = 0; i < frames && !sim.bonusCard; i += 1) {
+      const stage = sim.bonus!;
+      const cx = sim.player.box.x + sim.player.box.w / 2;
+      const want = stage.remaining === 0 ? BONUS.ROOM.TUNNEL_CX : stage.ballState?.x;
+      let input = makeInput();
+      if (want !== undefined) {
+        if (want > cx + 8) input = makeInput({ right: true });
+        else if (want < cx - 8) input = makeInput({ left: true });
+      }
+      sim.step(DT, input);
+    }
+    expect(sim.bonusCard).toBe('clear');
+    expect(sim.bonus!.remaining).toBe(0);
+    // The plaza waits behind the card.
+    for (let i = 0; i < 120; i += 1) sim.step(DT, makeInput({ right: true }));
+    expect(sim.inBonus).toBe(true);
+    expect(sim.state).toBe('PLAYING');
+    pressThroughCard(sim);
+    expect(sim.inBonus).toBe(false);
+    expect(sim.bonusCard).toBeNull();
+    expect(sim.screenId).toBe(5);
+  });
+
+  it('is dropped with the room by a reset', () => {
+    const sim = atTheHatch();
+    openHatch(sim);
+    expect(sim.bonusCard).toBe('brief');
+    sim.reset();
+    expect(sim.bonusCard).toBeNull();
   });
 });
 

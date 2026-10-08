@@ -5,7 +5,7 @@ a session. **Same authority as §4**: where doc 01 or `07_Analytics_and_Lead_Han
 disagree, this wins — they predate every revision here. Rationale for every line is in
 `docs/JOURNAL.md`; the rules these passes produced are in `docs/INVARIANTS.md`.
 
-`HANDOFF.md` §4.1–§4.8 still holds the model *proper* (stakes, lives, badges, the four verbs,
+`docs/MODEL.md` §4.1–§4.8 (moved verbatim from `HANDOFF.md`) holds the model *proper* (stakes, lives, badges, the four verbs,
 the receipt). Read that first; read the screen you are touching from here.
 
 **Screen order:** Head Office (0) · Setup Delays (1) · Compliance (2) · Workplace (3) ·
@@ -48,7 +48,12 @@ The pair is: `SCREEN_CLEAR` (well done for the stage *behind* you) → press →
 cleared, which is why `Simulation.clearedScreenId` exists and why the next screen is not loaded until that
 card is left (`docs/INVARIANTS.md`). There are five of them — the Tech Park is reached by a congratulations
 card and does not produce one, because a card in front of the win receipt is the receipt's own headline said
-twice.
+twice. The Engine Room has its own pair (§4.15), one card at each end.
+
+**All three cards are one 8-bit panel** (`.beam-run__stack--titlecard`: the HUD plaque's fill, bevel and
+rail at 4px, `fit-content` so the rail hugs the widest line) over a 90% wash with a 3px blur. Before it,
+the card's type sat straight on the stage and every stage's own lettering (the lobby sign, NOTARY, the
+WORKPLACE plaque) read through it.
 
 | Cleared | Credit (`COPY.clearCard.title`) | Hand-off (`COPY.clearCard.line`) |
 |---|---|---|
@@ -72,13 +77,13 @@ Head Office and the Tech Park would be advice the room cannot obey, and those tw
 
 | Screen | Headline (`COPY.deathCard.title`) | The instruction (`COPY.deathCard.line`) |
 |---|---|---|
-| Setup Delays (1) | Denied! | Take the ANSR powerup to avoid further delays. |
-| Compliance (2) | Non-compliance is a non-option! | Take the ANSR powerup to avoid legal drama. |
-| Workplace (3) | Looks like the floor fell under you! | Take the ANSR powerup to build your workspace. |
-| Hire Under Fire (4) | Declined! | Take the ANSR powerup to hire faster and better. |
+| Setup Delays (1) | Denied! | Take the ANSR powerup to avoid further delays |
+| Compliance (2) | Non-compliance is a non-option! | Take the ANSR powerup to avoid legal drama |
+| Workplace (3) | Looks like the floor fell under you! | Take the ANSR powerup to build your workspace |
+| Hire Under Fire (4) | Declined! | Take the ANSR powerup to hire faster and better |
 
-The headline is the **system's own word** and never the player's fault; the instruction is in the value
-orange and is aimed at the specific thing this stage would have done differently. It replaced
+The headline is the **system's own word** and never the player's fault; the instruction is **white**, set directly under the turning orange sunburst it names (owner
+call, 2026-10-08: the mark moved down from over the headline, and the line gave up the orange to it), and is aimed at the specific thing this stage would have done differently. It replaced
 `lifeLost.retryHint` — one generic orange line on the briefing card of a retry — and that surface is
 **deleted**, not merely unused (`docs/INVARIANTS.md`).
 
@@ -86,7 +91,7 @@ orange and is aimed at the specific thing this stage would have done differently
 etc.", and "move the controls copy to the game screen rather than the opening screen, like a play through",
 with F introduced "when it is relevant"). The briefing card composes, top to bottom: the level number as an
 eyebrow (`COPY.titleCard.tag`, five entries — the Tech Park is the arrival, not a level), the stage name, the
-brief, **the control legend on two of the six cards**, then the cap.
+brief, then the cap — and, **on two of the six cards, the control legend as its own plate under the card**.
 
 | Card | Legend | Why there |
 |---|---|---|
@@ -96,6 +101,21 @@ brief, **the control legend on two of the six cards**, then the cap.
 `LEGEND_ON_SCREEN` in `Game.ts` is the single line that decides this, and it is a fact about the levels
 rather than a preference. The fire cap is shown alone deliberately — reprinting move and jump beside it
 would bury the one control that is news in two the player has used for three stages.
+
+**The legend sits OUTSIDE the teal card, centred under it (owner call, 2026-09-29: "move the controls out
+of the main blue box")**: `.beam-run__card-group` holds the card stack and the legend and is the overlay's
+only child — the overlay centres first/last children with auto margins, so a hidden legend as a direct last
+child would drop the card to the bottom. The card is tag, name, brief, cap again.
+**The legend is a grey 8-bit tile (owner call, 2026-09-29)**: `.beam-run__keys` is a shrink-wrapped `#3A4044`
+plate with the caps' bevel-and-rail treatment, a faded **CONTROLS** caption (`COPY.legend.heading`, ink
+`#8E979C`, `PX_TYPE.keyHeading`) over a centred `.beam-run__keys-row` of caps, labels in `#E6E6E6`. Top/bottom
+padding equals the caption-to-caps step; left/right are 1.5x it. Rastered in headless Chrome at 1280 and 800.
+
+**Keyboard devices only (owner call, 2026-09-29: "in non desktop mode we are not showing the controls
+anywhere").** On touch neither card carries a legend — the thumb pads redrawn as round caps were cut, with
+their copy (`moveJumpTap`/`fireTap`) and CSS (`--pad`/`--small`). `Overlays.show` drops `data.legend` when
+`touch` is set, so the host's `LEGEND_ON_SCREEN` stays device-blind. The in-game act prompts already drew
+no key cap on touch (verb plaque only), so on a touch device no key or control guide appears anywhere.
 
 **Stage names moved to `levels.json`'s `copy.titleCard`** and `name` stays what analytics, the HUD plaque
 and the receipt use: **The Head Office · Setup Delays · The Compliance Maze · The Fit-Out Trap · Hire Under
@@ -134,9 +154,9 @@ against the 72% title cap: 37/30/48/40/37/60%.
    removed, the only surfaces the flood can stand on are the ground and the deck.
    **And the ANSR badge does not put a halo on the hero here** (owner call) — it clears the
    **weather** instead (§ below).
-   Five monsters (**EXIM, INTERCO, NOTARY, BOARD, TP PACT** — owner call: the old TAX / GST / LEGAL /
-   ENTITY / AUDIT named the *departments* a filing goes through, these name the **filings**, which are
-   the things that actually come back) wander one corridor each, re-rolling direction *and* speed at every junction from a seeded
+   Five monsters (**TRADE REG., IC TERMS, NOTARY, GOVERNANCE, TP DOCS** — owner call, 2026-09-29,
+   replacing EXIM / INTERCO / NOTARY / BOARD / TP PACT, which had replaced the old TAX / GST / LEGAL /
+   ENTITY / AUDIT *departments*: these name the **filings**, which are the things that actually come back) wander one corridor each, re-rolling direction *and* speed at every junction from a seeded
    generator — the player is never an input, so they are unpredictable rather than hunting.
    **The exodus is a walk** (owner call): `GATHER_SPEED` 420 → **160**, above their own `SPEED_MAX`
    (132) and well under the player's 260, so the whole thing takes ~4s rather than 1.8s. The leftover
@@ -157,11 +177,14 @@ against the 72% title cap: 37/30/48/40/37/60%.
    the screen floor and the head to the gate's own row (`gy 14`), so rendering both from one ground
    line stacks them into a lump ·
    the architecture is **brown** · the five names are framed plaques
-   **on the monsters**, and signage in the sky has been rejected twice. **Seven characters is the ceiling
-   on a name**, and that is the maze's geometry rather than taste: set at scale 2 over a creature 5 tiles
-   wide, with five of them converging on one landing, the long forms are 18+ characters of near-white lying
-   across half the screen — exactly the unreadable block the plaque is *dropped* on settling to avoid.
-   `screen2.test.ts` holds every authored name to 7, uppercase and apostrophe-free.
+   **on the monsters**, and signage in the sky has been rejected twice. **The plates stay on after the
+   powerup and at rest, and never overlap** (owner call, 2026-09-29; the old 7-character ceiling and the
+   "drop the plate on settling" rule are both gone). `render/maze.ts` `layoutNamePlaques` places each plate,
+   in authored order, in the first slot that clears the ones already placed: walking, over the head then
+   a row higher; settled, over the head then **under the feet** on the landing's face. `GATHER_SPACING`
+   went 40 → 60 so the rest layout is three over the heads (TRADE REG., NOTARY, TP DOCS) and two under
+   (IC TERMS, GOVERNANCE one row lower) rather than a staircase. `screen2.test.ts` checks no overlap on
+   every frame of the walk home and that every character is in the 5×7 font.
    **Contact costs a life, and the player is now visibly FILED for it** (owner call: "add a death
    animation for this screen — what happens to the player when he dies"). `drawFiled` buries him in a
    mound of forms to the chest, uneven course by course, with loose sheets still coming down and the
@@ -170,8 +193,9 @@ against the 72% title cap: 37/30/48/40/37/60%.
    who did it. Third of the game's three death poses, after the stamp flattening the hero on screen 1
    and the tape wrapping him on screen 3 — this screen had none for four passes.
    **The mark itself has no halo any more** (owner call): the dashed ring is gone from both pickup
-   treatments, and what says "pickup" is the shaft, the wake, the chevron, the lit plinth and four
-   flare cells. `docs/INVARIANTS.md` lists the four rings that were tried; do not add a fifth.
+   treatments, and what says "pickup" on this perch is now only the contact shadow and the spin — the
+   flare cells went first and the lit plinth went later (owner call: "a weird orange line below the
+   powerup — remove that"; a 36×4 strip in the mark's own tone read as an underline). `docs/INVARIANTS.md` lists the four rings that were tried; do not add a fifth.
    **NOTARY rides the hoist** (`MonsterSpec.hoist`), because the plate is a level of the maze and a
    level with no monster on it is a free walk; its feet read the plate's live top, never a row in
    `levels.json`.
@@ -303,6 +327,12 @@ against the 72% title cap: 37/30/48/40/37/60%.
    (owner call). Canopy in the aperture, stem, then a can that **flares** 44 → 72 towards a lit lens, with
    the services duct **cut** around each of them (`CEILING.DUCT_GAP`). Still no beam: lens face, floor pool
    (now 130 half-width, so the four pools no longer meet) and up-facing edges ·
+   · **the fixed room is the Head Office's colours** (2026-09-29, owner: "make the office lighter like the
+   first screen, but only after the mummy fixes things"). `drawSceneBackground`'s third dial `restore`
+   (screen 3 only, read off the Workplace hazard in `Game`) walks the shell (`WALL_BROKEN→WALL_FIXED`),
+   the furniture (lobby walnut) and the ceiling/duct/glazing metal (lobby soffit) from dark to light; the
+   spotlights' metal follows it in `workplace.ts`, and the restored layer lays the lobby's warm stone over
+   the floor and drops its cool wash to 0.05. The broken room is unchanged ·
    · **the room came off the teal axis.** Warm grey-olive plaster (`WALL`) and warm dark furniture
    (`FURN`, plus `DAMAGE` for the mess), a **cool** ceiling so it does not read as a sepia filter, and cool
    daylight in the glazing — so below the dado rail the only teal left in the room is the player, and the
@@ -335,6 +365,64 @@ against the 72% title cap: 37/30/48/40/37/60%.
    belly, and a **mandible with mass** under the jaw when it opens. The fallen costume was re-authored with
    it (87×22 at scale 3): the suit and the beast are on screen together through `stripping`, so they cannot
    be at two cell sizes.
+   **Rebuilt a fifth time (2026-09-29, owner: "make it look like actual Godzilla, this looks more like a
+   bigger lizard/frog"):** same 80×63 grid at scale 3 and same jaw registration, new animal — **charcoal
+   hide** (`#4A5650`, shade `#28302D`, lit `#77877D`, keyline `#0C1110`) instead of crimson, a **small head**
+   on a thick neck over a **pear-shaped body** heaviest at the thighs, short bent arms, grey ridged chest
+   plates instead of a cream belly, and ten big **bone dorsal plates** (`#CFCBB8`, darker bases) anchored on
+   the real back edge and largest over the shoulders. Generated from part masks in a throwaway script;
+   only the literal ships. The costume follows through the shared palette.
+   Same day, second note ("muscular abdomen and above; the face is too sharp, Godzilla is rounder"):
+   the skull became ellipses sloping from dome to a blunt snout with a cheek muscle, and the upper body
+   gained shoulder, pectoral, four abdominal segments (chest tones `#9AA595`/`#78836F`), quad and calf
+   masses lit on their own contours.
+   Third face note ("still too sharp and elongated — fuller, muscular, defined, carry some weight"):
+   the head now spends its weight **vertically** — taller dome (rows 1–16), a deep blunt upper muzzle,
+   one broad lower jaw with a flat underside, a bigger jowl with a crease back from the mouth corner, a
+   lit brow ridge, and a thicker neck. Mouth registration (`JAW_ROW` 10, hinge 62, tip 77) and the
+   hazard's `MOUTH_*_FRACTION` are unchanged, so the fire leaves the same cell.
+   **Maple plates and a domed head (2026-09-29, owner: "less pointy ones" + "the head is less beaky, less
+   inclined forward, more weight on top"):** every triangular dorsal plate was rebuilt as a rounded
+   **maple** plate (a dome with three round lobes at the crown, same anchor and direction as the triangle
+   it replaced), shaded in three tones — `F` rim `#E6E2D0`, `f` face `#CFCBB8`, `d` root `#9E9A88`; `c`
+   (`#BCAE8C`) is now upper teeth and claws only. Rows 0–10 of the skull were re-cut: crown a row higher
+   (row 0) and 3 cells further back so its high point sits over the eye, and a near-vertical blunt front
+   instead of the forehead-to-tip diagonal that read as a beak. Mouth row, teeth and lower jaw untouched.
+   Colours otherwise as shipped (charcoal); 12 alternative palettes were previewed and not taken.
+   **It walks, and the jaw moves as one piece (2026-09-29, owner: "the feet don't move and that looks
+   weird … and other muscles where required" + "when it's throwing flame the lower jaw is getting
+   elongated"):** the grid is split into parts at load (`BEAST_CELLS` in `render/dragon.ts`: tail, body,
+   near/far leg below row 50, near forearm rows 29–35, lower jaw rows 11–16 in front of the hinge) and each
+   part is offset by whole cells per frame. While it shifts its weight between bursts the legs step
+   (shin sheared from the knee, foot lifted by compressing the shin, stride phase read off `box.x` so a
+   planted foot does not skate, `STRIDE_PX` 60), the body sinks a cell on each footfall, the forearm swings
+   against the near leg and the tail tip rides the steps. The hazard's `gait` dial (0..1, eased over
+   `GAIT_EASE` 0.25s) brings the stride in and settles both feet for every burst; the stride is dropped
+   under reduced motion like the hero's run cycle. The tail also lifts with `jawOpen` (roar, wind-up,
+   burn) — a pose, so it survives reduced motion. The **lower jaw now drops rigidly**, each column by its
+   distance from the hinge, with the maw only in the gap it leaves; before, a hole was painted down from
+   the lip with a thin mandible under it while the shut jaw stayed put, which read as a jaw stretched to
+   twice its depth. The drop is `JAW_MAX_CELLS` **5** (was 8; owner: "the face when throwing fire still
+   feels elongated, maybe 2–3 pixels") — every cell of drop is a cell of extra head height.
+   **It stomps (2026-09-29, owner: "when the player reaches the Godzilla it should stomp on the player
+   like an animal would, and the player should flatten and die, and the screens that come up should
+   come like in other levels"):** new cause `'stomp'` (tag `HEADCOUNT CUT`). Within `STOMP_TRIGGER` 60px
+   of its front foot (`STOMP_FOOT_X` 51px ahead of its centre), past the roar, it lifts
+   that foot for `STOMP_WINDUP` 0.45s over where the player was (clamped to `STOMP_REACH` 21px), slams
+   it over `STOMP_SLAM` 0.08s onto an 84×60 footprint (the only lethal part), then stands on it for
+   `STOMP_RECOVER` 0.7s and steps home; it neither drifts nor turns while a foot is up. A miss thuds and
+   shakes the frame and kicks dust. A hit is an ordinary setback — shake, flash, "HEADCOUNT CUT +2
+   MONTHS" into the log, the impact beat with the hero in the **same flattened pose as the DENIED
+   stamp** and the foot repainted on top of him (`drawDragonFoot`), then this stage's death card,
+   "Try again", the retry briefing card; on the last life, the game-over card. **It stomps a haloed
+   player too** (owner call) — the foot comes down on the bubble and books nothing.
+   **It cannot be walked past until it is beaten** (owner call, same day: "without killing the Godzilla
+   the player should not be able to cross it"). Its body from `BARRIER_X` 75px either side of its centre
+   (the front of its toes) is a full-height wall until `stripping`, enforced by `Dragon.holdBack` pushing
+   the player back out rather than as a physics solid (a drifting solid is resolved on Y by gravity and
+   would stand him on its head). A player held there is 38px from the front foot, so reaching it means
+   being stomped; turning and running as the foot rises escapes. **This reverses the old rule that the
+   stage is crossable without its powerup** — the only way to the exit is the badge and four clean jets.
    **Its ending is rebuilt with it:** the fall is a real **pivot** about a point between the feet, eased,
    with a compression, ground shadow and dust kicks over its last fifth (all on sim time, so they survive
    reduced motion); the costume opens as a **side hatch at the hazard's own `door`** — a tapered cavity
@@ -348,8 +436,14 @@ against the 72% title cap: 37/30/48/40/37/60%.
    its patch of floor, shifting inside `ROOST_DRIFT`, and attacks with **one straight, growing,
    slightly diverging cone of fire** thrown from its jaw down the lane in front of it: 0.65s of cream
    scorch marks along the floor first, then the flame grows out to `CONE_REACH` over `CONE_GROW` and
-   stands there for the rest of `BURST_TIME`. **Nothing travels** — no fireballs, no rolling fronts —
-   so the dangerous floor is a fixed strip with a rhythm. One of the screen's taunts rides each burst
+   burns for the rest of `BURST_TIME`. **Nothing travels** — no fireballs, no rolling fronts. **The fire
+   is a jet aimed at the player** (owner call, 2026-09-29: "follow the player … more natural", "the fire
+   need not be in the angle it is in"): straight from the jaw at their centre, landing and splashing
+   along the floor when aimed down (`FLAME_SPLASH`), ending in the air when not. The aim is held for the
+   wind-up, then **eases** after them (`AIM_EASE`, capped at `AIM_TURN_RATE`), follows a jump up to
+   `AIM_UP`, and holds once they are behind the jaw; fire already in the air keeps its direction, so a
+   swinging jet bends like a hose. The taunt is written along it. Known trade: a jet aimed low and
+   close crosses the name plate, which sits under the old lane. One of the screen's taunts rides each burst
    on a plaque that **does not move** (owner call); the next burst brings the next taunt. The four are
    **OFFER DROPOUT · POOL TOO NARROW · COUNTER OFFER · 90-DAY NOTICE**, authored in `levels.json`; two of
    them are the owner's rewording of an earlier pair. CANDIDATE DECLINED → OFFER DROPOUT, because a candidate
@@ -406,6 +500,12 @@ against the 72% title cap: 37/30/48/40/37/60%.
    cliff at a 3.6s crossing, gx 16 holds the full 0.40s window. `FALL_TIME` came down 0.55 → 0.35 with it,
    because the fall spends exactly the lead the crossing buys and the mark was landing level with his
    shoulder instead of 30px in front of him.
+   **Nothing of the delivery is painted on the floor** (owner call: "a blue bucket thing on the floor
+   below the powerup brick", "a weird orange line below the powerup"). `render/carrier.ts` used to draw a
+   cyan landing bracket with two posts and a chevron, landing dust and a footprint (orange when urgent)
+   at the ground band — left over from when the mark landed on the floor, so all of it sat under the
+   brick. The brick is the landing affordance now; the live mark keeps only its flare cells, clock ring
+   and "TAKE IT" plaque.
 13. **Screen 0 is called "Head Office"** (owner call — it was "Reception" for the whole build until
    this pass), and it is **an office lobby INTERIOR**.
 
@@ -427,7 +527,7 @@ against the 72% title cap: 37/30/48/40/37/60%.
    ("Every plan looks clean from the lobby.") — a head office has a lobby, and the line still names
    the real thing rather than echoing a word from the cap above it.
 
-   **The wall sign says HEAD OFFICE too** (owner call, later pass). It read
+   **The wall sign says HEADQUARTERS too** (owner call, later pass; briefly HEAD OFFICE). It read
    "MARKET ENTRY: ON PAPER" — the verdict on the stage, written on the one piece of furniture in the
    game whose job is to say where you are. A directory board in a lobby names the building; it does
    not editorialise about the plan inside it, and that verdict is already made twice on this screen
@@ -470,7 +570,7 @@ against the 72% title cap: 37/30/48/40/37/60%.
    pixels.
 
    **Each stamp names one of the four setup approvals, and DENIED has moved onto the rubber die** (owner
-   call). Left to right, in the order a real setup hits them: **ENTITY · BANKING · TAX IDS · DIR KYC**
+   call). Left to right, in the order a real setup hits them, in the owner's exact terms: **ENTITY · BANKING · TAX · MCA**
    (Legal Entity Formation · Banking Account Setup · PAN/TAN/GST Registration · Director Forms), authored on
    the stamp entries in `levels.json` because they are drawn content. Four identical stamps shouting one word
    was one piece of information repeated four times; four stamps each refusing a *different* approval is the
@@ -504,6 +604,14 @@ against the 72% title cap: 37/30/48/40/37/60%.
    is now the same *kind* of pickup as the Compliance perch: you stop under it (or hold BACK to come
    back to it) and take it when it drops, ~3.6s in. Both halves are pinned in `badgeReach.test.ts`;
    the trade is `docs/OPEN.md` §18 and the arithmetic is in `docs/INVARIANTS.md`.
+   **With 1Wrk every stamp head is a solid block at every point of its stroke** (owner call, 2026-09-29:
+   "if a user manages to jump on the stamp at any time it should act as an actual solid thing"). Parked,
+   slamming, held or lifting, its side stops you as a wall, its underside bonks a jump, and its top can be
+   stood on; a moving head carries its rider (up to the parked row at y 242, and back down with the next
+   slam — he gets off by jumping or walking off). This replaced the one-way platform that was only solid
+   while coming down or held. **Without the badge it is still not solid** (a judgement call, not the
+   owner's words: a solid stamp would park an unassisted player against its side instead of flattening
+   him, which dissolves the tuned reflex test), so any contact still costs a life. `Stamps.solids` / `carry`.
 
 15. **THE ENGINE ROOM is a secret stage under the Tech Park, and it is the only place the game says
    what happens AFTER go-live** (owner call: "add a secret tunnel in which the user can go in and this
@@ -544,10 +652,12 @@ against the 72% title cap: 37/30/48/40/37/60%.
    person has some time to see the screen and understand") — the fifteen phrases on that wall are the point
    of the stage, and at 4.8s nobody had read one. Every later serve comes on `BALL.RESPAWN_GAP`.
    The tray is carried **above his head** (a paddle at foot level puts his body in the ball's lane); the
-   skateboard is `SKATE_SPEED_MULT` **2.0** — 520 px/s, twice the run and the only place in the game he is
-   quicker than it (owner call), set to match the mark's own fastest sideways pace of 508 so the rally is
-   not a chase he loses by arithmetic; jump is masked, because there is nothing to jump onto and a jump
-   would take the bounce line with it.
+   skateboard is `SKATE_SPEED_MULT` **2.4** — 624 px/s (was 2.0 / 520, set to match the mark's fastest
+   sideways pace of 508; the owner then asked for "a bit" more, 2026-09-29), the only place in the game he
+   is quicker than the run; jump is masked, because there is nothing to jump onto and a jump
+   would take the bounce line with it. **On the lift out the whole kit stays behind** (owner note: only the
+   tray used to, hanging in mid-air): the board on the floor under the tray, two posts between them, drawn
+   in the room pass *behind* the hero so he is lifted out of it (`leftBehindKit`, render/brickBreaker.ts).
 
    **The wall.** 24 blocks, 6 × 4, 176×40, **colour-coded by row**, read bottom-up in the order the ball
    takes them: footprint (cyan — add centres, add locations, workspace expansion) · people (mint —
@@ -597,7 +707,18 @@ against the 72% title cap: 37/30/48/40/37/60%.
 
    **The HUD is off in here** (`Hud.setBare`), because nothing in the room can cost a life or a month and a
    delay log would be furniture that lies — but the wrapper and its live region stay, so the stage can still
-   announce itself. It says its name big for three seconds and then keeps it **stencilled on the floor**.
+   announce itself. Its name is **stencilled on the floor** once the briefing card is gone.
+
+   **Its two cards** (owner call, reversing "a card would announce the discovery back to the player who made
+   it": the hidden level gets transition screens like every other stage). The drop opens a **briefing card**
+   — eyebrow `HIDDEN LEVEL` (`COPY.bonus.tag`), `THE ENGINE ROOM`, and the line the frame used to paint for
+   three seconds, `LIVE IS DAY ONE, NOT THE FINISH` (`COPY.bonus.brief`, set at an 18-char measure so it
+   breaks on its comma) — and the room's clock does not start until it is pressed, so the owner's 1.5 / 3.6
+   / 7.6s sequence is measured from the press. The lift out opens a **congratulations card** —
+   `HUMMING ALONG!` / `BUILT, STAFFED, GROWING. BACK UP TOP.` (`COPY.bonus.clear`) — over the emptied
+   room, and the plaza comes back on the press. Both are `Simulation.bonusCard` sub-states of `PLAYING`,
+   not GameStates, with the same 0.4s press grace as every card; the three-second on-frame title is
+   deleted (it printed the name the card prints).
 
    **Its NAME, which the owner rejected once.** It was *The Growth Floor* and it is **THE ENGINE ROOM**
    now, with **LIVE IS DAY ONE, NOT THE FINISH** as the line under it (was "LIVE IS WHERE THE WORK

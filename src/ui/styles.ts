@@ -34,6 +34,16 @@ export const STYLE_ELEMENT_ID = 'beam-run-styles';
  * units are unsupported; see the @supports block below `.beam-run__stage`.
  */
 const U = (n: number): string => `calc(${n} * var(--beam-run-u))`;
+/**
+ * A design pixel: 1px on any frame up to the native 1280, and growing with the frame
+ * past it (`--beam-run-px`, set on the stage). Every px *ceiling* in this sheet is
+ * written with it, because the standalone site lifts the 1280px display cap: with
+ * plain px ceilings every overlay line and panel stopped growing at ~1300-1650px
+ * while the canvas kept scaling, so on a 1920 or 2560 screen the cards and the title
+ * screen read as a small island in the middle of a big picture. Floors stay plain
+ * px (they are legibility minimums on small frames, where this is exactly 1px).
+ */
+const P = (n: number): string => `calc(${n} * var(--beam-run-px, 1px))`;
 
 /**
  * Shared plaque behind every HUD readout: the legibility fix (never bare text
@@ -93,6 +103,7 @@ export const CSS = `
  */
 .beam-run__stage {
   --beam-run-u: 1vw;
+  --beam-run-px: max(1px, calc(var(--beam-run-u) * 100 / 1280));
   position: relative;
   width: 100%;
   max-width: min(
@@ -188,7 +199,7 @@ export const CSS = `
 /* Gutter = the inset every HUD readout keeps from the frame edge, plus the
    device safe area so a notch or home indicator never sits on a readout. */
 .beam-run__hud {
-  position: absolute; inset: 0; padding: clamp(8px, 2.2%, 22px);
+  position: absolute; inset: 0; padding: clamp(8px, 2.2%, ${P(22)});
   display: none; pointer-events: none;
 }
 .beam-run__hud--visible { display: block; }
@@ -203,16 +214,16 @@ export const CSS = `
  * belongs to the thumb controls).
  */
 .beam-run__hud-stack {
-  position: absolute; top: calc(clamp(8px, 2.2%, 22px) + env(safe-area-inset-top, 0px));
+  position: absolute; top: calc(clamp(8px, 2.2%, ${P(22)}) + env(safe-area-inset-top, 0px));
   display: flex; flex-direction: column; gap: 8px;
-  max-height: calc(100% - clamp(16px, 4.4%, 44px));
+  max-height: calc(100% - clamp(16px, 4.4%, ${P(44)}));
 }
 .beam-run__hud-stack--left {
-  left: calc(clamp(8px, 2.2%, 22px) + env(safe-area-inset-left, 0px));
+  left: calc(clamp(8px, 2.2%, ${P(22)}) + env(safe-area-inset-left, 0px));
   align-items: flex-start;
 }
 .beam-run__hud-stack--right {
-  right: calc(clamp(8px, 2.2%, 22px) + env(safe-area-inset-right, 0px));
+  right: calc(clamp(8px, 2.2%, ${P(22)}) + env(safe-area-inset-right, 0px));
   align-items: flex-end;
 }
 .beam-run__hud-row {
@@ -304,21 +315,38 @@ export const CSS = `
 /* Overlays ------------------------------------------------------------- */
 .beam-run__overlay {
   position: absolute; inset: 0; display: none;
-  flex-direction: column; align-items: center; justify-content: center;
-  gap: clamp(6px, 1.6%, 14px); text-align: center;
+  flex-direction: column; align-items: center; justify-content: flex-start;
+  gap: clamp(6px, 1.6%, ${P(14)}); text-align: center;
   padding: 5% 7%; pointer-events: auto; overflow-y: auto;
   background: rgba(0, 30, 39, 0.92);
   backdrop-filter: blur(2px);
 }
 .beam-run__overlay--visible { display: flex; animation: beam-run-overlay-in 0.22s ease-out both; }
 /*
+ * Centred with auto margins, not with justify-content (which is flex-start above for
+ * exactly this reason). A flex column centred by justify-content overflows BOTH ends once it is taller than the frame, and the
+ * part above the top edge is outside the scroll range: on a 16:9 frame 450px tall
+ * (an 800x600 window) or a phone in landscape, the win receipt lost its brand line
+ * and headline and the assist dialog lost its title, with no way to scroll to them.
+ * Auto margins centre exactly the same when there is room and collapse to zero when
+ * there is not, so the content starts at the top and the rest scrolls. The keyword
+ * safe center would do this too, but it is not supported by every Safari still on
+ * phones. The title screen is excluded: it is top-anchored by its own composition.
+ */
+.beam-run__overlay:not(.beam-run__overlay--start) > :first-child { margin-top: auto; }
+.beam-run__overlay:not(.beam-run__overlay--start) > :last-child { margin-bottom: auto; }
+/*
  * The briefing card. It used to be a 1.2s caption over the stage, so a light 55%
  * wash was right; it is a reading surface now (a stage name, a line about what is
- * in the stage, and a button that starts it), and it waits. Denser wash so the
- * type carries, but still short of the scene overlays' 92% — the screen behind it
- * is the thing being described, and a glimpse of it is part of the briefing.
+ * in the stage, and a button that starts it), and it waits. The type sits on its own
+ * panel now (see the stack rule below), so the wash's only job is to turn the stage's
+ * own lettering into texture: 90% and a softer blur, still short of the base 92% —
+ * the screen behind is the thing being described, and a glimpse of it belongs here.
  */
-.beam-run__overlay--titlecard { background: rgba(0, 33, 42, 0.86); }
+.beam-run__overlay--titlecard {
+  background: rgba(0, 30, 39, 0.9);
+  backdrop-filter: blur(3px);
+}
 @keyframes beam-run-overlay-in {
   from { opacity: 0; transform: translateY(8px) scale(0.99); }
   to { opacity: 1; transform: none; }
@@ -355,22 +383,15 @@ export const CSS = `
       rgba(0, 18, 25, 0.34) 0%,
       rgba(0, 18, 25, 0.62) 100%
     );
-  gap: clamp(16px, 4%, 40px);
-  padding: clamp(18px, 5.5%, 56px) clamp(16px, 7%, 72px);
+  gap: clamp(16px, 4%, ${P(40)});
+  padding: clamp(18px, 5.5%, ${P(56)}) clamp(16px, 7%, ${P(72)});
 }
 /* End screens (win + the mid-run receipt): tighter frame, tighter lockup gap. */
 .beam-run__overlay--receipt {
-  padding: clamp(14px, 3.2%, 34px) clamp(14px, 4.5%, 48px);
-  gap: clamp(10px, 2.2%, 22px);
+  padding: clamp(14px, 3.2%, ${P(34)}) clamp(14px, 4.5%, ${P(48)});
+  gap: clamp(10px, 2.2%, ${P(22)});
 }
-/*
- * Title screen composition: the whole block (lockup + copy) is centred as one
- * unit — a top-pinned marquee read as a detached logo — but the lockup is the
- * title of the thing, so it sits at display size with a clear gap before the
- * copy underneath. The other big beat lives inside the copy (below the stake,
- * before the tagline).
- */
-.beam-run__overlay--start { gap: clamp(16px, 3.6%, 38px); }
+/* Title screen composition: see the TITLE SCREEN COMPOSITION note further down. */
 .beam-run__overlay--scene::before {
   content: ''; position: absolute; inset: 0; pointer-events: none;
   background: repeating-linear-gradient(
@@ -386,9 +407,9 @@ export const CSS = `
  */
 .beam-run__stack {
   position: relative;
-  width: min(100%, 660px);
+  width: min(100%, ${P(660)});
   display: flex; flex-direction: column; align-items: center;
-  gap: clamp(12px, 2.6%, 26px);
+  gap: clamp(12px, 2.6%, ${P(26)});
   text-align: center;
 }
 /*
@@ -398,7 +419,7 @@ export const CSS = `
  * groups* instead: the figure block, the meters, the receipt and the actions each
  * open with a bigger step, while the pieces inside a group stay close.
  */
-.beam-run__stack--receipt { width: min(100%, 720px); gap: clamp(5px, 1%, 10px); }
+.beam-run__stack--receipt { width: min(100%, ${P(720)}); gap: clamp(5px, 1%, ${P(10)}); }
 /* End-screen columns: stacked by default, side by side once the frame can carry
    it (see Overlays.columns — stacked, these screens are taller than a 16:9 frame
    and push the CTA below the fold). 900px is the smallest frame where the CTA cap
@@ -406,43 +427,132 @@ export const CSS = `
 .beam-run__cols,
 .beam-run__col {
   display: flex; flex-direction: column; align-items: center;
-  width: 100%; gap: clamp(5px, 1%, 10px);
+  width: 100%; gap: clamp(5px, 1%, ${P(10)});
 }
 @container (min-width: 900px) {
-  .beam-run__stack--receipt { width: min(100%, 1060px); }
+  .beam-run__stack--receipt { width: min(100%, ${P(1060)}); }
   /* Equal-width columns, tops aligned and now STRETCHED to one height: the two
      captions sit on one line and the two blocks under them share both edges, which
      is what makes the screen symmetrical on a clean run — where the cost side is
      three lines against the receipt's four rows. Centring each column's mass
      instead leaves the captions on different lines, which reads as a mistake. */
-  .beam-run__cols { flex-direction: row; align-items: stretch; gap: clamp(20px, 3%, 44px); }
+  .beam-run__cols { flex-direction: row; align-items: stretch; gap: clamp(20px, 3%, ${P(44)}); }
   .beam-run__col { flex: 1 1 0; min-width: 0; }
   /* The panel takes the slack, with its contents centred in it, so a short run gets
      a full-height box rather than a box floating above the fold of its column. */
   .beam-run__col--main .beam-run__cost { flex: 1 1 auto; justify-content: center; }
-  .beam-run__col--aside .beam-run__receipt { max-width: none; }
+  /* The receipt does the same from the other side: with the hint gone from under the
+     rows, a delayed run's cost panel can be the taller block, so the list grows to
+     the column's height and its four rows share the slack equally. Either way the two
+     blocks end on one line. */
+  .beam-run__col--aside .beam-run__receipt { max-width: none; flex: 1 1 auto; }
+  .beam-run__col--aside .beam-run__receipt-list { flex: 1 1 auto; }
+  .beam-run__col--aside .beam-run__receipt-row { flex: 1 1 auto; }
   /* The receipt starts its own column, so it no longer needs the group step that
      separated it from the meters when everything was one stack. */
   .beam-run__stack--receipt .beam-run__col--aside .beam-run__receipt { margin-top: 0; }
+  /* Same for the left caption: its stacked-layout step put "Months lost to delays"
+     ~10px below "What got you here" on the raster, so the two captions missed the
+     one line they are meant to share. */
+  .beam-run__stack--receipt .beam-run__col--main .beam-run__months-label { margin-top: 0; }
 }
 .beam-run__stack--receipt .beam-run__months-label,
-.beam-run__stack--receipt .beam-run__clock-line { margin-top: clamp(8px, 2%, 20px); }
+.beam-run__stack--receipt .beam-run__clock-line { margin-top: clamp(8px, 2%, ${P(20)}); }
 .beam-run__stack--receipt .beam-run__receipt,
-.beam-run__stack--receipt .beam-run__actions { margin-top: clamp(10px, 2.6%, 26px); }
+.beam-run__stack--receipt .beam-run__actions { margin-top: clamp(10px, 2.6%, ${P(26)}); }
 /* The unit sits with its figure; the verdict line sits just under it. */
 .beam-run__stack--receipt .beam-run__months { margin-top: 0; }
-.beam-run__stack--receipt .beam-run__matched { margin-top: clamp(6px, 1.6%, 16px); }
+.beam-run__stack--receipt .beam-run__matched { margin-top: clamp(6px, 1.6%, ${P(16)}); }
 /*
  * The title screen carries three things now — the offer, the buttons, one cap — so it
  * can breathe. (It held five: a three-line hook, a dare and Start.)
  */
-.beam-run__stack--start { gap: clamp(14px, 3%, 30px); }
+.beam-run__stack--start { gap: clamp(14px, 3%, ${P(30)}); }
 /* The offer sits with the hook it follows, not adrift between it and the cap. */
-.beam-run__stack--start .beam-run__brief { margin-top: clamp(-4px, -0.4%, 0px); }
+.beam-run__stack--start .beam-run__brief { margin-top: clamp(-4px, -0.4%, ${P(0)}); }
 /* The row of key caps that used to be here is on the briefing cards now (owner call:
    the controls belong on the game screen, introduced as they become relevant), so the
    title screen is back to three things: the hook, the offer, one cap. */
-.beam-run__stack--start .beam-run__actions { margin-top: clamp(8px, 2%, 22px); }
+.beam-run__stack--start .beam-run__actions { margin-top: clamp(8px, 2%, ${P(22)}); }
+/*
+ * TITLE SCREEN COMPOSITION - TYPE IN THE SKY, ART LEFT ALONE.
+ *
+ * The copy used to be centred on the frame under the same full-frame chequer wash
+ * the end screens use. That put START on the skyline and dimmed the whole attract
+ * scene to mud, so the one picture that tells the pitch (the hero, the rising
+ * market, the lit ANSR tower) was the thing nobody could see. A title screen reads
+ * top to bottom like a poster: the marquee and the hook in the open sky, the world
+ * underneath at full strength.
+ *
+ * So the block is pinned to the top of the frame (the attract scene keeps its
+ * skyline below it, see titleScene.ts) and the wash becomes a stepped scrim that
+ * is only dark where the type is: hard bands rather than a smooth fade, which is
+ * how an 8-bit machine would have faded a sky, and nothing at all over the ground
+ * or the hero. The scanlines stay, lighter.
+ */
+.beam-run__overlay--start {
+  justify-content: flex-start;
+  padding-top: clamp(18px, 4.4%, ${P(56)});
+  gap: clamp(12px, 2.6%, ${P(30)});
+  background: linear-gradient(
+    to bottom,
+    rgba(0, 17, 23, 0.74) 0% 34%,
+    rgba(0, 17, 23, 0.58) 34% 42%,
+    rgba(0, 17, 23, 0.42) 42% 48%,
+    rgba(0, 17, 23, 0.26) 48% 53%,
+    rgba(0, 17, 23, 0.12) 53% 57%,
+    rgba(0, 17, 23, 0) 57% 100%
+  );
+  backdrop-filter: none;
+}
+.beam-run__overlay--start::before { opacity: 0.6; }
+/*
+ * Phone held upright. The frame is a 16:9 strip across the middle of a tall stage
+ * (the touch band, see the control band note above), so the sky trick has no room:
+ * the copy would cover the only art on screen and leave the bands empty. Here the
+ * stack stops being a box (display contents) and its three children join the
+ * overlay grid: the marquee, hook and offer sit in the band ABOVE the frame, hugging
+ * its top edge, and START sits in the band BELOW it, where a thumb already is. The
+ * middle track is exactly the frame height (1 unit is 1% of the frame width, and in
+ * portrait the frame is the full stage width), so the art shows through untouched.
+ * The outer tracks never shrink below their content: if a band is too short for
+ * the copy (an embed with a small band) the tracks grow and the overlay scrolls,
+ * as every overlay does, rather than clipping the marquee off the top.
+ */
+.beam-run__start-head {
+  display: flex; flex-direction: column; align-items: center;
+  gap: clamp(12px, 2.6%, ${P(30)}); width: 100%;
+}
+/* The marquee is the name of the thing, the hook is what it says: a step more air
+   between them than inside the copy, so the lockup reads as a masthead. */
+.beam-run__start-head > .beam-run__brand { margin-bottom: clamp(2px, 0.9%, ${P(12)}); }
+.beam-run__overlay--start > .beam-run__actions { margin-top: clamp(4px, 1%, ${P(12)}); }
+@media (orientation: portrait) {
+  .beam-run__stage--touch .beam-run__overlay--start.beam-run__overlay--visible {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows:
+      minmax(min-content, 1fr) calc(56.25 * var(--beam-run-u)) minmax(min-content, 1fr);
+    justify-items: center;
+    gap: 0;
+    padding: 0 clamp(16px, 5vw, ${P(28)});
+    background: none;
+  }
+  .beam-run__stage--touch .beam-run__overlay--start::before { display: none; }
+  .beam-run__stage--touch .beam-run__start-head {
+    grid-row: 1; align-self: end;
+    padding: clamp(16px, 5vw, ${P(28)}) 0 clamp(18px, 5.4vw, ${P(30)});
+    gap: clamp(16px, 5vw, ${P(28)});
+  }
+  .beam-run__stage--touch .beam-run__overlay--start > .beam-run__actions {
+    grid-row: 3; align-self: start;
+    margin: 0; padding: clamp(20px, 6vw, ${P(34)}) 0 clamp(16px, 5vw, ${P(28)});
+  }
+  /* Thumb-sized, not a banner: full width it outweighed the whole masthead. */
+  .beam-run__stage--touch .beam-run__overlay--start > .beam-run__actions .beam-run__btn {
+    max-width: ${P(300)};
+  }
+}
 
 /* Bitmap type ---------------------------------------------------------------
  * The overlays are set in the game's own 5×7 font, drawn as SVG rects (see
@@ -457,52 +567,28 @@ export const CSS = `
 /* ANSR lockup (generated sunburst + wordmark) ------------------------------- */
 .beam-run__brand {
   display: flex; align-items: center; justify-content: center;
-  flex-wrap: wrap; gap: clamp(10px, 1.6%, 18px);
+  flex-wrap: wrap; gap: clamp(10px, 1.6%, ${P(18)});
 }
-/* Wordmark, divider and edition on one centred row (see BrandMark). Every item
+/* Wordmark and edition on one centred row, no divider (see BrandMark). Every item
    is line-height 1, so centring the boxes centres the caps. */
 .beam-run__brand-text {
   display: flex; align-items: center; justify-content: center;
-  flex-wrap: wrap; gap: clamp(9px, 1.5%, 17px);
+  flex-wrap: wrap; gap: clamp(9px, 1.5%, ${P(17)});
 }
 /* Height is left to the aspect ratio: the sunburst's own bounding box is
    175×181, so forcing a square would squash the real logo by 3%. */
 .beam-run__brand-mark {
-  width: clamp(34px, ${U(4.2)}, 56px); height: auto;
+  width: clamp(34px, ${U(4.2)}, ${P(56)}); height: auto;
   flex: none; display: block;
 }
-/* The negative margins cancel the trailing letter-space that tracking leaves
-   after the last glyph — without them the gap before the divider looks wider
-   than the gap after it, and the whole lockup sits fractionally left of centre. */
-.beam-run__brand-word {
-  font-size: clamp(21px, ${U(3)}, 36px); font-weight: 700; color: ${BRAND.WHITE};
-  letter-spacing: 0.2em; line-height: 1; margin-right: -0.2em;
-}
-/* The divider: a 2px bar the height of the wordmark's caps, centred on the same
-   line as both texts. Its own font-size is the overlay's, not the wordmark's, so
-   the height is set explicitly rather than in em. */
-.beam-run__brand-rule {
-  width: 2px; height: clamp(16px, ${U(2.2)}, 27px); flex: none;
-  background: rgba(230, 230, 230, 0.4);
-}
-/*
- * The edition returns to a supporting size beside the wordmark. The line-height
- * of 1 is the part that matters: with the inherited line-height its line box was
- * taller than its glyphs, so centring the boxes did not centre the *text*, which
- * is what made it look off. With both lines at line-height 1 and the row centred,
- * the two cap heights share a centre line.
- */
-.beam-run__brand-title {
-  font-size: clamp(12px, ${U(1.7)}, 20px); color: ${BRAND.LIGHT_GREY};
-  font-weight: 500; text-transform: uppercase; letter-spacing: 0.14em; line-height: 1;
-  margin-right: -0.14em;
-}
+/* The wordmark and the edition are bitmap art (see BrandMark LOCKUP_PX): each span
+   is a flex box around its SVG so no inline line box adds space under the glyphs,
+   and centring the boxes centres the caps. */
+.beam-run__brand-word,
+.beam-run__brand-title { display: flex; align-items: center; }
 .beam-run__brand--compact .beam-run__brand-mark {
-  width: clamp(22px, ${U(2.6)}, 32px);
+  width: clamp(22px, ${U(2.6)}, ${P(32)});
 }
-.beam-run__brand--compact .beam-run__brand-word { font-size: clamp(13px, ${U(1.7)}, 19px); }
-.beam-run__brand--compact .beam-run__brand-title { font-size: clamp(10px, ${U(1.2)}, 14px); }
-.beam-run__brand--compact .beam-run__brand-rule { height: clamp(10px, ${U(1.3)}, 15px); }
 
 /* Titles are bitmap art (the visible glyphs live in the SVG); the element itself
    just centres it and carries the orange value hairline underneath. */
@@ -524,7 +610,7 @@ export const CSS = `
  */
 .beam-run__title::after {
   content: ''; display: block; width: 84%; height: 6px;
-  margin: clamp(10px, 1.8%, 18px) auto 0;
+  margin: clamp(10px, 1.8%, ${P(18)}) auto 0;
   background:
     linear-gradient(${BRAND.ORANGE}, ${BRAND.ORANGE}) 0 0 / 18px 100% no-repeat,
     rgba(255, 84, 0, 0.24);
@@ -535,7 +621,7 @@ export const CSS = `
   to { background-position-x: 100%; }
 }
 .beam-run__subtitle {
-  font-size: clamp(13px, ${U(1.8)}, 20px); color: ${BRAND.LIGHT_GREY}; margin: 0;
+  font-size: clamp(13px, ${U(1.8)}, ${P(20)}); color: ${BRAND.LIGHT_GREY}; margin: 0;
   text-shadow: 0 2px 0 rgba(0, 16, 22, 0.85);
 }
 /* Hints are bitmap lines on the end screens (the only place they are used now). */
@@ -554,7 +640,7 @@ export const CSS = `
 .beam-run__stake {
   margin: 0; width: 100%;
   display: flex; flex-direction: column; align-items: center;
-  gap: clamp(8px, 1.6%, 18px);
+  gap: clamp(8px, 1.6%, ${P(18)});
 }
 .beam-run__stake-figure { display: flex; justify-content: center; width: 100%; }
 /* A restrained bloom: at 12px/0.5 the glow bled into the lines around it and softened
@@ -568,38 +654,61 @@ export const CSS = `
  *
  * The caps get the same treatment as the NES action buttons below and the HUD plaques
  * above — solid fill, square, a 2px light/dark inner bevel and a hard dark rail — so
- * a cap on the title screen and a cap in the game are the same object. On touch they
- * are round, because the pads drawn over the game are.
+ * a cap on the title screen and a cap in the game are the same object. Keyboard
+ * devices only: on touch the briefing cards carry no legend at all (owner call).
  *
  * It replaced a written sentence, twice: a legend was cut from this screen for reading
  * as a manual, and the sentence that came back rendered wider than the headline on a
  * phone. A cap is the size of its glyph, not of its explanation.
  */
+/*
+ * The legend is a grey 8-bit tile (owner call): the same square bevel-and-rail object
+ * as the caps and the NES buttons, in a neutral grey so it reads as a separate plate on
+ * the teal card rather than a second card. A faded CONTROLS caption over the caps.
+ *
+ * Symmetry: the tile shrink-wraps its contents and is centred on the card's axis; the
+ * caption and the caps row are each centred on the tile's own axis. Top and bottom
+ * padding are equal and so is the caption-to-caps step (one measure); left and right
+ * are equal at 1.5x that, because a row of caps is wide and flat and the same inset on
+ * every side left it looking pinched at the ends. min-width keeps the one-cap fire
+ * tile from collapsing narrower than the level 0 tile reads as the same object at.
+ */
 .beam-run__keys {
-  display: flex; flex-wrap: wrap; justify-content: center; align-items: center;
-  gap: clamp(10px, 1.8%, 22px);
+  --beam-run-keys-pad: clamp(10px, ${U(1.3)}, ${P(18)});
+  display: flex; flex-direction: column; align-items: center;
+  gap: var(--beam-run-keys-pad);
+  width: fit-content; max-width: 100%; min-width: min(100%, ${U(16)});
+  box-sizing: border-box;
+  padding: var(--beam-run-keys-pad) calc(var(--beam-run-keys-pad) * 1.5);
+  background: #3A4044;
+  box-shadow:
+    inset 3px 3px 0 rgba(255, 255, 255, 0.14),
+    inset -3px -3px 0 rgba(0, 0, 0, 0.38),
+    0 0 0 3px ${RAIL};
 }
-.beam-run__key-group { display: flex; align-items: center; gap: clamp(4px, 0.7%, 8px); }
+.beam-run__keys-head { display: flex; justify-content: center; width: 100%; }
+.beam-run__keys-head .beam-run__pixels { max-width: none; }
+.beam-run__keys-row {
+  display: flex; flex-wrap: wrap; justify-content: center; align-items: center;
+  gap: clamp(10px, 1.8%, ${P(22)}) clamp(14px, ${U(2.2)}, ${P(30)});
+}
+/* In frame units, not %: a percentage gap here resolved against the shrink-wrapped group
+   (~4px), and each cap's 2px outer rail ate all of it, so the two arrows fused into one
+   block and the label touched its cap. */
+.beam-run__key-group { display: flex; align-items: center; gap: clamp(8px, ${U(0.9)}, ${P(14)}); }
 .beam-run__key {
   display: inline-flex; align-items: center; justify-content: center;
-  min-width: clamp(22px, ${U(2.8)}, 36px); min-height: clamp(22px, ${U(2.8)}, 36px);
-  padding: clamp(3px, 0.5%, 6px) clamp(5px, 0.8%, 9px);
+  min-width: clamp(22px, ${U(2.8)}, ${P(36)}); min-height: clamp(22px, ${U(2.8)}, ${P(36)});
+  /* Side padding in frame units: a percentage resolved against the shrink-wrapped
+     group and sat on its 5px floor, so SPACE had half the air at its ends that it
+     had above and below. */
+  padding: clamp(3px, 0.5%, ${P(6)}) clamp(6px, ${U(0.6)}, ${P(9)});
   background: #00161D;
   box-shadow:
     inset 2px 2px 0 rgba(150, 205, 218, 0.22),
     inset -2px -2px 0 rgba(0, 0, 0, 0.45),
     0 0 0 2px ${RAIL};
 }
-/* The on-screen pads are round, so their legend is too. */
-.beam-run__key--pad { border-radius: 50%; }
-/* The act pad is smaller than jump, on the game and here: the two are both discs, so
-   size is what separates them (and drawing the act button as an arrow instead put the
-   same glyph in the row twice, once meaning move and once meaning fire). */
-.beam-run__key--small {
-  min-width: clamp(17px, ${U(2.1)}, 27px); min-height: clamp(17px, ${U(2.1)}, 27px);
-  padding: clamp(2px, 0.4%, 5px);
-}
-.beam-run__key--small .beam-run__pixels { width: clamp(8px, ${U(0.9)}, 13px); }
 /* Caps shrink-wrap their glyph, so the shared percentage cap has nothing to measure;
    the width is already bounded in frame units by PX_TYPE.key. */
 .beam-run__key .beam-run__pixels { max-width: none; }
@@ -607,7 +716,7 @@ export const CSS = `
 
 /* Closing figure: months lost to delays. */
 .beam-run__months-label { display: flex; justify-content: center; }
-.beam-run__months { display: flex; align-items: flex-end; gap: clamp(8px, 1.2%, 14px); }
+.beam-run__months { display: flex; align-items: flex-end; gap: clamp(8px, 1.2%, ${P(14)}); }
 /* Bitmap digits with an orange glow: an arcade readout, not a web number. */
 .beam-run__months-value {
   display: inline-flex; align-items: flex-end;
@@ -630,13 +739,16 @@ export const CSS = `
 .beam-run__clock-label,
 .beam-run__clock-strong { display: flex; }
 
-/* Receipt — the four capabilities, each its own route to the Navigator. */
-.beam-run__receipt { width: 100%; max-width: 640px; display: flex; flex-direction: column; gap: 6px; }
-/* The receipt's header, hint and footer centre on their column, mirroring the
-   left column's caption: the rows fill the column, so the axis of the screen
-   stays down the middle. */
+/* Receipt — the four capabilities, as a read-only list (owner call: the rows are
+   not buttons any more, and the "pick one" hint under them went with the clicks). */
+.beam-run__receipt { width: 100%; max-width: ${P(640)}; display: flex; flex-direction: column; gap: 6px; }
+/* The receipt's header centres on its column, mirroring the left column's caption:
+   the rows fill the column, so the axis of the screen stays down the middle. */
 .beam-run__receipt-title { display: flex; justify-content: center; }
-.beam-run__receipt-list { display: flex; flex-direction: column; gap: 6px; width: 100%; }
+.beam-run__receipt-list {
+  display: flex; flex-direction: column; gap: 6px; width: 100%; margin: 0; padding: 0;
+  list-style: none;
+}
 /*
  * One row layout everywhere: mark | product + saving | stage underneath.
  * Bitmap type is wider than the web type this replaced, and the four-column
@@ -645,17 +757,14 @@ export const CSS = `
  * is the pairing that matters.
  */
 .beam-run__receipt-row {
-  font: inherit; cursor: pointer; text-align: left; width: 100%;
+  text-align: left; width: 100%; box-sizing: border-box;
   display: grid; grid-template-columns: 22px minmax(0, 1fr) auto;
-  align-items: center; gap: 4px 10px;
+  align-items: center; align-content: center; gap: 4px 10px;
   min-height: 44px; padding: 8px 14px; border-radius: 0;
   background: rgba(0, 22, 29, 0.72);
   border: 2px solid rgba(150, 205, 218, 0.22);
   color: ${BRAND.LIGHT_GREY};
-  transition: filter 0.15s ease, border-color 0.15s ease;
 }
-.beam-run__receipt-row:hover { filter: brightness(1.18); border-color: rgba(255, 84, 0, 0.5); }
-.beam-run__receipt-row:focus-visible { outline: 3px solid ${BRAND.WHITE}; outline-offset: 2px; }
 /* The mark is a drawn pixel glyph (hollow box / check), not a font character:
    \\25CB and \\2713 come from whatever typeface the host has, which is exactly
    the mismatch the rest of this screen just got rid of. */
@@ -665,7 +774,7 @@ export const CSS = `
   display: flex; justify-content: flex-end; grid-column: 3; grid-row: 1;
 }
 .beam-run__receipt-stage { display: flex; grid-column: 2 / -1; grid-row: 2; }
-/* Engaged rows carry the value accent; unreached rows stay dim but clickable. */
+/* Engaged rows carry the value accent; unreached rows stay dim. */
 .beam-run__receipt-row--engaged {
   background: rgba(60, 20, 0, 0.6); border-color: rgba(255, 84, 0, 0.55);
   box-shadow: inset 4px 0 0 ${BRAND.ORANGE};
@@ -684,15 +793,15 @@ export const CSS = `
  */
 .beam-run__cost {
   width: 100%; display: flex; flex-direction: column; align-items: center;
-  gap: clamp(4px, 1%, 10px);
-  padding: clamp(10px, 2%, 20px) clamp(12px, 2.4%, 24px);
+  gap: clamp(4px, 1%, ${P(10)});
+  padding: clamp(10px, 2%, ${P(20)}) clamp(12px, 2.4%, ${P(24)});
   background: rgba(0, 22, 29, 0.72);
   border: 2px solid rgba(150, 205, 218, 0.22);
 }
 /* The breakdown is the figure's small print, so it is divided off inside the panel
    rather than floating under it. */
 .beam-run__cost .beam-run__receipt-delays {
-  width: 100%; margin-top: clamp(6px, 1.6%, 16px); padding-top: clamp(6px, 1.6%, 16px);
+  width: 100%; margin-top: clamp(6px, 1.6%, ${P(16)}); padding-top: clamp(6px, 1.6%, ${P(16)});
   border-top: 2px solid rgba(150, 205, 218, 0.18);
 }
 /* A clean run writes nothing here (the verdict has already said it), and an empty
@@ -728,63 +837,109 @@ export const CSS = `
  * contains - a border drawn round nothing, which reads as a panel that has lost its
  * contents rather than as one holding them. A rail should hug what it encloses.
  */
-.beam-run__stack--gameover { width: min(100%, 440px); gap: clamp(8px, 1.8%, 18px); }
-.beam-run__stack--gameover .beam-run__months-label { margin-top: clamp(6px, 1.4%, 14px); }
+.beam-run__stack--gameover { width: min(100%, ${P(440)}); gap: clamp(8px, 1.8%, ${P(18)}); }
+.beam-run__stack--gameover .beam-run__months-label { margin-top: clamp(6px, 1.4%, ${P(14)}); }
 .beam-run__stack--gameover .beam-run__months { margin-top: 0; }
-.beam-run__stack--gameover .beam-run__matched { margin-top: clamp(2px, 0.6%, 6px); }
+.beam-run__stack--gameover .beam-run__matched { margin-top: clamp(2px, 0.6%, ${P(6)}); }
 /* The argument is the panel's own footnote: divided off under the figure and its
    small print, the way the closing receipt divides off its breakdown. */
 .beam-run__stack--gameover .beam-run__cost .beam-run__advice {
-  margin-top: clamp(8px, 1.8%, 18px); padding-top: clamp(8px, 1.8%, 18px);
+  margin-top: clamp(8px, 1.8%, ${P(18)}); padding-top: clamp(8px, 1.8%, ${P(18)});
   border-top: 2px solid rgba(150, 205, 218, 0.18);
 }
-.beam-run__stack--gameover .beam-run__actions { margin-top: clamp(8px, 2%, 20px); }
+.beam-run__stack--gameover .beam-run__actions { margin-top: clamp(8px, 2%, ${P(20)}); }
 /* The retry hint sits with the stage name, not under it as a second heading. */
-.beam-run__overlay--titlecard .beam-run__advice { margin-top: clamp(8px, 1.8%, 18px); }
+.beam-run__overlay--titlecard .beam-run__advice { margin-top: clamp(8px, 1.8%, ${P(18)}); }
+/* The death card's powerup: the bare sunburst between the headline and the line that
+   names it, turning at the stage pickup's own rate (one revolution per 3.3s). It takes
+   the advice line's step above it, and the line sits close under it, so the mark and
+   the sentence read as one unit. */
+.beam-run__death-mark {
+  display: block; flex: none; width: clamp(36px, ${U(5)}, ${P(64)}); height: auto;
+  margin: clamp(8px, 1.8%, ${P(18)}) auto 0;
+  animation: beam-run-mark-spin 3.33s linear infinite;
+}
+.beam-run__overlay--titlecard .beam-run__death-mark + .beam-run__advice { margin-top: 0; }
+@keyframes beam-run-mark-spin { to { transform: rotate(360deg); } }
 /*
- * The briefing card: stage name, the line about the stage, the retry hint when
- * there is one, then the button and its keyboard prompt. A narrower measure than
- * the end screens because the brief is one sentence — at 660px it set as a single
- * wide line and read as a caption rather than as a paragraph to stop for.
+ * THE TRANSITION CARDS (briefing, congratulations, death) ARE ONE PANEL NOW, AND THE
+ * PANEL HUGS WHAT IT HOLDS.
+ *
+ * They were a column of type laid straight on the stage behind them, and the raster
+ * showed why that read as clutter: every stage paints its own words (the lobby's HEAD
+ * OFFICE sign, BUSINESS CASE, NOTARY, the WORKPLACE plaque), so at any wash light
+ * enough to glimpse the room the card's type sat on top of the room's type, and the eye
+ * had to sort which words were the card's. A solid 8-bit panel - the HUD plaque's own
+ * fill, bevel and rail, one step heavier - gives the card a ground of its own, and the
+ * stage becomes what it should be here: a dimmed picture around the edges.
+ *
+ * Width is fit-content so the rail hugs the widest line (a two-word credit over a
+ * two-line hand-off is ~330px; a stage name ~520px) - the finding that took the
+ * out-of-lives panel from 560 to 440 applies to every rail. The floor keeps a short
+ * card from collapsing round one word. Every glyph inside is sized in frame units
+ * (PixelType maxShare), so nothing in here measures the shrink-wrapped box.
+ *
+ * The rhythm is three steps, all in frame units so a phone gets the same proportions:
+ * tight inside a group (eyebrow onto the name, the brief's own two lines), a normal step
+ * between groups, and the largest one before the cap, which is the only control.
  */
-.beam-run__stack--titlecard { width: min(100%, 560px); gap: clamp(10px, 2.2%, 22px); }
+.beam-run__stack--titlecard {
+  width: fit-content; min-width: min(100%, ${U(30)}); max-width: min(100%, ${P(680)});
+  gap: clamp(10px, ${U(1.6)}, ${P(22)});
+  padding: clamp(16px, ${U(2.8)}, ${P(38)}) clamp(20px, ${U(4.2)}, ${P(56)});
+  background: #00161D;
+  box-shadow:
+    inset 4px 4px 0 rgba(150, 205, 218, 0.16),
+    inset -4px -4px 0 rgba(0, 0, 0, 0.45),
+    0 0 0 4px ${RAIL};
+}
 /*
  * "LEVEL 3", over the stage name. An eyebrow, so it is tied to the heading under it
- * rather than floating as a line of its own: the stack's own gap would read as two
- * separate captions, which is the thing a number over a name must not look like.
+ * rather than floating as a line of its own - but by a visible gap: pulled in so far
+ * that its baseline touched the name's cap height, it read as a smudge on the title.
  */
 .beam-run__eyebrow {
-  margin: 0 0 clamp(-14px, -1.4%, -6px); width: 100%;
+  margin: 0 0 calc(-1 * clamp(4px, ${U(0.8)}, ${P(11)})); width: 100%;
   display: flex; flex-direction: column; align-items: center;
 }
 /*
  * The control legend on a briefing card (owner call: the controls copy moved off the
- * opening screen). Under the brief, above the cap, separated by a step and nothing else.
+ * opening screen) sits OUTSIDE the teal card, as its own grey plate centred under it
+ * (owner call: "move the controls out of the main blue box"). The card and the plate
+ * are one centred group, which is the overlay's only child, so the pair is centred in
+ * the frame together and the card stays centred when the plate is hidden.
  *
- * **A divider was drawn here and cut in its own raster.** The row is set as chrome about
- * the machine rather than as another line about the place, so a rule over it looked like
- * the right idea — but the rule spans the card (560px) and the row it encloses is ~300px
- * on level 0 and **~100px on level 3**, where the legend is the single F cap. A
- * full-width rail over one small button is a border drawn round nothing, which is the
- * same finding that took the out-of-lives panel from 560 to 440: a rail has to hug what
- * it holds. The caps carry their own bevel and dark fill, so they already read as buttons
- * rather than as a third sentence — the separation only has to be a pause.
+ * The gap is measured edge to edge: the card's 4px rail and the plate's 3px rail are
+ * box-shadows and take no layout space, so the visible step is the gap minus 7px.
+ *
+ * **A card-wide divider was drawn round the legend once and cut in its own raster**: it
+ * spanned the card while the row was ~300px on level 0 and ~100px on level 3. The plate
+ * shrink-wraps the row instead, so its edge is always the legend's own edge.
  */
-.beam-run__overlay--titlecard .beam-run__keys {
-  margin-top: clamp(6px, 1.4%, 14px);
+.beam-run__card-group {
+  width: 100%;
+  display: flex; flex-direction: column; align-items: center;
+  gap: clamp(16px, ${U(2)}, ${P(28)});
 }
 /* One line of prose about the stage, in bitmap type like everything else here. */
 .beam-run__brief {
   margin: 0; width: 100%;
   display: flex; flex-direction: column; align-items: center; gap: 5px;
 }
+/* The brief's two lines get real leading on a card: at 5px, 20px glyphs stacked into
+   one block of type and the line had to be decoded rather than read. */
+.beam-run__stack--titlecard .beam-run__brief { gap: clamp(5px, ${U(0.65)}, ${P(9)}); }
 /* The button opens its own step: it is the last thing on the card and the only
    control on it, so it gets the biggest gap and nothing sits under it. */
-.beam-run__stack--titlecard .beam-run__actions { margin-top: clamp(6px, 1.6%, 16px); }
+.beam-run__stack--titlecard .beam-run__actions { margin-top: clamp(4px, ${U(0.9)}, ${P(12)}); }
+/* The focus ring on a card's cap: white and unmissable, one step lighter than the
+   global 6px/4px so on a panel it does not read as a second frame round the button.
+   5px (was 3px, owner call: wider and bolder). */
+.beam-run__stack--titlecard .beam-run__btn:focus-visible { outline-width: 5px; outline-offset: 3px; }
 
 .beam-run__actions {
   display: flex; flex-wrap: wrap; justify-content: center; align-items: center;
-  gap: clamp(12px, 1.8%, 20px);
+  gap: clamp(12px, 1.8%, ${P(20)});
 }
 /*
  * NES-style buttons: square, chunky, with a 4px light/dark inner bevel and a
@@ -813,7 +968,10 @@ export const CSS = `
     inset -4px -4px 0 rgba(255, 255, 255, 0.14),
     0 0 0 4px rgba(0, 16, 22, 0.88);
 }
-.beam-run__btn:focus-visible { outline: 4px solid ${BRAND.WHITE}; outline-offset: 4px; }
+/* The white ring round a focused cap (START, CONTINUE, TRY AGAIN: the cards focus their
+   button, so it shows from the first frame). 6px rather than 4px (owner call: "a bit
+   wider, a bit more bold"). */
+.beam-run__btn:focus-visible { outline: 6px solid ${BRAND.WHITE}; outline-offset: 4px; }
 /* The label is sized in frame units (see PixelType); a cap that shrink-wraps it
    has nothing for a percentage to measure against, and clicks belong to the cap. */
 .beam-run__btn .beam-run__pixels { max-width: none; pointer-events: none; }
@@ -896,6 +1054,15 @@ export const CSS = `
 .beam-run__touch--armed .beam-run__touch-btn--shoot {
   display: flex; background: rgba(0, 84, 101, 0.75); border-color: rgba(207, 230, 236, 0.85);
 }
+/* A tool has just been armed and not used yet: the pad pulses a white ring (stepped,
+   8-bit) until the first shot. Under reduced motion the ring holds still. */
+.beam-run__touch--hint .beam-run__touch-btn--shoot {
+  animation: beam-run-pad-hint 0.9s steps(1, end) infinite;
+}
+@keyframes beam-run-pad-hint {
+  0% { box-shadow: 0 0 0 3px ${BRAND.WHITE}; }
+  50% { box-shadow: 0 0 0 0 transparent; }
+}
 /*
  * PAUSE — in the top band, and the position is the whole point.
  *
@@ -915,7 +1082,7 @@ export const CSS = `
   position: absolute;
   top: calc(${PAUSE_BTN.top}px + env(safe-area-inset-top, 0px));
   right: calc(
-    clamp(8px, 2.2%, 22px) + ${padCss(LIVES_PLAQUE)} + ${PAUSE_BTN.plaqueChrome}px +
+    clamp(8px, 2.2%, ${P(22)}) + ${padCss(LIVES_PLAQUE)} + ${PAUSE_BTN.plaqueChrome}px +
       ${PAUSE_BTN.clear}px + env(safe-area-inset-right, 0px)
   );
   display: flex;
@@ -997,16 +1164,16 @@ export const CSS = `
 /* Assist options dialog ------------------------------------------------- */
 /* Web type here is deliberate: real form controls, real sentences. */
 .beam-run__assist-intro {
-  margin: 0; font-size: clamp(11px, ${U(1.4)}, 16px); color: ${BRAND.LIGHT_GREY};
+  margin: 0; font-size: clamp(11px, ${U(1.4)}, ${P(16)}); color: ${BRAND.LIGHT_GREY};
   text-shadow: 0 2px 0 rgba(0, 16, 22, 0.85);
 }
 .beam-run__assist-list {
   display: flex; flex-direction: column; gap: 10px;
-  text-align: left; width: 100%; max-width: 520px;
+  text-align: left; width: 100%; max-width: ${P(520)};
 }
 .beam-run__assist-row {
   display: flex; align-items: center; gap: 12px; cursor: pointer;
-  font-size: clamp(13px, ${U(1.8)}, 17px); color: ${BRAND.WHITE};
+  font-size: clamp(13px, ${U(1.8)}, ${P(17)}); color: ${BRAND.WHITE};
   min-height: 34px;
 }
 .beam-run__assist-check {
@@ -1016,6 +1183,7 @@ export const CSS = `
 /* Static fallback card (pre-lazy-mount / kill switch / boot failure) ----- */
 .beam-run__fallback {
   --beam-run-u: 1vw;
+  --beam-run-px: max(1px, calc(var(--beam-run-u) * 100 / 1280));
   position: relative; width: 100%; margin: 0 auto; box-sizing: border-box;
   max-width: min(
     var(--beam-run-max-width, 1280px),
@@ -1023,18 +1191,18 @@ export const CSS = `
   );
   aspect-ratio: 1280 / 720; overflow: hidden; border-radius: ${RADII.md}px;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: clamp(10px, 2.5%, 20px); text-align: center; padding: 6% 8%;
+  gap: clamp(10px, 2.5%, ${P(20)}); text-align: center; padding: 6% 8%;
   font-family: ${TYPOGRAPHY.fontFamily}; color: ${BRAND.WHITE};
   background:
     radial-gradient(120% 90% at 80% 15%, rgba(0, 84, 101, 0.55), rgba(0, 36, 46, 0) 60%),
     ${BRAND.DEEP_TEAL};
 }
-.beam-run__fallback-title { font-size: clamp(22px, ${U(4)}, 44px); font-weight: 700; margin: 0; }
+.beam-run__fallback-title { font-size: clamp(22px, ${U(4)}, ${P(44)}); font-weight: 700; margin: 0; }
 .beam-run__fallback-title::after {
   content: ''; display: block; width: 56px; height: 3px; margin: 10px auto 0;
   background: ${BRAND.ORANGE}; border-radius: 2px;
 }
-.beam-run__fallback-body { margin: 0; color: ${BRAND.LIGHT_GREY}; font-size: clamp(14px, ${U(2)}, 20px); }
+.beam-run__fallback-body { margin: 0; color: ${BRAND.LIGHT_GREY}; font-size: clamp(14px, ${U(2)}, ${P(20)}); }
 @supports (height: 100dvh) {
   .beam-run__fallback {
     max-width: min(
@@ -1056,25 +1224,22 @@ export const CSS = `
      re-anchoring any more - only a tighter log so it cannot eat the play area. */
   .beam-run__hud-log-rows { max-height: 18vh; }
 
-  .beam-run__subtitle { font-size: clamp(15px, 4.2vw, 22px); }
+  .beam-run__subtitle { font-size: clamp(15px, 4.2vw, ${P(22)}); }
 
   /* Phones: the column takes the full width and the bar labels give up width to
      the meters. */
   .beam-run__stack { width: 100%; }
-  .beam-run__brand-mark { width: clamp(32px, 9vw, 46px); }
-  .beam-run__brand-word { font-size: clamp(19px, 5.6vw, 28px); }
-  .beam-run__brand-title { font-size: clamp(11px, 3.2vw, 16px); }
-  .beam-run__brand-rule { height: clamp(14px, 4vw, 21px); }
+  .beam-run__brand-mark { width: clamp(32px, 9vw, ${P(46)}); }
   /* Bitmap labels need more of the row than web type did; the per-glyph floors
      in Overlays' PX_TYPE now handle the "too small on a phone" problem, so the
      font-size overrides that used to live here are gone. */
   .beam-run__bar {
-    grid-template-columns: minmax(70px, 36%) minmax(0, 1fr) clamp(22px, 6vw, 34px);
+    grid-template-columns: minmax(70px, 36%) minmax(0, 1fr) clamp(22px, 6vw, ${P(34)});
     gap: 8px;
   }
   .beam-run__actions { flex-direction: column; width: 100%; }
-  .beam-run__btn { width: 100%; max-width: 380px; min-height: 48px; padding: 14px 20px; }
-  .beam-run__assist-row { font-size: clamp(15px, 4vw, 18px); min-height: 44px; }
+  .beam-run__btn { width: 100%; max-width: ${P(380)}; min-height: 48px; padding: 14px 20px; }
+  .beam-run__assist-row { font-size: clamp(15px, 4vw, ${P(18)}); min-height: 44px; }
   .beam-run__receipt-row { grid-template-columns: 20px minmax(0, 1fr) auto; row-gap: 2px; }
 }
 
@@ -1090,7 +1255,10 @@ export const CSS = `
   .beam-run__title::after { animation: none; background-position-x: 50%; }
   .beam-run__btn:active { transform: none; }
   .beam-run__hud-lives--spent { animation: none; }
-  .beam-run__receipt-row { transition: none; }
+  .beam-run__touch--hint .beam-run__touch-btn--shoot {
+    animation: none; box-shadow: 0 0 0 3px ${BRAND.WHITE};
+  }
+  .beam-run__death-mark { animation: none; }
   .beam-run__btn { transition: none; }
 }
 

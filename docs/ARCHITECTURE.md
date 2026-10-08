@@ -27,7 +27,9 @@ need all of it. The rules that constrain these modules are in `docs/INVARIANTS.m
   the next screen is loaded by the press that *leaves* `SCREEN_CLEAR` — so `Simulation.clearedScreenId`,
   not `screenId`, is what the congratulations card is drawn from (`docs/INVARIANTS.md`).
   **`TITLE_CARD` is the briefing between two screens and it waits for a press** — neither card times out
-  (owner call). `Simulation.requestAdvance()` is the only way out of all three waiting states and is
+  (owner call). The Engine Room's own pair is **not** a state: `Simulation.bonusCard` (`'brief'` |
+  `'clear'`) inside `PLAYING`, which `syncUI` reads before `state`.
+  `Simulation.requestAdvance()` is the only way out of all the waiting cards and is
   state-aware (`SCREEN_CLEAR` → load + brief · `LIFE_LOST` → the same stage · `TITLE_CARD` → play), called
   by both `step()` (a mapped key) and each card's own button; `titleCardReady` / `clearCardReady` /
   `deathCardReady` report the 0.4s grace each needs, `titleCardProgress` is presentation only. Every
@@ -115,13 +117,13 @@ need all of it. The rules that constrain these modules are in `docs/INVARIANTS.m
   has to be stopped by the partition wall and `hasLineOfFire` has to stop him winding up at a player
   behind it — that wall is where the badge lands, so it has to be cover),
   **`Dragon.ts`** (screen 4's grounded Godzilla: roar beat, the patch of floor it holds, **one
-  growing diverging cone of fire** with a pinned taunt, the water cannon, the glasses, and the ending —
+  growing diverging jet of fire aimed at the player** (eased aim, hose-like bend, taunt written along it), the water cannon, the glasses, and the ending —
   the topple, the **costume that unzips and then vanishes** (`costumeState()`), the five who **walk out
   of it one at a time** (`CandidateState` carries a facing and a walk, not a fall), and **`relief`**, the
   0..1 sim-time dial the backdrop reads for "the environment comes good"; replaced `Fire.ts`). It also
   exports `MOUTH_X_FRACTION`/`MOUTH_Y_FRACTION` — the jaw is the one piece of anatomy the sim and the
-  renderer both need, so it has one source, and both are read off the drawn grid — and **`coneBoxes()`,
-  the single function that says what burns *and* what is painted**. Its whole ending is a function of one
+  renderer both need, so it has one source, and both are read off the drawn grid — and **`flameStream()` /
+  `streamBoxes()`, the single source of what burns *and* what is painted**. Its whole ending is a function of one
   clock (seconds since the beast went down), so nothing about it is remembered.
   Each answers `assisted` in its own way; `Stamps`,
   `ComplianceMaze` and `Dragon` set `shieldsPlayer`, which is what licenses the bubble on the player.
@@ -146,7 +148,7 @@ four-pip countdown that blinks out; the lens it hangs from is the *room's* numbe
 floating with nothing above it. Also: the **real ANSR mark** via `ansrLogo.ts`, sized to the hitbox, on a
 dark cell core, plus levitation shaft + flare + ground chevron — pure, so it rasterises alone;
 `Game.drawBadge` supplies only the band and a phase — plus **`drawBadgePerch`**, the same mark
-standing still on a wall with a contact shadow, a lit plinth and four flare cells, and none of the
+standing still on a wall with only a contact shadow under it (no plinth, no flare), and none of the
 rail's shaft, brackets or ground chevron),
 `stamps.ts` (screen 1's hazard — pure, no wall clock, so it rasterises alone. **Two words per stamp**: the
 approval it refuses on the pale index plate, from `StampState.label` (authored in `levels.json`, carried
@@ -164,9 +166,9 @@ masonry the backdrop cannot reach and under the cast; pure, rasterises alone),
 `docs/INVARIANTS.md` for why that breaks the composed-creature rule on purpose, and why shrinking the cell
 three times over is what "make it smaller / more refined" always meant — plus the opening **jaw** drawn on
 top in *cell* coordinates so it mirrors with the grid (a wedge from `JAW_ROW`, its own teeth at the grid's
-pitch, and a mandible under them); the cone
-of fire, painted **per column from `coneBoxes`' own arithmetic** rather than from the boxes themselves,
-with its cream floor telegraph and pinned taunt plaque; the floating brick the badge lands on; the
+pitch, and a mandible under them); the jet
+of fire, painted **point by point inside `fire.boxes`** (so it holds at any aim), with the taunt written
+along it; the floating brick the badge lands on; the
 **topple** (`drawTopplingBeast`, a per-row shear) and the **fallen costume** it becomes (a second grid,
 87×22 at the same scale 3, whose zip is painted only as far as it has been opened); the cannon (32×17, a flared bell) and its
 jets (a tapering line of cells, not five squares); steam; the five HIRED candidates walking out; and
@@ -220,9 +222,10 @@ resolves to null without `Path2D`, draw is a no-op).
 same parts: `clearcard` (you cleared THAT stage) · `titlecard` (here is THIS one) · `deathcard` (what just
 happened, and the powerup that answers it). `titlecard` is a **briefing**, not a caption: the level number
 as an eyebrow (`COPY.titleCard.tag`) · the stage name · one line about the stage
-(`COPY.titleCard.brief[screenId]`, at a 26-char measure) · **the control legend on two of the six cards**
-(`fillLegend`, driven by `LEGEND_ON_SCREEN` in `Game.ts`) · a primary **Continue** cap wired to
-`onAdvance`, and **nothing under it** (two keyboard-prompt lines were tried and cut — see
+(`COPY.titleCard.brief[screenId]`, at a 26-char measure) · a primary **Continue** cap wired to
+`onAdvance`, and **nothing under it** inside the card. **The control legend on two of the six cards** is
+a grey plate *outside* the card, under it, in one `.beam-run__card-group` with the stack (`fillLegend`,
+driven by `LEGEND_ON_SCREEN` in `Game.ts`) (two keyboard-prompt lines were tried and cut — see
 `docs/INVARIANTS.md`). `role="dialog"` and it takes focus like every other overlay —
 the two `titlecard` special cases (`role="status"`, "transient → skip focus") are deleted. Its variable
 lines are repainted only when one of them changes, because the host calls `show()` every frame — and the

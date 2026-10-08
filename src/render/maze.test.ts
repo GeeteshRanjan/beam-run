@@ -193,6 +193,12 @@ describe('compliance monsters', () => {
     expect(plaqueBottom).toBeLessThanOrEqual(Math.min(...raised.map((r) => r.y)));
   });
 
+  it('keeps the name plate on a monster that has settled on the landing', () => {
+    // Owner call: the names stay on after the powerup, resting included.
+    const { ctx, rects } = recorder();
+    drawMonsters(ctx, [monster({ friendly: true, arm: 1, settled: true })]);
+    expect(rects.some((r) => r.fill.startsWith('rgba(90,190,150'))).toBe(true);
+  });
   it('wears no orange — that is reserved for value', () => {
     const { ctx, rects } = recorder();
     drawMonsters(ctx, [monster(), monster({ friendly: true })]);

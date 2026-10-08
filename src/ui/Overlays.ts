@@ -29,7 +29,7 @@
 import { COPY, CAPABILITIES } from '../data/copy';
 import { JOURNEY } from '../data/tuning.config';
 import type { LedgerRow } from '../core/setbackLog';
-import { createBrandLockup } from './BrandMark';
+import { createBrandLockup, createSunburst } from './BrandMark';
 import {
   createPixelHeading,
   createPixelSvg,
@@ -41,21 +41,29 @@ import {
   type PixelLineOptions,
 } from './PixelType';
 
+/** Two wrapped lines where neither is shorter than half the other. */
+function isBalancedPair(lines: readonly string[]): boolean {
+  if (lines.length !== 2) return false;
+  const [a, b] = [lines[0]!.length, lines[1]!.length];
+  return Math.min(a, b) * 2 >= Math.max(a, b);
+}
+
 /**
- * The jump pad's face on a touch device, as a pixel disc — the round `\u2B24` the
- * on-screen button carries, which the 5×7 font has no glyph for. Drawn rather than
- * typed for the same reason the receipt's tick is: a font character comes from whatever
- * typeface the host has, and this row is meant to look like the buttons it describes.
+ * The measure a briefing line is wrapped at: `max` (the card's 26) unless that leaves
+ * a lopsided pair, then the widest narrower measure, down to `min`, that gives two
+ * balanced lines. A greedy wrap at a fixed measure leaves a near-widow whenever the
+ * line ends in a short phrase — "flatten you" under "do not let the paperwork" once
+ * the full stops came off the cards (owner call) — and a brief is two lines of
+ * roughly equal weight or it reads as an accident over a centred button.
  */
-const DOT_GLYPH = [
-  '..###..',
-  '.#####.',
-  '#######',
-  '#######',
-  '#######',
-  '.#####.',
-  '..###..',
-] as const;
+export function briefMeasure(text: string, max = 26, min = 18): number {
+  const first = wrapPixelLabel(text, max);
+  if (first.length <= 1 || isBalancedPair(first)) return max;
+  for (let n = max - 1; n >= min; n -= 1) {
+    if (isBalancedPair(wrapPixelLabel(text, n))) return n;
+  }
+  return max;
+}
 
 /**
  * Authored-pixel size as a % of the frame width, per role. These are the type
@@ -93,6 +101,11 @@ const PX_TYPE = {
    */
   key: { unit: 0.18, minPx: 2, maxPx: 3, maxShare: 20 },
   keyLabel: { unit: 0.15, minPx: 1.5, maxPx: 2.4, maxShare: 16 },
+  /**
+   * CONTROLS, at the top of the legend's grey tile. One step under the cap labels, so
+   * the tile reads caption → buttons and the caption never competes with them.
+   */
+  keyHeading: { unit: 0.12, minPx: 1.3, maxPx: 2, maxShare: 18 },
 
   /*
    * End-screen roles. These all carry `maxShare` (a cap in frame units) rather
@@ -132,6 +145,12 @@ const TITLE_INK = { color: '#FFFFFF', shadow: 'rgba(0,16,22,0.85)' } as const;
 const VALUE_INK = { color: '#FF5400', shadow: 'rgba(0,16,22,0.9)' } as const;
 /** Captions and other secondary lines — cool grey, one step down from body. */
 const DIM_INK = { color: '#9FC8D2', shadow: 'rgba(0,16,22,0.85)' } as const;
+/**
+ * The legend tile's two inks (it is grey, not teal): the cap labels in light grey, and
+ * the CONTROLS caption faded to a mid grey — ~3.6:1 on the tile, quiet but readable.
+ */
+const KEY_LABEL_INK = { color: '#E6E6E6', shadow: 'rgba(0,0,0,0.45)' } as const;
+const KEY_HEADING_INK = { color: '#8E979C', shadow: 'rgba(0,0,0,0.35)' } as const;
 
 /**
  * Eight surfaces. Three of them are the run's own punctuation and they are built from
@@ -228,6 +247,11 @@ export interface OverlayData {
    */
   brief?: string;
   /**
+   * The brief's wrap measure, when 26 would strand a word. Only the hidden level sets
+   * it: its line is 31 characters and breaks cleanly on its comma at 18.
+   */
+  briefChars?: number;
+  /**
    * The control legend on a briefing card, on the two cards that teach one. Absent on
    * the other four, where a row of caps would be furniture.
    */
@@ -260,7 +284,7 @@ interface ReceiptView {
   root: HTMLDivElement;
   rows: Map<
     string,
-    { btn: HTMLButtonElement; detail: HTMLSpanElement; mark: HTMLElement }
+    { el: HTMLLIElement; detail: HTMLSpanElement; mark: HTMLElement }
   >;
   /**
    * Where the itemised delays are written. The mid-run summary keeps them inside the
@@ -326,7 +350,7 @@ export class Overlays {
   private lostUnitText = '';
 
   private readonly reducedMotion: boolean;
-  /** Touch device — decides which control line the title screen prints. */
+  /** Touch device: the briefing cards carry no control legend on one. */
   private readonly isTouch: boolean;
   // Months count-up state (driven each frame by the Game).
   private monthsTarget = 0;
@@ -360,7 +384,7 @@ export class Overlays {
     // host calls `show()` every rendered frame, and repainting three bitmap SVGs at
     // 60Hz is a lot of DOM for a screen that is standing still.
     if (name === 'titlecard' && data.levelLabel) {
-      const key = `${data.levelTag ?? ''}|${data.levelLabel}|${data.brief ?? ''}|${data.legend ?? ''}`;
+      const key = `${data.levelTag ?? ''}|${data.levelLabel}|${data.brief ?? ''}|${data.briefChars ?? ''}|${data.legend ?? ''}`;
       if (key !== this.titleCardKey) {
         this.titleCardKey = key;
         this.titleCardSr.textContent = data.levelLabel;
@@ -401,11 +425,12 @@ export class Overlays {
           // 26 characters rather than `body`'s own 34: the brief is the only prose on
           // the card, so it is set as a short measure on two balanced lines. At 34 the
           // greedy wrap fills the first line and leaves two words on the second, which
-          // reads as an accident above a centred button.
+          // reads as an accident above a centred button. `briefMeasure` narrows it when
+          // 26 would leave a lopsided pair.
           setPixelText(this.titleCardBrief, data.brief, {
             ...PX_TYPE.body,
             ...MUTED_INK,
-            maxChars: 26,
+            maxChars: data.briefChars ?? briefMeasure(data.brief),
           });
         }
         /*
@@ -413,10 +438,16 @@ export class Overlays {
          * there is none: `display: none` does not take text out of `textContent`, so a
          * pre-built row left in place would put the whole control guide on every card in
          * the game as far as anything reading the DOM is concerned.
+         *
+         * **Keyboard devices only** (owner call: "in non desktop mode we are not showing
+         * the controls anywhere"). On touch the row used to redraw the thumb pads as
+         * round caps; the pads themselves are on the screen the moment the stage starts,
+         * so the card no longer teaches them.
          */
-        this.titleCardKeys.hidden = !data.legend;
+        const legend = this.isTouch ? undefined : data.legend;
+        this.titleCardKeys.hidden = !legend;
         this.titleCardKeys.replaceChildren();
-        if (data.legend) this.fillLegend(this.titleCardKeys, data.legend);
+        if (legend) this.fillLegend(this.titleCardKeys, legend);
       }
     }
     if (name === 'clearcard' && data.clear) {
@@ -436,7 +467,7 @@ export class Overlays {
         setPixelText(this.clearCardLine, data.clear.line, {
           ...PX_TYPE.body,
           ...MUTED_INK,
-          maxChars: 26,
+          maxChars: briefMeasure(data.clear.line),
         });
       }
     }
@@ -452,11 +483,12 @@ export class Overlays {
           ...TITLE_INK,
           maxChars: 20,
         });
-        // The one instruction this game has, in the value orange, on the one surface
-        // where the player has just been shown why they need it.
+        // The one instruction this game has, in white (owner call) under the orange
+        // sunburst it names, on the one surface where the player has just been shown
+        // why they need it.
         setPixelText(this.deathCardLine, data.death.line, {
           ...PX_TYPE.body,
-          ...VALUE_INK,
+          ...TITLE_INK,
           maxChars: 26,
         });
       }
@@ -597,8 +629,7 @@ export class Overlays {
       const row = view.rows.get(cap.badge);
       if (!row) continue;
       const engaged = r.engaged.includes(cap.badge);
-      row.btn.classList.toggle('beam-run__receipt-row--engaged', engaged);
-      row.btn.setAttribute('aria-pressed', engaged ? 'true' : 'false');
+      row.el.classList.toggle('beam-run__receipt-row--engaged', engaged);
       row.mark.replaceChildren(this.pixelMark(engaged));
       // An engaged row states the outcome ("Setup stood up"), not a months-saved
       // figure: those figures were shares of the benchmark gap, and the benchmark is
@@ -804,27 +835,25 @@ export class Overlays {
   }
 
   /**
-   * The receipt: four capability rows, each a button that carries its own topic
-   * into the Navigator. Engaged rows read "saves N months"; unreached rows are
-   * dimmed but still clickable — an unreached stage is a live interest signal.
+   * The receipt: four capability rows, read-only. Engaged rows state the outcome;
+   * unreached rows are dimmed.
+   *
+   * The rows used to be buttons, each carrying its own topic into the Navigator, with
+   * a "Pick one to talk about." hint under them. Both are gone (owner call): the rows
+   * are a statement of what the run got, not a menu. They are list items, so a
+   * screen reader still walks them as four entries and nothing on them is focusable.
    */
-  private buildReceipt(context: CtaContext, delaysHost?: HTMLElement): ReceiptView {
+  private buildReceipt(delaysHost?: HTMLElement): ReceiptView {
     const root = this.h('div', 'beam-run__receipt') as HTMLDivElement;
     const title = this.pixel('div', 'beam-run__receipt-title', COPY.win.receiptTitle, {
       ...PX_TYPE.caption,
       ...DIM_INK,
     });
-    const hint = this.pixel('div', 'beam-run__hint', COPY.win.receiptHint, {
-      ...PX_TYPE.body,
-      ...MUTED_INK,
-    });
-    const list = this.h('div', 'beam-run__receipt-list');
+    const list = this.h('ul', 'beam-run__receipt-list');
     const rows: ReceiptView['rows'] = new Map();
 
     for (const cap of CAPABILITIES) {
-      const btn = this.doc.createElement('button');
-      btn.type = 'button';
-      btn.className = 'beam-run__receipt-row';
+      const row = this.h('li', 'beam-run__receipt-row') as HTMLLIElement;
       const mark = this.h('span', 'beam-run__receipt-mark');
       mark.setAttribute('aria-hidden', 'true');
       const markArt = this.pixelMark(false);
@@ -838,22 +867,17 @@ export class Overlays {
         ...MUTED_INK,
       });
       const detail = this.h('span', 'beam-run__receipt-detail') as HTMLSpanElement;
-      btn.append(mark, product, stage, detail);
-      btn.setAttribute('aria-label', `${cap.product} — ${cap.stage}. ${cap.effect}.`);
-      btn.addEventListener('click', () => this.cb.onCta(context, cap.topic));
-      list.appendChild(btn);
-      rows.set(cap.badge, { btn, detail, mark });
+      row.append(mark, product, stage, detail);
+      list.appendChild(row);
+      rows.set(cap.badge, { el: row, detail, mark });
     }
 
     // The delays live inside the receipt unless the caller owns a place for them
     // (the win screen does — see `fillDelays`).
     const delays = delaysHost ?? this.h('div', 'beam-run__receipt-delays');
-    // The hint sits UNDER the list, not between the heading and it. Both end screens
-    // are two columns of "caption, then a block": with the hint in the middle the
-    // right-hand block started a line and a half below the left-hand one, so the two
-    // masses never lined up. As a footnote it also reads where it is acted on — the
-    // rows are directly above it.
-    root.append(title, list, hint);
+    // Caption, then the block — the same shape as the left column's caption and cost
+    // panel, so the two captions share a line and the two blocks share both edges.
+    root.append(title, list);
     if (!delaysHost) root.appendChild(delays);
     return { root, rows, delays };
   }
@@ -968,27 +992,14 @@ export class Overlays {
    */
   private fillLegend(row: HTMLElement, kind: LegendKind): void {
     row.replaceChildren();
-    const sentence =
-      kind === 'fire'
-        ? this.isTouch
-          ? COPY.legend.fireTap
-          : COPY.legend.fireKeys
-        : this.isTouch
-          ? COPY.legend.moveJumpTap
-          : COPY.legend.moveJumpKeys;
+    const sentence = kind === 'fire' ? COPY.legend.fireKeys : COPY.legend.moveJumpKeys;
     row.append(this.h('span', 'beam-run__sr', sentence));
     /*
-     * Touch shows the pads it will actually draw over the game (see `TouchControls`):
-     * two arrows, a big round jump and a **smaller** act button beside it. Keyboard
-     * shows the keys. Same three groups either way.
-     *
-     * The act pad is a disc at a smaller size rather than a different glyph, and that
-     * is the point: the first cut drew it as '>' — the *same* character the right-hand
-     * move arrow uses — so the row read "> MOVE … > FIRE" and asked the player to tell
-     * two identical glyphs apart. The real buttons separate on size and shape, so the
-     * legend does too.
+     * Keyboard only: the caller never passes a legend on touch (see the titlecard
+     * branch of `show`), because the thumb pads are already on the screen there. The
+     * touch version of this row (the pads redrawn as round caps) was cut for that.
      */
-    type Group = readonly [readonly (string | readonly string[])[], string, boolean];
+    type Group = readonly [readonly string[], string];
     /*
      * The fire lesson is **one group, on its own** (owner call: introduce F when it is
      * relevant). It arrives on level 3, three stages after the player learned to move
@@ -997,34 +1008,45 @@ export class Overlays {
      * them is news reads as the title screen's manual, which is what this move was
      * meant to get away from.
      */
-    const move: Group = [['<', '>'], COPY.legend.caps.move, false];
-    const groups: readonly Group[] = this.isTouch
-      ? kind === 'fire'
-        ? [[[DOT_GLYPH], COPY.legend.caps.fire, true]]
-        : [move, [[DOT_GLYPH], COPY.legend.caps.jump, false]]
-      : kind === 'fire'
-        ? [[['F'], COPY.legend.caps.fire, false]]
-        : [move, [['SPACE'], COPY.legend.caps.jump, false]];
-    for (const [caps, label, small] of groups) {
+    const groups: readonly Group[] =
+      kind === 'fire'
+        ? [[['F'], COPY.legend.caps.fire]]
+        : [
+            [['<', '>'], COPY.legend.caps.move],
+            [['SPACE'], COPY.legend.caps.jump],
+          ];
+    /*
+     * The row is a grey 8-bit tile (owner call): a faded CONTROLS caption over the caps,
+     * both centred on the tile's axis. The caption is decorative artwork like the caps;
+     * the hidden sentence above stays the only text in the row.
+     */
+    const heading = this.h('span', 'beam-run__keys-head');
+    heading.appendChild(
+      createPixelSvg(this.doc, [COPY.legend.heading], {
+        ...PX_TYPE.keyHeading,
+        ...KEY_HEADING_INK,
+        centreInk: true,
+      }),
+    );
+    const caps = this.h('div', 'beam-run__keys-row');
+    for (const [glyphs, label] of groups) {
       const group = this.h('div', 'beam-run__key-group');
-      for (const cap of caps) {
-        const key = this.h(
-          'span',
-          'beam-run__key' +
-            (this.isTouch ? ' beam-run__key--pad' : '') +
-            (small ? ' beam-run__key--small' : ''),
-        );
+      for (const cap of glyphs) {
+        const key = this.h('span', 'beam-run__key');
+        // centreInk: the glyph, not glyph + shadow, sits on the cap's middle (owner
+        // call: the caps' glyphs read as off-centre by the shadow's one cell).
         key.appendChild(
-          typeof cap === 'string'
-            ? createPixelSvg(this.doc, [cap], { ...PX_TYPE.key, ...TITLE_INK })
-            : this.pixelGrid(cap, '#FFFFFF'),
+          createPixelSvg(this.doc, [cap], { ...PX_TYPE.key, ...TITLE_INK, centreInk: true }),
         );
         group.appendChild(key);
       }
       // Decorative: the row's own hidden sentence is the accessible copy.
-      group.appendChild(createPixelSvg(this.doc, [label], { ...PX_TYPE.keyLabel, ...DIM_INK }));
-      row.appendChild(group);
+      group.appendChild(
+        createPixelSvg(this.doc, [label], { ...PX_TYPE.keyLabel, ...KEY_LABEL_INK }),
+      );
+      caps.appendChild(group);
     }
+    row.append(heading, caps);
   }
 
   private buildStart(): OverlayEntry {
@@ -1074,8 +1096,17 @@ export class Overlays {
     const start = this.btn(COPY.start.play, 'primary', () => this.cb.onStart());
     actions.append(start);
 
-    stack.append(tagline, offer, actions);
-    el.append(brand, stack);
+    /*
+     * The marquee, hook and offer are one group and START is its own, so the two can
+     * be placed apart: on a desktop frame they stack in the sky above the attract
+     * skyline; on a phone held upright the group sits in the band above the frame and
+     * START in the band below it, where the thumb is (see the title screen
+     * composition note in styles.ts). Reading and focus order are unchanged.
+     */
+    const head = this.h('div', 'beam-run__start-head');
+    stack.append(tagline, offer);
+    head.append(brand, stack);
+    el.append(head, actions);
     return { el, focusTarget: start };
   }
 
@@ -1131,12 +1162,22 @@ export class Overlays {
     const el = this.overlayShell(['titlecard', 'deathcard']);
     el.setAttribute('role', 'alertdialog');
     const stack = this.stack('titlecard');
+    /*
+     * The powerup itself (owner call: "show the ANSR powerup, the logo, and only the
+     * logo"), directly over the line that names it (owner call: it moved down from over
+     * the headline). The line says "Take the ANSR powerup …", so the mark sits on top of
+     * the sentence it illustrates — the orange sunburst they will see turning on the
+     * stage — without the product tag the pickup's popup carries. With the mark carrying
+     * the orange, the line itself is white. Decorative: the line is the accessible copy.
+     * It turns slowly, as it does on the stage, and holds still under reduced motion.
+     */
+    const mark = createSunburst(this.doc, 'beam-run__death-mark');
     this.deathCardTitle = this.h('h2', 'beam-run__title');
     this.deathCardLine = this.h('p', 'beam-run__advice');
     const actions = this.h('div', 'beam-run__actions');
     const retry = this.btn(COPY.deathCard.retry, 'primary', () => this.cb.onAdvance());
     actions.appendChild(retry);
-    stack.append(this.deathCardTitle, this.deathCardLine, actions);
+    stack.append(this.deathCardTitle, mark, this.deathCardLine, actions);
     el.appendChild(stack);
     return { el, focusTarget: retry };
   }
@@ -1183,10 +1224,16 @@ export class Overlays {
      * 3: fire). One row, filled per card and emptied when there is none — see
      * `fillLegend` for why it is not two pre-built rows toggled by `hidden`.
      *
-     * It sits UNDER the brief and ABOVE the button, which is the one arrangement that
-     * works: a row of chrome directly under a cap reads as a caption on the cap (the
-     * reason no keyboard prompt has ever survived on this card), and above the brief it
-     * would be the first thing read on a screen whose job is to say where you are.
+     * It sits **outside the card, under it** (owner call: "move the controls out of the
+     * main blue box"). The card is about the place — where you are, what is in it, the
+     * button that starts it — and the legend is about the machine, so it is its own
+     * grey plate below the panel rather than a row inside it. Under rather than over:
+     * above the card it would be the first thing read on a screen whose job is to say
+     * where you are. DOM order follows the picture, so it is read after the button.
+     *
+     * Both live in one centred group, and that group is the overlay's only child: the
+     * overlay centres its first and last children with auto margins, and a hidden
+     * legend as the last child would drop the card to the bottom of the frame.
      */
     this.titleCardKeys = this.h('div', 'beam-run__keys');
     this.titleCardKeys.hidden = true;
@@ -1195,14 +1242,10 @@ export class Overlays {
     const begin = this.btn(COPY.titleCard.begin, 'primary', () => this.cb.onAdvance());
     actions.appendChild(begin);
 
-    stack.append(
-      this.titleCardTag,
-      this.titleCardLabel,
-      this.titleCardBrief,
-      this.titleCardKeys,
-      actions,
-    );
-    el.appendChild(stack);
+    stack.append(this.titleCardTag, this.titleCardLabel, this.titleCardBrief, actions);
+    const group = this.h('div', 'beam-run__card-group');
+    group.append(stack, this.titleCardKeys);
+    el.appendChild(group);
     return { el, focusTarget: begin };
   }
 
@@ -1236,7 +1279,7 @@ export class Overlays {
     });
     this.summaryMonths = this.h('span', 'beam-run__clock-strong');
     clock.append(clockLabel, this.summaryMonths);
-    this.summaryReceipt = this.buildReceipt('summary');
+    this.summaryReceipt = this.buildReceipt();
     const actions = this.h('div', 'beam-run__actions');
     const cta = this.btn(COPY.summary.cta, 'primary', () => this.cb.onCta('summary'));
     const resume = this.btn(COPY.summary.resume, 'ghost', () => this.cb.onResume());
@@ -1257,7 +1300,9 @@ export class Overlays {
 
   private buildWin(): OverlayEntry {
     const el = this.overlayShell(['scene', 'receipt', 'win'], COPY.win.title);
-    const brand = createBrandLockup(this.doc, { compact: true });
+    // The full name, "ANSRcade | The GCC Game", as on the title screen (owner call):
+    // the closing screen is the one a prospect screenshots, so it carries the edition.
+    const brand = createBrandLockup(this.doc, { compact: true, title: COPY.meta.edition });
     const card = this.stack('receipt');
     const title = this.pixelTitle(COPY.win.title, ['MARKET ENTRY', 'COMPLETE']);
 
@@ -1307,12 +1352,13 @@ export class Overlays {
      */
     const cost = this.h('div', 'beam-run__cost');
     cost.append(figure, this.winVerdict, delays);
-    this.winReceipt = this.buildReceipt('win', delays);
+    this.winReceipt = this.buildReceipt(delays);
 
     // "Play again" is the only cap. The Navigator route is not a button on this
     // screen any more (owner call): it was one generic offer standing next to the
     // four capability rows, each of which is the same offer with a topic attached.
-    // The rows carry the conversion, which is what `receiptHint` points at.
+    // The rows were the conversion until they became read-only (owner call), so this
+    // screen now has no Navigator route at all; the mid-run summary keeps its CTA.
     const actions = this.h('div', 'beam-run__actions');
     const replay = this.btn(COPY.win.replay, 'primary', () => this.cb.onRestart());
     actions.append(replay);
@@ -1327,8 +1373,8 @@ export class Overlays {
      */
     card.append(title, this.columns([label, cost], [this.winReceipt.root]), actions);
     el.append(brand, card);
-    // Focus lands on "Play again", the only cap on the screen. The receipt rows are
-    // the conversion routes and they are reachable with one Tab from here.
+    // Focus lands on "Play again", the only cap and the only focusable thing on the
+    // screen now that the receipt rows are read-only.
     return { el, focusTarget: replay };
   }
 }

@@ -18,14 +18,12 @@
  * *positions* come from `world/badgeDrop.ts`, which the simulation collides against —
  * so what is drawn and what can be taken cannot disagree.
  */
-import { RESOLUTION, POWERUPS } from '../data/tuning.config';
-import { pxRect, drawPixels, maxWidth, hash2, type Palette } from './PixelArt';
+import { POWERUPS } from '../data/tuning.config';
+import { pxRect, drawPixels, maxWidth, type Palette } from './PixelArt';
 import { drawAnsrBadgeMark, markSpin, MARK_SPIN_TURNS, BADGE_MARK_D } from './badge';
 import { drawLabelPlaque } from './PixelText';
 import type { DropView } from '../world/badgeDrop';
 
-const { TILE: T } = RESOLUTION;
-const GROUND_TOP = 15 * T;
 
 const HULL_OUT = '#04222B';
 const HULL = '#0F5A6C';
@@ -117,13 +115,9 @@ export function drawDrone(
 }
 
 /**
- * The whole delivery: drone, cable, the mark under it or falling, and the landing
- * spot it is aimed at.
- *
- * The aiming chevron on the ground is not decoration — it is the affordance. The
- * badge is going to be takeable for a few seconds only, so the player has to be
- * able to start running *before* it lands, which means the ground has to say where
- * it will be while it is still in the air.
+ * The whole delivery: drone, cable, the mark under it or falling, and its clock once
+ * it is down. Where it will land is said by the floating brick it lands on
+ * (`drawFloatingBrick`), not by anything this module paints.
  */
 export function drawBadgeDelivery(
   ctx: CanvasRenderingContext2D,
@@ -132,7 +126,6 @@ export function drawBadgeDelivery(
   reduced: boolean,
 ): void {
   if (view.phase === 'gone') return;
-  const dropX = view.dropGx * T + T / 2;
 
   // The drone keeps crossing after it has let go — it is still in the air until the
   // far edge, and cutting to nothing the instant the badge lands read as the machine
@@ -140,19 +133,16 @@ export function drawBadgeDelivery(
   // is off-frame anyway.
   drawDrone(ctx, view.carrier.x, view.carrier.y, phase, reduced);
 
-  if (view.phase === 'carrying' || view.phase === 'falling') {
-    // The landing spot, while the badge is still on its way: a bracket on the floor
-    // with a chevron stepping up out of it.
-    const lift = reduced ? 0 : Math.floor(phase * 6) % 2 === 0 ? 0 : 4;
-    pxRect(ctx, `rgba(${CYAN}, 0.5)`, dropX - 22, GROUND_TOP - 5, 44, 5, 1);
-    pxRect(ctx, `rgba(${CYAN}, 0.5)`, dropX - 22, GROUND_TOP - 14, 5, 10, 1);
-    pxRect(ctx, `rgba(${CYAN}, 0.5)`, dropX + 17, GROUND_TOP - 14, 5, 10, 1);
-    for (let i = 0; i < 3; i += 1) {
-      pxRect(ctx, `rgba(${CYAN}, ${0.55 - i * 0.14})`, dropX - 3 + i * 0, GROUND_TOP - 22 - i * 8 - lift, 6, 5, 2);
-      pxRect(ctx, `rgba(${CYAN}, ${0.35 - i * 0.1})`, dropX - 11, GROUND_TOP - 18 - i * 8 - lift, 5, 5, 2);
-      pxRect(ctx, `rgba(${CYAN}, ${0.35 - i * 0.1})`, dropX + 6, GROUND_TOP - 18 - i * 8 - lift, 5, 5, 2);
-    }
-  }
+  /*
+   * **Nothing is painted on the floor** (owner call: "a blue bucket thing on the floor
+   * below the powerup brick", and "a weird orange line below the powerup"). The landing
+   * bracket, its chevron, the dust and the footprint under the live mark were all drawn
+   * at the ground band from when the badge landed on the floor. It lands on the floating
+   * brick now, so every one of them sat under the brick, describing a spot the badge
+   * never reaches — the cyan bracket with its two posts read as a bucket, and its urgent
+   * blink as an orange line. The brick itself is the landing spot, in plain view from
+   * the moment the screen opens, so it does the affordance's job.
+   */
 
   if (view.phase === 'carrying') {
     // The cable: it hangs from the hull to the mark, so the two are one object.
@@ -199,9 +189,8 @@ export function drawBadgeDelivery(
  *  1. **A ring of cells that empties.** Twelve cells round the mark, one going out
  *     for each twelfth of the lifetime spent. A ring reads as a clock; a shrinking
  *     bar under a 40px icon reads as damage.
- *  2. **A blink in the last `WARN_TIME`.** Held frames, not a fade, and the ground
- *     bracket blinks with it so the cue is at the player's feet as well as on the
- *     pickup. Under reduced motion the blink is replaced by a steady warning tone on
+ *  2. **A blink in the last `WARN_TIME`.** Held frames, not a fade, on the ring
+ *     and the "TAKE IT" plaque. Under reduced motion the blink is replaced by a steady warning tone on
  *     the same cells — the information stays, the flashing does not.
  */
 function drawExpiryClock(
@@ -215,11 +204,6 @@ function drawExpiryClock(
   const urgent = view.remaining <= POWERUPS.DROP.WARN_TIME;
   const blink = urgent && !reduced ? Math.floor(phase * 16) % 2 === 0 : true;
 
-  // Landing dust it kicked up, stable per column so it does not shimmer.
-  for (let i = 0; i < 5; i += 1) {
-    const n = hash2(Math.round(x / 8) + i, 19);
-    pxRect(ctx, 'rgba(198,182,150,0.35)', x - 26 + i * 12, GROUND_TOP - 4 - n * 4, 8, 4, 2);
-  }
   // Four flare cells off the mark, at full alpha. A 40px logo lying on scorched brick
   // is a dark disc on a dark floor; four bright cells are what make it a *pickup*
   // from across the frame. Full alpha and few, never a wash — the halo lesson.
@@ -243,10 +227,6 @@ function drawExpiryClock(
     const color = urgent ? (blink ? '#FF5400' : 'rgba(255,84,0,0.25)') : `rgba(${CYAN}, 0.75)`;
     pxRect(ctx, color, cx - 2, cy - 2, 4, 4, 2);
   }
-
-  // The bracket on the floor, so the pickup has a footprint rather than hovering.
-  const foot = urgent && blink ? '#FF5400' : `rgba(${CYAN}, 0.55)`;
-  pxRect(ctx, foot, x - 22, GROUND_TOP - 5, 44, 5, 1);
 
   // "NOW" plaque in the last beat: the one moment this screen tells the player to
   // hurry, and it says it in words because the ring alone is a shape nobody has

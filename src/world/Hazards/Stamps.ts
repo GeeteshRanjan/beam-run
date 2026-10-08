@@ -86,8 +86,8 @@ export interface StampState {
   /** 0..1 through the wind-up that precedes the slam (0 at any other time). */
   warn: number;
   /**
-   * What this stamp is refusing, set on its index label — ENTITY, BANKING, TAX IDS,
-   * DIR KYC (owner call: the four stamps name the four setup approvals, and DENIED
+   * What this stamp is refusing, set on its index label — ENTITY, BANKING, TAX,
+   * MCA (owner call: the four stamps name the four setup approvals, and DENIED
    * moves onto the rubber die at the bottom).
    *
    * Authored in `levels.json`, carried through here rather than looked up in the
@@ -136,52 +136,70 @@ export class Stamps implements Hazard {
   }
 
   /**
-   * **An ANSR-backed stamp can be stood on** (owner call: "when the player jumps on
-   * the stamp he is currently hitting the ground — make it such that the player is
-   * standing on the stamp, in the case that he jumps on it with the powerup taken").
+   * **With the badge, the head is a solid object at every point of its stroke** (owner
+   * call: "make the stamps solid — if a user manages to jump on the stamp at any time it
+   * should act as an actual solid thing, stop the user as a wall would, and he should be
+   * able to stand on it"). This supersedes the earlier rule that it was a one-way
+   * platform, only while coming down or held.
    *
-   * Unassisted this returns nothing and always did: a stamp you could climb is a
-   * stamp you are not timing, and timing them is the screen. Assisted it returns the
-   * pressing face, and that is the third thing 1Wrk does on this screen — the
-   * mechanism slows down, it cannot press you, and now the thing that used to flatten
-   * you holds your weight. Which is the argument the screen makes, as geometry.
+   * So, assisted, it is a plain two-way AABB: walking into its side stops you, jumping
+   * into its underside bonks you, landing on top stands you on it. What still aborts a
+   * stroke is the *stamp's own motion into you* — being pressed from above, which
+   * `update` checks after the head has moved. A head that moves with somebody on top
+   * carries him (see `carry`), so riding it is never read as being pressed.
    *
-   * Three constraints, and every one of them is load-bearing:
+   * **Unassisted it is still not solid, on purpose.** A solid stamp without the badge
+   * is a far easier screen: walking into a stamp that is down just parks you against
+   * its side instead of flattening you, so the only way to be hit is to stand in the
+   * column at the instant of the drop, and the tuned reflex test (`HAZARDS.STAMPS.CYCLE`)
+   * stops being one. Standing on stamps is what 1Wrk buys; without it a head you touch
+   * flattens you, from the side or from above.
    *
-   *  · **One-way.** The face is only solid to a player who was already above it, so
-   *    walking into a pressed stamp is still a walk-through and the assisted screen
-   *    is not quietly given four new walls. A two-way solid here would be a *harder*
-   *    screen with the badge than without it, which inverts the whole model — and a
-   *    pressed head spans 512-600, i.e. exactly a standing player, so it would have
-   *    been four walls rather than four hurdles.
-   *  · **Only while it is coming DOWN or held.** A rising solid under a standing body
-   *    passes through it — `moveAndCollide` is driven by the player's motion — and the
-   *    honest ways round that are both wrong here: carrying the rider would take him
-   *    to the parked row at 242 and hand him back on the next slam (a lift he cannot
-   *    get off), and pushing him would be the defect. Dropping the solid for the lift
-   *    means the stamp simply leaves from under him, which is also the picture.
-   *  · **Never while it is retracting.** A stamp backing off a shielded player is
-   *    mid-apology; giving it a surface at the same time says two things at once.
-   *
-   * Nothing can be crushed against it, because a press that meets the player aborts
-   * (see `update`) — so the one solid in this game that descends can never descend
-   * into anybody.
+   * One exclusion, and it is load-bearing: a head the player is already **inside** is
+   * left out. The only way to be inside one is for it to have come down onto you, and
+   * `moveAndCollide` resolves an overlap by snapping to the nearest face on the axis you
+   * are moving along — i.e. it would teleport a shielded player onto the roof of the
+   * stamp that just touched him, or ~100px sideways out of it. Left out, he simply stays
+   * put while it retracts off him, which is the picture.
    */
   solids(player: Player): AABB[] {
     if (!this.slowed) return [];
     const boxes: AABB[] = [];
-    const prevBottom = player.box.y + player.box.h;
     for (const s of this.stamps) {
-      if (s.abortE !== null || s.e >= DESCENDING) continue;
-      const press = this.pressOf(s);
-      if (press <= 0) continue;
-      const head = this.headBox(s, press);
-      if (prevBottom > head.y) continue; // he was not above it: walk through
+      const head = this.headBox(s, this.pressOf(s));
+      if (aabbOverlap(player.box, head)) continue;
       boxes.push(head);
     }
     return boxes;
   }
-
+  /**
+   * Keep a rider on a moving head. Called after the head has moved from `before` to
+   * `after`, before anything checks for a press.
+   *
+   *  · **Rising:** anybody whose feet were at or above the old top and whose body the
+   *    new top now cuts into is lifted onto it — a rising solid cannot pass through a
+   *    body standing on (or dropping onto) it. `vy` only loses its downward part, so a
+   *    jump already under way keeps its momentum.
+   *  · **Falling:** only a player actually standing on it (grounded, feet on the old
+   *    top) follows it down; one in the air above it just falls after it and lands.
+   *
+   * Horizontal overlap is strict, as in `aabbOverlap`, so a player standing flush
+   * against the side of a moving head is never picked up by it.
+   */
+  private carry(player: Player, before: AABB, after: AABB): void {
+    if (after.y === before.y) return;
+    const b = player.box;
+    if (b.x >= after.x + after.w || b.x + b.w <= after.x) return;
+    const feet = b.y + b.h;
+    if (after.y < before.y) {
+      if (feet > before.y + 1 || feet <= after.y) return;
+    } else if (!player.onGround || Math.abs(feet - before.y) > 1) {
+      return;
+    }
+    b.y = after.y - b.h;
+    if (player.vy > 0) player.vy = 0;
+    player.onGround = true;
+  }
   speedMultAt(): number {
     return 1;
   }
@@ -223,6 +241,7 @@ export class Stamps implements Hazard {
 
     for (const s of this.stamps) {
       const prevE = s.e;
+      const before = this.headBox(s, this.pressOf(s));
       s.e += step;
       /*
        * It has hit the floor: the frame the accelerating slam bottoms out, i.e. the
@@ -240,6 +259,8 @@ export class Stamps implements Hazard {
         s.abortPress = 0;
       }
       const press = this.pressOf(s);
+      // Only a solid head can carry anybody; unassisted, the overlap below flattens him.
+      if (ctx.assisted) this.carry(player, before, this.headBox(s, press));
       if (press <= 0) continue;
       if (!aabbOverlap(player.box, this.headBox(s, press))) continue;
 

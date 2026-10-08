@@ -260,8 +260,8 @@ export const BUBBLE_ORANGE: BubbleTint = {
  * unharmed, inside a field) in the same colour as the thing it is protecting him
  * from: rasterised, the hero disappeared into his own hazard. Teal is the brand and
  * the water's colour, which is the correct read anyway — the halo and the cannon
- * arrive together and do the same job. The reserved orange keeps the badge burst,
- * the ANSR ENGAGED label and the HUD chip on this screen, so the value accent is
+ * arrive together and do the same job. The reserved orange keeps the badge burst
+ * and the HUD chip on this screen, so the value accent is
  * still what says "ANSR is with you"; it just is not painted on top of the fire.
  */
 export const BUBBLE_TEAL: BubbleTint = {

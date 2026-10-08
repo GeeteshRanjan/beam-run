@@ -63,9 +63,7 @@ describe('copy', () => {
       COPY.start.headline,
       COPY.start.tagline,
       COPY.legend.moveJumpKeys,
-      COPY.legend.moveJumpTap,
       COPY.legend.fireKeys,
-      COPY.legend.fireTap,
       COPY.win.title,
       COPY.win.lostLabel,
       COPY.win.verdictClean,
@@ -128,22 +126,24 @@ describe('copy', () => {
      * Owner call: the controls copy moved off the opening screen and onto the briefing
      * cards, "like a play through", with F introduced "when it is relevant".
      *
-     * These four sentences are the legend's *accessible* copy — the visible row is caps —
+     * These two sentences are the legend's *accessible* copy — the visible row is caps —
      * so they are not measured against any headline. What they must do is split the
-     * lesson in two: the move/jump pair may not mention fire (it is shown three stages
+     * lesson in two: the move/jump line may not mention fire (it is shown three stages
      * before a powerup arms one, so naming it would be a control that does nothing), and
-     * the fire pair must name the key, because it is the one control nobody can guess.
+     * the fire line must name the key, because it is the one control nobody can guess.
+     * Keyboard only: there is no touch pair any more (owner call, no controls legend in
+     * non-desktop mode).
      */
-    for (const line of [COPY.legend.moveJumpKeys, COPY.legend.moveJumpTap]) {
-      expect(line.toLowerCase(), line).toContain('jump');
-      expect(line.toLowerCase(), line).not.toContain('fire');
-    }
+    expect(COPY.legend.moveJumpKeys.toLowerCase()).toContain('jump');
+    expect(COPY.legend.moveJumpKeys.toLowerCase()).not.toContain('fire');
     expect(COPY.legend.fireKeys).toMatch(/\bF\b/);
-    for (const line of [COPY.legend.fireKeys, COPY.legend.fireTap]) {
-      expect(line.toLowerCase(), line).toContain('fire');
-    }
+    expect(COPY.legend.fireKeys.toLowerCase()).toContain('fire');
+    expect(COPY.legend).not.toHaveProperty('moveJumpTap');
+    expect(COPY.legend).not.toHaveProperty('fireTap');
     // Every cap label sets inside its own cap, which is what keeps the row a row of
     // buttons rather than a row of words.
+    // No exceptions: "TO FIRE" was tried on level 3 and cut (owner call), so every plate
+    // uses one bare word per cap.
     for (const label of Object.values(COPY.legend.caps)) {
       expect(normalizeForPixels(label).length, label).toBeLessThanOrEqual(5);
     }
@@ -162,7 +162,7 @@ describe('copy', () => {
      */
     expect(badges).toHaveLength(SCREENS.length - 2);
     expect(SCREENS.filter((s) => !s.badge).map((s) => s.name)).toEqual([
-      'Head Office',
+      'Headquarters',
       'ANSR Tech Park',
     ]);
     // …and a screen may only omit the badge if it has nothing to defend against.
@@ -182,7 +182,7 @@ describe('copy', () => {
   });
 
   it('blames the environment for every setback cause, never the player', () => {
-    for (const cause of ['stamp', 'fire', 'monster', 'mummy', 'fall']) {
+    for (const cause of ['stamp', 'fire', 'stomp', 'monster', 'mummy', 'fall']) {
       expect(COPY.setback.tag[cause]).toBeTruthy();
       expect(COPY.setback.reason[cause]).toBeTruthy();
       expect(COPY.setback.reason[cause]!.toLowerCase()).not.toContain('you failed');

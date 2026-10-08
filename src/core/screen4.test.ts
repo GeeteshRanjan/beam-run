@@ -23,7 +23,8 @@ import type { Simulation } from './Simulation';
  *
  *  · the beast **stands on the ground at the far end** and answers with one straight,
  *    growing, slightly diverging **cone** of fire down the lane in front of it. There
- *    are no fireballs and no rolling flame fronts: nothing on this screen travels;
+ *    are no fireballs and no rolling flame fronts; once lit, the cone's far end
+ *    follows the player inwards (never further out than the lane it lit on);
  *  · the badge is **air-dropped** by a drone onto one of three **floating bricks** in
  *    turn and **expires**, so the test is being there in time *and* jumping for it;
  *  · and the old mid-screen hurdle is gone (owner call) — a boss screen did not need
@@ -109,8 +110,10 @@ describe('Screen 4 — Hire Under Fire (cross the lane → Talent500 → hire th
     const dragon = sim.activeHazard as Dragon;
     expect(dragon.isRoaring).toBe(true);
     const before = sim.months;
-    // Stand directly underneath it for the whole roar.
-    for (let i = 0; i < Math.ceil((D.ROAR_TIME - 0.1) / DT); i += 1) {
+    // Stand directly underneath it for the whole roar — and only the roar: `expireGrace`
+    // has already spent some of it, and once it ends a player parked at its feet is
+    // stomped (owner call), which is a different claim from this one.
+    for (let i = 0; i < Math.ceil((D.ROAR_TIME - 0.1) / DT) && dragon.isRoaring; i += 1) {
       const box = dragon.dragonState().box;
       sim.player.box.x = box.x + box.w / 2;
       sim.step(DT, makeInput());
@@ -136,6 +139,36 @@ describe('Screen 4 — Hire Under Fire (cross the lane → Talent500 → hire th
     expect(sim.lifeLost?.cause).toBe('fire');
     expect(sim.setbacks).toBe(1);
     expect(sim.lives).toBe(sim.livesTotal - 1);
+  });
+
+  it('stops at its feet and it STOMPS: the same lost life, death card and retry as any stage', () => {
+    // Owner call: "when the player reaches the Godzilla it should stomp on the player …
+    // and the screens that come up should come like in other levels". So the stomp is a
+    // setback like every other — months, a life, a row in the log — and what follows is the
+    // stage's own death card and then a retry of the same stage.
+    const sim = driveToScreen(4);
+    expireGrace(sim);
+    const dragon = sim.activeHazard as Dragon;
+    while (dragon.isRoaring) sim.step(DT, makeInput());
+    const before = sim.months;
+    for (let i = 0; i < Math.ceil(3 / DT) && sim.state === 'PLAYING'; i += 1) {
+      const s = dragon.dragonState();
+      const home = s.box.x + s.box.w / 2 + s.dir * D.STOMP_FOOT_X;
+      if (!s.stomp) sim.player.box.x = home - sim.player.box.w / 2;
+      sim.step(DT, makeInput());
+    }
+    expect(sim.state).toBe('LIFE_LOST');
+    expect(sim.lifeLost?.cause).toBe('stomp');
+    expect(sim.months - before).toBe(JOURNEY.SETBACK_MONTHS);
+    expect(sim.lives).toBe(sim.livesTotal - 1);
+    expect(sim.log[sim.log.length - 1]?.cause).toBe('stomp');
+    // The impact beat, then the death card — exactly the path the other stages take.
+    stepN(sim, Math.ceil(1.2 / DT));
+    expect(sim.deathCardUp).toBe(true);
+    recoverFromLifeLost(sim);
+    expect(sim.screenId).toBe(4);
+    expect(sim.state).toBe('PLAYING');
+    expect((sim.activeHazard as Dragon).isRoaring).toBe(true);
   });
 
   it('a lost life restarts the stage with the roar, the suit and the drone back', () => {
@@ -408,48 +441,51 @@ describe('Screen 4 — Hire Under Fire (cross the lane → Talent500 → hire th
     expect(dragon.relief).toBe(1);
   });
 
-  it('is crossable unassisted by reading the lane — nothing here is a wall', () => {
-    // No screen in this game is impossible without its badge. Unassisted the dragon
-    // cannot be answered at all, so the stage has to be survivable — and this is that
-    // claim *played* rather than inferred from the tuning numbers. The policy is the
-    // simplest thing a person does: walk right, jump what is rolling at you, and back
-    // off from the column while it is pouring.
-    const sim = driveToScreen(4);
-    const dragon = sim.activeHazard as Dragon;
+  it('cannot be walked past: the exit is only open once it has been beaten', () => {
     /*
-     * The policy is the claim, so it is worth stating: **wait just outside the far end
-     * of the lane, and commit the moment a burst ends.**
+     * Owner call: "without killing the Godzilla the player should not be able to cross it —
+     * right now the player can just walk past it". This reverses the older rule that every
+     * stage is crossable without its powerup: here the powerup is how you win, and the beast
+     * stands between you and the exit until it is down.
      *
-     * That is the only policy the screen's own numbers allow, and working it out is
-     * what set them. One gap on its own is 0.95s ≈ 247px against a 325px lethal strip,
-     * so a player who only ever walks during the gaps oscillates and never crosses.
-     * Gap **plus** wind-up plus the ~0.3s the flame takes to grow out to the far end is
-     * ~1.9s ≈ 494px, which clears it with room. So the crossing is one committed run
-     * begun on the beat the fire goes out — and the wind-up, which reads as the moment
-     * to freeze, is in fact the safest part of the run.
+     * Played with the halo on, so nothing on the screen can end the attempt and the only
+     * thing stopping him is the body: twenty seconds of holding right, jumping as he goes,
+     * never reaches the exit and never gets behind it.
      */
-    let laneFar = Number.POSITIVE_INFINITY;
-    let committed = false;
-    let wasBurning = false;
-    let t = 0;
-    while (t < 90 && sim.screenId === 4 && sim.state === 'PLAYING') {
-      const f = dragon.fireState();
-      // The lane is legible from the wind-up onwards: its far end is where to wait.
-      if (f) laneFar = Math.min(f.mouth.x, f.target.x);
-      const burning = f?.phase === 'burning';
-      if (wasBurning && !burning) committed = true;
-      wasBurning = burning;
-      const px = sim.player.box.x + sim.player.box.w / 2;
-      const back = !committed && Number.isFinite(laneFar) && px > laneFar - 36;
-      sim.step(DT, makeInput({ right: !back, left: back }));
-      t += DT;
+    const sim = driveToScreen(4);
+    expireGrace(sim);
+    engageBadge(sim);
+    const dragon = sim.activeHazard as Dragon;
+    for (let t = 0; t < 20 && sim.state === 'PLAYING'; t += DT) {
+      sim.step(DT, makeInput({ right: true, jumpPressed: Math.floor(t * 3) % 2 === 0 }));
+      const s = dragon.dragonState();
+      const front = s.box.x + s.box.w / 2 - D.BARRIER_X;
+      expect(sim.player.box.x + sim.player.box.w).toBeLessThanOrEqual(front + 1e-6);
     }
-    // Clearing a stage now stops on the congratulations card and then on the next
-    // stage's briefing card (owner call: two cards per transition), so the crossing
-    // ends in SCREEN_CLEAR rather than on screen 5. Press through both.
+    expect(sim.screenId).toBe(4);
+    expect(sim.state).toBe('PLAYING');
+    expect(sim.setbacks).toBe(0);
+    // …and once it is beaten the way is open.
+    beatTheDragon(sim, dragon);
+    expect(dragon.isBeaten).toBe(true);
+    for (let t = 0; t < 10 && sim.state === 'PLAYING'; t += DT) {
+      sim.step(DT, makeInput({ right: true }));
+    }
     stepToPlaying(sim);
     expect(sim.screenId).toBe(5);
-    expect(sim.setbacks).toBe(0);
+  });
+
+  it('…and without the powerup, reaching it is being stood on', () => {
+    // Unassisted there is no answer to it at all, so walking up to it ends in a stomp (or
+    // the fire on the way in) — never on the far side of it.
+    const sim = driveToScreen(4);
+    expireGrace(sim);
+    for (let t = 0; t < 30 && sim.state === 'PLAYING'; t += DT) {
+      sim.step(DT, makeInput({ right: true }));
+    }
+    expect(sim.state).toBe('LIFE_LOST');
+    expect(sim.screenId).toBe(4);
+    expect(['fire', 'stomp']).toContain(sim.lifeLost?.cause);
   });
 
   it('and it is genuinely dangerous: ignoring the lane costs a life', () => {
@@ -466,6 +502,30 @@ describe('Screen 4 — Hire Under Fire (cross the lane → Talent500 → hire th
     }
     expect(sim.state).toBe('LIFE_LOST');
     expect(sim.lifeLost?.cause).toBe('fire');
+  });
+
+  it('the fire follows: parking in the pocket under the jaw costs a life now', () => {
+    // x≈860 is 68–148px in front of the jaw (it drifts), inside the pocket the old fixed
+    // lane never touched. A jet aimed at whoever is standing there reaches it.
+    const sim = driveToScreen(4);
+    expireGrace(sim);
+    standAtColumn(sim, 21, 860 - 21 * T - 14);
+    let t = 0;
+    while (t < 20 && sim.state === 'PLAYING') {
+      sim.step(DT, makeInput({}));
+      t += DT;
+    }
+    expect(sim.state).toBe('LIFE_LOST');
+    expect(sim.lifeLost?.cause).toBe('fire');
+  });
+
+  it('…and still never follows anybody back to the spawn', () => {
+    const sim = driveToScreen(4);
+    expireGrace(sim);
+    standAtColumn(sim, 3);
+    stepN(sim, Math.ceil(30 / DT));
+    expect(sim.state).toBe('PLAYING');
+    expect(sim.setbacks).toBe(0);
   });
 
   it('help never lapses: the suit does not come back on', () => {
@@ -488,7 +548,10 @@ describe('Screen 4 — Hire Under Fire (cross the lane → Talent500 → hire th
     engageBadge(sim);
     const before = sim.months;
     const base = sim.screen.data.monthsBase!;
-    // Walk out of the right-hand side, haloed, so nothing intervenes.
+    // It has to be beaten before the exit is reachable (owner call)…
+    standAtColumn(sim, 14);
+    beatTheDragon(sim, sim.activeHazard as Dragon);
+    // …then walk out of the right-hand side, haloed, so nothing intervenes.
     for (let i = 0; i < 4000 && sim.state === 'PLAYING'; i += 1) {
       sim.player.box.x = Math.min(RESOLUTION.WIDTH, sim.player.box.x + 8);
       sim.step(DT, makeInput({ right: true }));

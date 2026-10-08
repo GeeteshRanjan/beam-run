@@ -193,6 +193,16 @@ export class Simulation {
   private _bonus: BrickBreaker | null = null;
   /** The column he dropped in at, so the plaza gives him back the ground he left. */
   private bonusReturnX = 0;
+  /**
+   * The secret stage's own two cards (owner call: the hidden level gets transition
+   * screens like every other stage). `'brief'` is up from the frame he drops in until a
+   * press, `'clear'` from the frame the shaft has carried him out until a press, and the
+   * room is frozen under both. They are sub-states of PLAYING rather than GameStates for
+   * the same reason the room is: a new state would put a stakeless room into the
+   * transition table, the analytics funnel and every PLAYING guard in the host.
+   */
+  private _bonusCard: 'brief' | 'clear' | null = null;
+  private bonusCardT = 0;
 
   /**
    * Seconds of play on the current screen. Two jobs, one accumulator: it is the
@@ -518,6 +528,7 @@ export class Simulation {
     // Loading any screen leaves the secret stage: it exists only inside one visit to
     // the Tech Park, and a reset that kept it would put the plant room under screen 0.
     this._bonus = null;
+    this._bonusCard = null;
     this._screen = new Screen(id);
     this.powerups.reset();
     this.hazard = this.buildHazard();
@@ -562,6 +573,22 @@ export class Simulation {
   get inBonus(): boolean {
     return this._bonus !== null;
   }
+  /**
+   * Which of the secret stage's two cards is up, or null (the room is being played, or
+   * there is no room). The host paints the briefing card for `'brief'` and the
+   * congratulations card for `'clear'`, from `COPY.bonus`.
+   */
+  get bonusCard(): 'brief' | 'clear' | null {
+    return this._bonusCard;
+  }
+  /**
+   * The same press grace as the other cards, and it matters at both ends: he arrives on
+   * the briefing card with the act key that opened the hatch still down, and on the
+   * congratulations card with a move key held from walking into the shaft.
+   */
+  get bonusCardReady(): boolean {
+    return this.bonusCardT >= TRANSITION.TITLE_CARD_SKIP_AFTER;
+  }
 
   /** The tunnel mouth on this screen, in px, or null on the five without one. */
   get tunnelSpan(): { x: number; w: number } | null {
@@ -600,12 +627,16 @@ export class Simulation {
     this._bonus = new BrickBreaker();
     const at = BrickBreaker.spawnPoint();
     this._player.respawn(at.x, at.y);
+    // The room is briefed before it starts: its clock does not run until the press.
+    this._bonusCard = 'brief';
+    this.bonusCardT = 0;
     this.events.onTunnelEnter?.();
   }
 
   /** Back onto the plaza, at the column he left it from. */
   private leaveTunnel(): void {
     this._bonus = null;
+    this._bonusCard = null;
     this._player.respawn(this.bonusReturnX, this._screen.spawnY);
     this.events.onTunnelExit?.();
   }
@@ -652,6 +683,14 @@ export class Simulation {
    * host can wire the button once and never check.
    */
   requestAdvance(): void {
+    // The secret stage's cards: the briefing card starts the room, the congratulations
+    // card hands the plaza back. Both inside PLAYING, so they are read first.
+    if (this.sm.state === 'PLAYING' && this._bonus && this._bonusCard) {
+      if (!this.bonusCardReady) return;
+      if (this._bonusCard === 'clear') this.leaveTunnel();
+      else this._bonusCard = null;
+      return;
+    }
     /*
      * The congratulations card, which is the *first* of the two cards every transition
      * now shows. Leaving it is where the next screen is actually loaded — see
@@ -915,7 +954,18 @@ export class Simulation {
      * the game.
      */
     if (this._bonus) {
-      if (this._bonus.update(dt, this._player, input)) this.leaveTunnel();
+      // A card is up: the room is frozen and the only thing a press does is leave it.
+      if (this._bonusCard) {
+        this.bonusCardT += dt;
+        if (input.anyPressed) this.requestAdvance();
+        return;
+      }
+      // The shaft has carried him out: the congratulations card comes up over the room
+      // he just cleared, exactly as a stage's does, and the plaza waits behind the press.
+      if (this._bonus.update(dt, this._player, input)) {
+        this._bonusCard = 'clear';
+        this.bonusCardT = 0;
+      }
       return;
     }
 

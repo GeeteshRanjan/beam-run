@@ -69,6 +69,7 @@ import {
   drawFloatingBrick,
   drawScorchedGround,
   drawBurningHero,
+  drawDragonFoot,
 } from '../render/dragon';
 import { drawBadgeDelivery } from '../render/carrier';
 import {
@@ -77,6 +78,7 @@ import {
   drawTunnelHatch,
   type EngineRoomView,
 } from '../render/brickBreaker';
+import { drawActPrompt, actPromptWidth, CAP_H, LEAD_STRIP_H } from '../render/actPrompt';
 import type { BrickBreaker } from '../world/BrickBreaker';
 import { badgeCenter } from '../world/badgeFloat';
 import { isPerched, perchCenter } from '../world/badgePerch';
@@ -186,6 +188,12 @@ const LEGEND_ON_SCREEN: readonly (LegendKind | undefined)[] = [
   undefined,
 ];
 
+/**
+ * The hidden level's brief wrap measure. Its line is 31 characters: at the stages' 26
+ * it strands FINISH alone, at 18 it breaks on its own comma (16/14).
+ */
+const BONUS_BRIEF_CHARS = 18;
+
 export class Game {
   readonly root: HTMLElement;
   readonly stage: HTMLDivElement;
@@ -210,6 +218,14 @@ export class Game {
   private readonly touch: TouchControls;
   private readonly assistMenu: AssistMenu;
   private readonly isTouch = isTouchDevice();
+  /**
+   * The tool prompt over the hero's head ("F  CUT THE TAPE" / "F  HOLD TO SPRAY"), owner
+   * call: when a powerup arms a tool, say on the frame itself which key uses it. Shown
+   * from the moment the tool is armed until it is first used, then faded out; re-arming
+   * (a retry that takes the powerup again) shows it again. `toolPromptA` is its fade.
+   */
+  private toolPromptA = 0;
+  private toolPromptUsed = false;
   private readonly analytics: Analytics;
   private runStartS = 0;
   private reducedMotion = false;
@@ -236,6 +252,7 @@ export class Game {
     roaring: false,
     toppling: false,
     beaten: false,
+    stomps: 0,
   };
   /** Last-seen DENIED stamp counters: strokes that landed, strokes that were refused. */
   private stampCues = { slams: 0, deflections: 0 };
@@ -392,6 +409,11 @@ export class Game {
           const p = this.sim.player;
           this.effects.emitBurst(p.box.x + p.box.w / 2, p.box.y + p.box.h / 3, '#E4EAEC', 16, 170);
         }
+        // Stood on by the Godzilla: dust off the bricks either side of the foot.
+        if (cause === 'stomp') {
+          const p = this.sim.player;
+          this.effects.emitBurst(p.box.x + p.box.w / 2, p.box.y + p.box.h, '#CFC6B0', 16, 170);
+        }
         this.audio.playSfx('setback');
         /*
          * The cost, written where it was paid and then carried to where it is
@@ -485,11 +507,10 @@ export class Game {
         this.hud.announce(
           `${COPY.badgeToast.prefix}: ${cap?.product ?? COPY.meta.name}. ${cap?.effect ?? ''}`,
         );
-        // Floating "ANSR ENGAGED" + the product name, in the value orange.
-        if (c) {
-          this.spawnPopup(c.x, c.y - 24, 'ANSR ENGAGED', BRAND.ORANGE, 2);
-          this.spawnPopup(c.x, c.y - 8, solutionTag(type), '#CFE6EC', 2);
-        }
+        // Floating product name only. The "ANSR ENGAGED" line above it (and the
+        // one that stayed painted in the room) is gone (owner call): the product
+        // name and the HUD chip already say which powerup is on.
+        if (c) this.spawnPopup(c.x, c.y - 16, solutionTag(type), '#CFE6EC', 2);
       },
     });
 
@@ -732,6 +753,7 @@ export class Game {
     this.effects.update(dt);
     if (!this.paused) {
       this.updatePopups(dt);
+      this.updateToolPrompt(dt);
       if (this.delayFlight) {
         this.delayFlight.t += dt;
         if (this.delayFlight.t >= DELAY_FLIGHT_TIME) this.delayFlight = null;
@@ -823,6 +845,11 @@ export class Game {
     // stage behind you, then — one press later — what the stage ahead is.
     else if (state === 'SCREEN_CLEAR') overlay = 'clearcard';
     else if (state === 'TITLE_CARD') overlay = 'titlecard';
+    // The hidden level's own pair (owner call), inside PLAYING: the briefing card on the
+    // drop and the congratulations card on the lift out, built from the same surfaces.
+    else if (state === 'PLAYING' && this.sim.bonusCard) {
+      overlay = this.sim.bonusCard === 'brief' ? 'titlecard' : 'clearcard';
+    }
     /*
      * A lost life shows NOTHING (owner call). The sim holds in LIFE_LOST for
      * `LIVES.LOST_HOLD`, which is the beat the impact is painted on — the hero
@@ -856,7 +883,15 @@ export class Game {
 
     const screenId = this.sim.screenId;
     const clearedId = this.sim.clearedScreenId;
-    this.overlays.show(overlay, {
+    if (this.sim.bonusCard) {
+      this.overlays.show(overlay, {
+        levelLabel: COPY.bonus.name,
+        levelTag: COPY.bonus.tag,
+        brief: COPY.bonus.brief,
+        briefChars: BONUS_BRIEF_CHARS,
+        clear: COPY.bonus.clear,
+      });
+    } else this.overlays.show(overlay, {
       levelLabel: this.sim.screenLabel,
       // "Level 3" (owner call: call the levels out). Five of the six screens have one —
       // the Tech Park is the arrival, not a level — so an absent tag is normal and the
@@ -913,10 +948,14 @@ export class Game {
           ? COPY.controls.shootWater
           : COPY.controls.shoot,
     );
+    // The touch half of the tool prompt: the act pad pulses until the tool is first used.
+    this.touch.setShootHint(this.toolPromptA > 0);
     // On-screen touch controls: only while actively playing on a touch device.
     this.touch.setVisible(
       this.isTouch &&
         state === 'PLAYING' &&
+        // The hidden level's cards are inside PLAYING; the pads are not for them.
+        !this.sim.bonusCard &&
         !this.paused &&
         !this.assistOpen &&
         !this.summaryOpen,
@@ -935,7 +974,7 @@ export class Game {
      * is also what makes the room usable — the wall of blocks spans the full frame and
      * the log's four rows hang over the right-hand column of it (the rasteriser has no
      * HUD, so only the DOM's own extents catch that). The stage says its name on the
-     * frame instead: big for three seconds, then stencilled on the floor.
+     * briefing card instead, then keeps it stencilled on the floor.
      */
     const hudVisible =
       !this.paused &&
@@ -1015,6 +1054,7 @@ export class Game {
         this.reducedMotion,
         this.maze?.skyClear ?? 0,
         this.dragon?.relief ?? 0,
+        this.workplace?.restore ?? 0,
       );
     }
   }
@@ -1079,7 +1119,6 @@ export class Game {
       }
     }
 
-    this.drawEngagedLabel(ctx);
     this.drawHazards(ctx);
     this.drawBadge(ctx);
 
@@ -1132,7 +1171,82 @@ export class Game {
           this.reducedMotion,
         );
       }
+      // Stood on by the Godzilla: flattened (the squash pose, above), with its foot
+      // still on him — repainted after him, because the hero is drawn over the hazards.
+      const beast = this.stomped ? this.dragon : null;
+      if (beast) drawDragonFoot(ctx, beast.dragonState(), this.reducedMotion);
     }
+    // Outside the flicker gate: a prompt that blinks with the hero's i-frames is noise.
+    this.drawToolPrompt(ctx, cx, feetY - p.box.h);
+  }
+
+  /** Which tool is in the player's hands right now, if any. */
+  private get armedTool(): { label: string; sinceShot: number } | null {
+    const workplace = this.workplace;
+    if (workplace?.hasCutter) {
+      return { label: COPY.toolPrompt.cutter, sinceShot: workplace.sinceShot };
+    }
+    const dragon = this.dragon;
+    if (dragon?.hasCannon) return { label: COPY.toolPrompt.cannon, sinceShot: dragon.sinceShot };
+    return null;
+  }
+
+  /**
+   * Advance the tool prompt's fade. Up while a tool is armed and has not been used yet,
+   * and only while the stage is actually being played (not under a card or a lost life).
+   * "Used" is read off the hazard's own shot clock rather than the input, so a tap too
+   * quick for a render frame to see still counts, and a press that fired nothing does not.
+   */
+  private updateToolPrompt(dt: number): void {
+    const tool = this.armedTool;
+    if (!tool) this.toolPromptUsed = false;
+    else if (Number.isFinite(tool.sinceShot)) this.toolPromptUsed = true;
+    const want = tool !== null && !this.toolPromptUsed && this.sim.state === 'PLAYING' ? 1 : 0;
+    if (this.reducedMotion) this.toolPromptA = want;
+    else {
+      const step = dt / 0.25;
+      this.toolPromptA =
+        want > this.toolPromptA
+          ? Math.min(want, this.toolPromptA + step)
+          : Math.max(want, this.toolPromptA - step);
+    }
+  }
+
+  /**
+   * The prompt itself, over the hero's head. The key cap is **F** on a keyboard (J and
+   * the down arrow also fire, but one key is a lesson and three is a manual) and absent on
+   * touch, where there is no key to name — the act pad appearing beside the jump button is
+   * the other half of the prompt there, and it pulses while this is up.
+   */
+  private drawToolPrompt(ctx: CanvasRenderingContext2D, cx: number, headY: number): void {
+    const tool = this.armedTool;
+    if (!tool || this.toolPromptA <= 0) return;
+    // On a keyboard it reads PRESS [F] (owner calls: "write Press F", then "just keep
+    // Press [F]"), one strip
+    // LEAD_STRIP_H tall; on touch it is the verb plaque alone, CAP_H tall. The bottom
+    // edge stays 18px over the head either way.
+    const keyboard = !this.isTouch;
+    const h = keyboard ? LEAD_STRIP_H : CAP_H;
+    /*
+     * Keyboard: PRESS [F] and nothing after it (owner call: "just keep Press [F]"). The
+     * tool is already in the hero's hands and the thing to shoot is on the screen; the
+     * prompt only has to name the key. Touch has no key to name, so it keeps the verb.
+     */
+    const parts = {
+      cap: keyboard ? 'F' : null,
+      lead: keyboard ? COPY.toolPrompt.press : undefined,
+      label: keyboard ? '' : tool.label,
+    };
+    // Centred over the hero, but slid in from the edge when he is near one, so the
+    // strip never loses PRESS off the side of the frame.
+    const half = actPromptWidth(parts) / 2 + 8;
+    drawActPrompt(ctx, {
+      ...parts,
+      cx: Math.min(RESOLUTION.WIDTH - half, Math.max(half, cx)),
+      // Clear of the hero's head, and never up under the HUD plaques.
+      y: Math.max(72, Math.round(headY - 18 - h)),
+      alpha: this.toolPromptA,
+    });
   }
 
   /** The current screen's Workplace hazard, or null anywhere else. */
@@ -1310,10 +1424,18 @@ export class Game {
         roaring: false,
         toppling: false,
         beaten: false,
+        stomps: 0,
       };
       return;
     }
     const c = this.dragonCues;
+    // A stomp that lands: the floor takes it. The one that lands on the player already
+    // gets the setback's thud, shake and flash, so this is the one that missed.
+    if (dragon.stompsLanded > c.stomps && this.sim.state === 'PLAYING') {
+      this.audio.playSfx('stampThud');
+      this.effects.addShake(3, 0.12);
+    }
+    c.stomps = dragon.stompsLanded;
     const roaring = dragon.isRoaring && this.sim.state === 'PLAYING';
     if (roaring && !c.roaring) this.audio.playSfx('roar');
     c.roaring = roaring;
@@ -1382,41 +1504,12 @@ export class Game {
     return this.sim.state === 'LIFE_LOST' && this.sim.lifeLost?.cause === 'monster';
   }
 
-  /**
-   * The in-world "ANSR is with you" read once the badge is taken: one label, in
-   * the value orange, anchored at the badge column.
-   *
-   * It used to also cap the top edge of every solid from that column onwards with
-   * a bright cyan walkable edge. That has gone (owner call): it painted a blue
-   * line along the floor the moment the badge was picked up, which read as a
-   * surface defect rather than as value. Everything it was trying to say is now
-   * said by things attached to the player instead — the ANSR bubble around him
-   * and the engaged-capability chip in the HUD.
-   *
-   * Before that it was a gateway-and-dimming treatment, built for the old layout
-   * where the badge sat mid-screen and split it into a dimmed struggle half and a
-   * lit relief half. The badge is taken *before* the obstacles now, so there is no
-   * "before" half left to dim.
-   *
-   * Skipped on the finale, which paints its own plaza.
+  /*
+   * `drawEngagedLabel` used to be here: an "ANSR ENGAGED" line painted in the room
+   * from the badge column onwards once the powerup was taken. Removed (owner call),
+   * with the floating popup of the same words: the HUD chip and the player's bubble
+   * already say a powerup is on, and the label was a third copy of that.
    */
-  private drawEngagedLabel(ctx: CanvasRenderingContext2D): void {
-    const screen = this.sim.screen;
-    const badge = screen.data.badge;
-    if (!badge || screen.id === 5) return;
-    if (!this.sim.powerups.isAssisted) return;
-    const T = RESOLUTION.TILE;
-    const groundY = 15 * T;
-    const fromX = badge.gx * T + T / 2;
-
-    drawText(ctx, 'ANSR ENGAGED', fromX + 40, groundY - 124, {
-      scale: 2,
-      color: BRAND.ORANGE,
-      align: 'left',
-      outline: 'rgba(0,20,26,0.9)',
-      alpha: 0.9,
-    });
-  }
 
   /** Draw the human hero, choosing a pose from the sim's motion state. */
   private drawPlayer(ctx: CanvasRenderingContext2D, centerX: number, feetY: number): void {
@@ -1447,7 +1540,22 @@ export class Game {
    * — the sim booked the delay the instant the stamp landed.
    */
   private get flattened(): boolean {
-    return this.sim.state === 'LIFE_LOST' && this.sim.lifeLost?.cause === 'stamp';
+    return this.sim.state === 'LIFE_LOST' && (this.stamped || this.stomped);
+  }
+
+  /** The DENIED stamp's flattening (its stamp is lifted to show him, `drawStamps`). */
+  private get stamped(): boolean {
+    return this.sim.lifeLost?.cause === 'stamp';
+  }
+
+  /**
+   * True on the life-lost frames after the Godzilla stood on him (owner call: "stomp on the
+   * player like an animal would, and the player should flatten and die"). Same flattened
+   * pose as the stamp — the thing that did it is different, the result is the same — with
+   * the foot repainted on top of him (`drawDragonFoot`).
+   */
+  private get stomped(): boolean {
+    return this.sim.state === 'LIFE_LOST' && this.sim.lifeLost?.cause === 'stomp';
   }
 
   /**
@@ -1617,7 +1725,7 @@ export class Game {
     // The floating bricks the badge is delivered onto. Before the fire, because the
     // outer end of the cone crosses the last one and fire goes in front of masonry.
     drawFloatingBrick(ctx, this.sim.screen.propRects, t, this.reducedMotion);
-    drawDragon(ctx, state, t, this.reducedMotion);
+    drawDragon(ctx, state, t, this.reducedMotion, this.stomped);
     drawCone(ctx, hazard.fireState(), t, this.reducedMotion);
     drawWaterShots(ctx, hazard.waterStates());
     drawSteam(ctx, hazard.steamStates());

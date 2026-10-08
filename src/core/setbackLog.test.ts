@@ -24,7 +24,7 @@ function entry(cause: SetbackCause, index: number, screenId = 2): SetbackLogEntr
 
 describe('delay log', () => {
   it('names every obstacle from the copy deck, never from a raw cause', () => {
-    for (const cause of ['stamp', 'fire', 'monster', 'mummy', 'fall'] as const) {
+    for (const cause of ['stamp', 'fire', 'stomp', 'monster', 'mummy', 'fall'] as const) {
       expect(causeLabel(cause)).toBe(COPY.setback.tag[cause]);
     }
   });

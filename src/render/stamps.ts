@@ -12,7 +12,7 @@
  * **Two words now, and which one is where is the whole point** (owner call):
  * `DENIED` is printed on the **rubber die at the bottom** — the part that actually
  * comes down on you, and the part that leaves the mark — and the index label above it
- * carries what *this* stamp is refusing: ENTITY · BANKING · TAX IDS · DIR KYC, one
+ * carries what *this* stamp is refusing: ENTITY · BANKING · TAX · MCA, one
  * each, authored in `levels.json`.
  *
  * That swap is worth more than it looks. Four identical stamps all shouting the same

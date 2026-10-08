@@ -302,7 +302,6 @@ function drawTower(
   reduced: boolean,
 ): void {
   const tw = l.tower;
-  const cx = tw.x + tw.w / 2;
 
   // Body: three flat vertical bands instead of a gradient, then mullions and
   // floor courses so it reads as built. The sun is directly behind, so the
@@ -385,14 +384,8 @@ function drawTower(
   const c = l.canopy;
   pxRect(ctx, '#12586B', c.x, c.y, c.w, c.h, PX);
   pxRect(ctx, '#5CE2F4', c.x, c.y, c.w, 3, 3);
-  // The doors are the finish line, so they carry the outcome, not the address
-  // (the campus gate 900px back already says ANSR TECH PARK).
-  drawText(ctx, 'GO LIVE', cx, c.y - 16, {
-    scale: 2,
-    color: '#CFE6EC',
-    align: 'center',
-    outline: 'rgba(0,20,26,0.9)',
-  });
+  // No words over the doors (owner call): the "GO LIVE" line that stood above the
+  // canopy is gone. The lit doorway is the finish line and reads as one on its own.
 
   // Light spilling out of the doorway onto the plaza.
   const spill = ctx.createLinearGradient(0, e.y + e.h - 40, 0, l.horizonY + 60);

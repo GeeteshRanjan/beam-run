@@ -1015,7 +1015,7 @@ export const WINDOW = { x: 830, y: 176, w: W - 830 - 40, h: 210 } as const;
  * furniture reads against, and the darkest band at the bottom, which is the 140px the
  * hero's whole body stands against.
  */
-const WALL = {
+const WALL_BROKEN = {
   /** 0–160: the upper wall, in shadow under the services. */
   upper: '#231F1A',
   /** 160–460: the register the furniture is read against. */
@@ -1032,7 +1032,29 @@ const WALL = {
   joint: 'rgba(12,9,5,0.34)',
   /** Skirting board. */
   skirting: '#1E1B15',
-} as const;
+};
+
+type ShellPalette = { -readonly [K in keyof typeof WALL_BROKEN]: string };
+
+/**
+ * The same shell once the colleague has put the floor right — **the Head Office's warm
+ * plaster** (owner call: "make the office space lighter, like the first screen, but only
+ * after things are fixed"). The broken room stays the dark one above; `restore` walks every
+ * tone from there to here, so the fix lands as the room getting lighter rather than as a
+ * wash over an unchanged dark space. The value *structure* is kept — the band the hero
+ * stands against is still the darkest register on the wall, just at the lobby's dado value
+ * instead of near-black, which is what his teal blazer already reads against on screen 0.
+ */
+const WALL_FIXED: ShellPalette = {
+  upper: '#9A8E78',
+  mid: '#B4A78F',
+  dado: '#A69880',
+  base: '#857962',
+  rail: '#D8CCB2',
+  railLit: '#E4D9C0',
+  joint: 'rgba(60,48,30,0.22)',
+  skirting: '#5E5545',
+};
 
 /**
  * The Workplace's FURNITURE palette — warm dark, off the teal axis.
@@ -1045,7 +1067,7 @@ const WALL = {
  * changes is the temperature, which is the one axis left once the values are decided
  * and the hero is fixed. Now the only teal below the dado rail is the player.
  */
-const FURN = {
+const FURN_BROKEN = {
   /** Carcase and modesty panels: the darkest thing in the room after the ceiling void. */
   body: '#1D1A15',
   /** A step up, for a face that is turned towards the camera. */
@@ -1060,7 +1082,76 @@ const FURN = {
   shade: '#100E0A',
   /** Aluminium: monitor stands, drawer handles, chair frames. Neutral, not teal. */
   metal: '#6F7570',
-} as const;
+};
+
+type FurnPalette = { -readonly [K in keyof typeof FURN_BROKEN]: string };
+
+/**
+ * Furniture in the fixed room: the lobby's walnut. Still darker than the wall behind it
+ * with one lit edge each — the rule that keeps a pod reading as furniture — but a mid
+ * value against light plaster rather than near-black against dark.
+ */
+const FURN_FIXED: FurnPalette = {
+  body: '#4A3524',
+  face: '#5C4430',
+  top: '#6E5238',
+  lit: '#CFC3AA',
+  edge: '#8A6440',
+  shade: '#301F13',
+  metal: '#9DA8AE',
+};
+
+/** The ceiling, duct and glazing tones, broken → fixed (the lobby's cool soffit). */
+const OFFICE_METAL_BROKEN = {
+  void: '#04161B',
+  c0: '#0A2C36',
+  c1: '#0D3542',
+  c2: '#103E4C',
+  c3: '#124655',
+  tbar: '#17566A',
+  aperture: '#061C23',
+  duct: '#0C2E38',
+  ductLit: '#154C5A',
+  ductShade: '#06202A',
+  bar: '#1B2620',
+  sill: '#0C3340',
+};
+type MetalPalette = { -readonly [K in keyof typeof OFFICE_METAL_BROKEN]: string };
+const OFFICE_METAL_FIXED: MetalPalette = {
+  void: '#3A4A52',
+  c0: '#4B5D66',
+  c1: '#546872',
+  c2: '#5E727C',
+  c3: '#687C86',
+  tbar: '#8CA3AC',
+  aperture: '#2A3238',
+  duct: '#5E6A70',
+  ductLit: '#8C989E',
+  ductShade: '#3E484E',
+  bar: '#3A4147',
+  sill: '#6A737A',
+};
+
+/** Blend two palettes key by key; rgba entries switch over at the midpoint. */
+function mixPalette<T extends Record<string, string>>(a: T, b: T, f: number): T {
+  const out = {} as Record<string, string>;
+  for (const k of Object.keys(a)) {
+    const x = a[k]!;
+    const y = b[k]!;
+    out[k] = x.startsWith('#') && y.startsWith('#') ? mixHex(x, y, f) : f < 0.5 ? x : y;
+  }
+  return out as T;
+}
+
+/*
+ * The live palettes the office's painters read. Set once per frame at the top of
+ * `drawOfficeInterior` from its `restore` dial — module state rather than a parameter
+ * threaded through six painters, and safe because rendering is single-threaded and every
+ * reader runs inside that one call.
+ */
+let WALL: ShellPalette = { ...WALL_BROKEN };
+let FURN: FurnPalette = { ...FURN_BROKEN };
+let METAL: MetalPalette = { ...OFFICE_METAL_BROKEN };
 
 /**
  * A monitor: shell, bezel, screen, stand.
@@ -1271,7 +1362,16 @@ function drawWhiteboard(ctx: CanvasRenderingContext2D, x: number, y: number): vo
  * lighter mid register that the furniture reads against, and a darker band at the
  * floor so the ground has something to sit on.
  */
-function drawOfficeInterior(ctx: CanvasRenderingContext2D, t: number, reduced: boolean): void {
+function drawOfficeInterior(
+  ctx: CanvasRenderingContext2D,
+  t: number,
+  reduced: boolean,
+  restore = 0,
+): void {
+  const fix = Math.max(0, Math.min(1, restore));
+  WALL = mixPalette(WALL_BROKEN, WALL_FIXED, fix);
+  FURN = mixPalette(FURN_BROKEN, FURN_FIXED, fix);
+  METAL = mixPalette(OFFICE_METAL_BROKEN, OFFICE_METAL_FIXED, fix);
   /*
    * The plaster is WARM now, and the ceiling above it stays cool (see `WALL`).
    *
@@ -1315,18 +1415,18 @@ function drawOfficeInterior(ctx: CanvasRenderingContext2D, t: number, reduced: b
   // --- suspended ceiling -------------------------------------------------
   // Four courses of tile receding upwards, darkest at the top, on a T-bar grid.
   // Seen slightly from below, which is how every side-on office reads.
-  pxRect(ctx, '#04161B', 0, 0, W, CEILING.H, 2);
-  const courses = ['#0A2C36', '#0D3542', '#103E4C', '#124655'];
+  pxRect(ctx, METAL.void, 0, 0, W, CEILING.H, 2);
+  const courses = [METAL.c0, METAL.c1, METAL.c2, METAL.c3];
   for (let i = 0; i < 4; i += 1) {
     const y = i * 24;
     pxRect(ctx, courses[i]!, 0, y, W, 24, 2);
-    pxRect(ctx, '#17566A', 0, y, W, 2, 2); // T-bar along the course
-    for (let x = 0; x < W; x += CEILING.TILE_W) pxRect(ctx, '#17566A', x, y, 2, 24, 2);
+    pxRect(ctx, METAL.tbar, 0, y, W, 2, 2); // T-bar along the course
+    for (let x = 0; x < W; x += CEILING.TILE_W) pxRect(ctx, METAL.tbar, x, y, 2, 24, 2);
   }
   // Apertures for the four fittings, cut into the two nearest courses. The lamp
   // itself is the light layer's job (`render/workplace.ts`).
   for (const cx of CEILING.LIGHTS) {
-    pxRect(ctx, '#061C23', cx - CEILING.FIT_W / 2, CEILING.FIT_Y, CEILING.FIT_W, CEILING.FIT_H, 2);
+    pxRect(ctx, METAL.aperture, cx - CEILING.FIT_W / 2, CEILING.FIT_Y, CEILING.FIT_W, CEILING.FIT_H, 2);
   }
 
   /*
@@ -1347,21 +1447,21 @@ function drawOfficeInterior(ctx: CanvasRenderingContext2D, t: number, reduced: b
   for (const [gapL, gapR] of [...gaps, [W, W] as const]) {
     const to = Math.min(gapL, W);
     if (to > from) {
-      pxRect(ctx, '#0C2E38', from, 108, to - from, 24, 2);
-      pxRect(ctx, '#154C5A', from, 108, to - from, 4, 2);
-      pxRect(ctx, '#06202A', from, 128, to - from, 4, 2);
+      pxRect(ctx, METAL.duct, from, 108, to - from, 24, 2);
+      pxRect(ctx, METAL.ductLit, from, 108, to - from, 4, 2);
+      pxRect(ctx, METAL.ductShade, from, 128, to - from, 4, 2);
       // A capped end where the run stops at a fitting, so it reads as cut rather than
       // as a duct that happens to be missing.
-      if (gapL < W) pxRect(ctx, '#061C23', to - 4, 108, 4, 24, 2);
-      if (from > 0) pxRect(ctx, '#061C23', from, 108, 4, 24, 2);
+      if (gapL < W) pxRect(ctx, METAL.aperture, to - 4, 108, 4, 24, 2);
+      if (from > 0) pxRect(ctx, METAL.aperture, from, 108, 4, 24, 2);
     }
     from = Math.max(from, gapR);
   }
   for (let x = 20; x < W; x += 120) {
     if (gaps.some(([l, r]) => x + 6 > l && x < r)) continue;
-    pxRect(ctx, '#0C2E38', x, CEILING.H, 6, 8, 2); // hanger into the ceiling
+    pxRect(ctx, METAL.duct, x, CEILING.H, 6, 8, 2); // hanger into the ceiling
     if (!gaps.some(([l, r]) => x + 84 > l && x + 40 < r)) {
-      pxRect(ctx, '#154C5A', x + 40, 132, 44, 4, 2); // a run of trunking dropping away
+      pxRect(ctx, METAL.ductLit, x + 40, 132, 44, 4, 2); // a run of trunking dropping away
     }
   }
 
@@ -1398,7 +1498,7 @@ function drawOfficeInterior(ctx: CanvasRenderingContext2D, t: number, reduced: b
   ctx.restore();
   // Frame, transom and mullions, so it reads as glazing rather than as a hole. Dark
   // against the daylight, which is what a frame does when the light is behind it.
-  const bar = '#1B2620';
+  const bar = METAL.bar;
   pxRect(ctx, bar, winX - 7, winY - 7, winW + 14, 7, 2);
   pxRect(ctx, bar, winX - 7, winY + winH, winW + 14, 7, 2);
   pxRect(ctx, bar, winX - 7, winY, 7, winH, 2);
@@ -1406,7 +1506,7 @@ function drawOfficeInterior(ctx: CanvasRenderingContext2D, t: number, reduced: b
   for (let x = winX + 100; x < winX + winW; x += 100) pxRect(ctx, bar, x, winY, 5, winH, 2);
   pxRect(ctx, bar, winX, winY + 96, winW, 4, 2);
   pxRect(ctx, 'rgba(159,216,228,0.09)', winX, winY, winW, 96, 2); // sheen on the upper lights
-  pxRect(ctx, '#0C3340', winX - 10, winY + winH + 7, winW + 20, 8, 2); // sill
+  pxRect(ctx, METAL.sill, winX - 10, winY + winH + 7, winW + 20, 8, 2); // sill
 
   // --- the floor ---------------------------------------------------------
   drawStorageWall(ctx);
@@ -2063,6 +2163,12 @@ export function drawSceneBackground(
    * sort of economy that reads as a bug the first time a screen wants both.
    */
   relief = 0,
+  /**
+   * 0..1 repair dial, read by screen 3 only: the Workplace's `restore` (the colleague has
+   * reached the terminal). It walks the office shell from its dark broken palette to the
+   * Head Office's light one. A third dial rather than a reuse, for the reason given above.
+   */
+  restore = 0,
 ): void {
   switch (id) {
     case 0: {
@@ -2076,7 +2182,7 @@ export function drawSceneBackground(
       drawLobbyInterior(ctx, t, reduced);
       /*
        * The sign names the ROOM (owner call), the way the sign in a real lobby does:
-       * this is the player's own head office, and the three labelled steps in front
+       * this is the player's own headquarters, and the three labelled steps in front
        * of it are what the building has approved so far.
        *
        * It used to read "MARKET ENTRY: ON PAPER" — an editorial verdict on the stage,
@@ -2085,7 +2191,7 @@ export function drawSceneBackground(
        * plan looks clean from the lobby") and by the steps themselves, so the wall
        * was arguing a point the screen had made twice.
        */
-      drawFloorSign(ctx, W * 0.5, 100, 'HEAD OFFICE');
+      drawFloorSign(ctx, W * 0.5, 100, 'HEADQUARTERS');
       /*
        * Name the three easy hops. The three arguments after the ctx are the step's
        * own `gx`, `gy` and `w` from `levels.json` screen 0 — the width is not
@@ -2121,7 +2227,7 @@ export function drawSceneBackground(
        * **The permits file is back, hanging under the clock** (owner call). It is not
        * the board that was cut: a wall sign saying PERMITS was a label, a *file* under a
        * clock is the application and the wait in one object — and it is now the stamps
-       * that carry the four subjects (ENTITY, BANKING, TAX IDS, DIR KYC) while DENIED
+       * that carry the four subjects (ENTITY, BANKING, TAX, MCA) while DENIED
        * has moved onto their dies, so the old "same sentence twice" objection is gone
        * with it.
        *
@@ -2212,7 +2318,7 @@ export function drawSceneBackground(
        * live in `render/workplace.ts`, because a backdrop function has no business
        * knowing whether the room has been fixed.
        */
-      drawOfficeInterior(ctx, t, reduced);
+      drawOfficeInterior(ctx, t, reduced, restore);
       // On the wall under the services run, not in the ceiling: the ceiling band is
       // 96px deep now and the sign used to sit inside it.
       drawFloorSign(ctx, W * 0.5, 146, 'WORKPLACE');

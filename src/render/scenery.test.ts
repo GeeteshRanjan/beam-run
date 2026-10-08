@@ -479,3 +479,29 @@ describe("Setup Delays' permits file", () => {
     }
   });
 });
+
+describe('the Workplace shell (screen 3) and its repair dial', () => {
+  /*
+   * Owner call: "make the office space lighter, like the first screen, but only after things
+   * are fixed". The broken room keeps its dark shell; `restore` = 1 walks it to the Head
+   * Office's warm plaster. Measured as the wall's mid register, which is the largest surface.
+   */
+  const fills = (restore: number): string[] => {
+    const { ctx, rects } = recorder();
+    // The glazing clips its view; none of that is being asked about here, so it is stubbed.
+    const noop = () => undefined;
+    Object.assign(ctx, { save: noop, restore: noop, beginPath: noop, rect: noop, clip: noop, translate: noop });
+    drawSceneBackground(ctx, 3, 0, true, 0, 0, restore);
+    return rects.map((r) => r.fill.toUpperCase());
+  };
+  it('is dark while broken and the lobby plaster once fixed', () => {
+    expect(fills(0)).toContain('#35322A');
+    expect(fills(0)).not.toContain('#B4A78F');
+    expect(fills(1)).toContain('#B4A78F');
+    expect(fills(1)).not.toContain('#35322A');
+  });
+  it('does not leak the fixed palette into the next broken frame', () => {
+    fills(1);
+    expect(fills(0)).toContain('#35322A');
+  });
+});
